@@ -1,0 +1,62 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-check:
+    name: index.html matches src/
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - run: python3 build.py
+      - name: built file must be committed
+        run: git diff --exit-code index.html
+
+  physics:
+    name: physics reference
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node test/consistency.js
+
+  tutor:
+    name: tutor steps passable
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node test/tutor.js
+
+  handling:
+    name: human control path
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node test/handling.js
+
+  scenarios:
+    name: scenario analysis ${{ matrix.group }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [A, B, C]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node test/scenarios.js ${{ matrix.group }}

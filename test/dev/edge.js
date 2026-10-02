@@ -1,0 +1,11 @@
+const {loadEngine}=require('../load.js');
+function fresh(m){const E=loadEngine();E.WIND.spd=0;E.WIND.turb=0;E.cfg.mass=m||2500;return E;}
+function fly(E,sec,setup){const {IN,AP,step,apStep,DT}=E;for(let t=0;t<sec;t+=DT){if(setup)setup(t);const o=apStep(DT);IN.col=o.col;IN.lon=o.lon;IN.lat=o.lat;IN.ped=o.ped;step(DT);}}
+const mode=process.argv[2]||'vne';
+if(mode==='vne'){for(const v of [140,150,158]){const E=fresh(2900);E.reset('cruise');E.S.vb[0]=v*E.KT;E.S.rot.lam0=0.015;E.AP.on=true;E.AP.mode='cruise';E.AP.ias=v;E.AP.alt=-E.S.pos[2];fly(E,60);const S=E.S;
+  console.log(`MTOW ${v} kt: ias=${(S.ias/E.KT).toFixed(0)} P=${(S.Pload/1e3).toFixed(0)} fli=${S.eng.fli.toFixed(1)} NR=${S.NR.toFixed(1)} stall=${S.rot.stall.toFixed(2)} az=${(S.rot.stallAz*E.RAD).toFixed(0)} Mtip=${S.rot.Mtip.toFixed(2)} th=${(S.eul[1]*E.RAD).toFixed(1)} lon=${S.ctl.lon.toFixed(2)} lat=${S.ctl.lat.toFixed(2)} col=${S.ctl.col.toFixed(2)} vs=${(S.vs/E.FPM).toFixed(0)}`);}}
+if(mode==='xwind'){for(const d of [90,270,180,0]){const E=fresh();E.WIND.dir=d;E.WIND.spd=25;E.reset('high');E.AP.on=true;E.AP.mode='hover';E.AP.alt=-E.S.pos[2];E.AP.hdg=0;fly(E,40);const S=E.S;
+  console.log(`wind 25 kt from ${d}: ped=${S.ctl.ped.toFixed(2)} fenT=${S.fen.T.toFixed(0)} fenStall=${S.fen.stall.toFixed(2)} vi=${S.fen.vi.toFixed(1)} Vax=${S.fen.Vax.toFixed(1)} P=${(S.Pload/1e3).toFixed(0)} phi=${(S.eul[0]*E.RAD).toFixed(1)} th=${(S.eul[1]*E.RAD).toFixed(1)} lat=${S.ctl.lat.toFixed(2)} lon=${S.ctl.lon.toFixed(2)} psi=${(S.eul[2]*E.RAD).toFixed(1)}`);}}
+if(mode==='turn'){const E=fresh(2700);E.reset('cruise');E.S.vb[0]=120*E.KT;E.AP.on=true;E.AP.mode='cruise';E.AP.ias=120;E.AP.alt=-E.S.pos[2];fly(E,40);
+  // 45° banked turn: override lateral through the AP's roll command by biasing int
+  const {IN,step,DT}=E;const c={...IN};let n=0;for(let t=0;t<12;t+=DT){IN.lat=c.lat+0.25;IN.col=c.col+0.15;IN.lon=c.lon-0.05;step(DT);if(++n%720===0){const S=E.S;console.log(`t=${t.toFixed(0)} phi=${(S.eul[0]*E.RAD).toFixed(0)} nz=${S.nz.toFixed(2)} ias=${(S.ias/E.KT).toFixed(0)} stall=${S.rot.stall.toFixed(2)} az=${(S.rot.stallAz*E.RAD).toFixed(0)} q=${(S.om[1]*E.RAD).toFixed(1)} p=${(S.om[0]*E.RAD).toFixed(1)} inc=${S.incident&&S.incident.id}`);}}}
