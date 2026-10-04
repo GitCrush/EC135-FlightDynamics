@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.7 — 2026-10-04 · Limits of main and tail rotor
+
+- English only; the coach's speech is off by default (cues stay on).
+- Turbine power lapses with altitude and temperature, fitted to the published EC135 P2 hover ceilings; the FLI shows the closer of gearbox and turbine limit.
+- Fenestron blade stall at 16° (yaw-control margin at the hover ceiling); tail drive failure as a failure mode with its incident text.
+- Vortex ring: power settling in the developed ring, collective alone no longer recovers; recovery texts follow Airbus SIN 3463-S-00, Vuichard for a clockwise rotor is left cyclic with right pedal (the old text had it mirrored).
+- Resets hand over bumplessly from the trim autopilot (a zero-integrator start could sink a heavy, hot hover into the ring).
+- Scenario groups D (main and tail rotor at the limit, tail drive failure, weathercock, loss of yaw authority) and E (hover and cruise modes, transverse flow, vortex-ring recoveries).
+
 ## 1.6 — 2026-10-02 · Scenario analysis, published as EC135 Flight Dynamics
 
 - New `test/scenarios.js`: signs and magnitudes of yaw, pitch and roll in normal and limit manoeuvres (pedal turns, full pedal, engine-failure yaw, crosswind pedal margins, speed and angle-of-attack stability, retreating blade stall, low g, Vne, quick stop, autorotation landings) and of the aids in those manoeuvres.

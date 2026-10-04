@@ -54,7 +54,12 @@ const H={
     R:0.50, N:10, c:0.05, ratio:8.91,      // 1.0 m duct, 10 blades of 0.05 m chord, tip speed 188 m/s (ERF 1997)
     pos:[-6.10,0,-0.85],                   // relative to CG; thrust along -y (right pedal)
     sd:1.1,                                // exit/disc area ratio of the shroud (slight diffuser)
-    a:5.5, cd0:0.012, aStall:14*DEG,
+    /* Cambered blades in a dense cascade: stall at 16°, not the 14° of an
+       isolated symmetric section. With 14° the fan stalled at full pedal in
+       calm air and had 8 % moment margin at the published hover ceiling, too
+       little for a type certified with yaw control up to that ceiling in
+       wind. Estimate; it changes nothing below the stall. */
+    a:5.5, cd0:0.012, aStall:16*DEG,
     /* Pedal gearing: centre pedal 15°, full right 31°, full left -5°.
        The fan's thrust per degree is high (it runs at 40+ m/s inflow),
        so the linkage is geared short: full right pedal from the hover
@@ -71,6 +76,14 @@ const H={
     idle:15e3, acc:9e3,                    // flight-idle power, accessory load
     qMax:700, qFric:120,                  // drive torque cap at low rotor speed (Nm), rotor bearing/gearbox friction
     sfc:0.36,                              // kg per kWh, both engines together at cruise power
+    /* Thermodynamic lapse: every engine rating is capped by what the turbine
+       can make in the present air, k = thk · δ · θ^-thb (δ pressure ratio,
+       θ temperature ratio to ISA sea level). The two parameters are fitted
+       to the published EC135 P2 hover ceilings out of ground effect at
+       2835 kg (2685 m ISA, 1785 m ISA+20), using this model's own power
+       required there (551 / 543 kW, measured in a steady, non-turning hover). At sea level ISA the gearbox still limits; higher or
+       hotter the engines do, and the FLI shows whichever is closer. */
+    thk:0.789, thb:1.55,
     kp:30e3, ki:40e3,                      // FADEC NR governor, W per % and W per %·s
   },
   fus:{

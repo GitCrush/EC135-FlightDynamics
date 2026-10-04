@@ -28,3 +28,6 @@ Scene
 - Wires as a collision hazard (the power line is visual only).
 - Instancing for the forests (ANGLE_instanced_arrays) to allow denser
   woods on weak GPUs.
+
+- Dutch roll: the model is stiff in yaw (period ~1 s); needs flight data.
+- Tail drive failure as a guided exercise (the failure and its panel button exist).

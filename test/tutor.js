@@ -4,7 +4,7 @@
 /* The real code, all of it (test/loadfull.js): the same reset hand-over,
    tutor and control laws as the browser. Only the student is simulated. */
 const {loadFull}=require('./loadfull.js');
-const E=loadFull();E.WIND.spd=0;E.WIND.turb=0;E.cfg.lang='en';
+const E=loadFull();E.WIND.spd=0;E.WIND.turb=0;
 const {IN,cfg,AP,TUTOR,LESSONS,tutorStart,tutorStep,tutorNext,step,DT,KT,FT,RAD,DEG,wrapPi,clamp,sat,terrainH,qmat,mrot}=E;
 /* ideal student: goal = {alt (m AGL) | land, pos [n,e], hdg (deg), ias (kt), climbTo (ft)} */
 const ST={ci:0,ai:0,ei:0};
@@ -46,11 +46,11 @@ const GOALS={
 };
 let fail=0;
 for(let li=1;li<LESSONS.length;li++){
-  tutorStart(li);ST.li=ST.ri=0;const L=LESSONS[li];console.log(`■ ${L.title[1]}`);
-  const goals=GOALS[L.title[1]];if(!goals){console.log('  ERROR no goals for lesson');fail++;continue;}
+  tutorStart(li);ST.li=ST.ri=0;const L=LESSONS[li];console.log(`■ ${L.title}`);
+  const goals=GOALS[L.title];if(!goals){console.log('  ERROR no goals for lesson');fail++;continue;}
   for(let si=0;si<L.steps.length;si++){
     if(TUTOR.si!==si){console.log(`  ERROR expected step ${si}, tutor is at ${TUTOR.si}`);fail++;break;}
-    let g=goals[si]||{},t=0,limit=L.title[1].startsWith('Transition')||L.title[1].startsWith('Approach')?120:60;ST.ci=ST.ai=ST.ei=0;
+    let g=goals[si]||{},t=0,limit=L.title.startsWith('Transition')||L.title.startsWith('Approach')?120:60;ST.ci=ST.ai=ST.ei=0;
     if(g.manual){tutorNext();console.log(`  OK    step ${si+1}: manual`);continue;}
     if(g.hands||g.nudge){/* hands-off or a scripted nudge through the SAS */E.SAS.init=false;}
     const t0=E.S.t;
@@ -58,8 +58,8 @@ for(let li=1;li<LESSONS.length;li++){
       if(g.then&&TUTOR.flag)g=g.then;
       if(g.hands||g.nudge){const raw={col:IN.col,lon:(g.nudge&&t>0.5&&t<1.3)?g.nudge[0]:0,lat:0,ped:0,att:false};const o=E.sasApply(DT,raw);IN.lon=o.lon;IN.lat=o.lat;IN.ped=o.ped;}
       else if(!g.demo)student(g,DT);tutorStep(DT);step(DT);t+=DT;
-      if(process.env.TRACE&&L.title[1]===process.env.TRACE&&si===+(process.env.STEP||0)&&Math.round(t/DT)%720===0){const S=E.S;console.log(`    t ${t.toFixed(0)} N ${S.pos[0].toFixed(1)} E ${S.pos[1].toFixed(1)} vb ${S.vb[0].toFixed(2)} ${S.vb[1].toFixed(2)} th ${(S.eul[1]*RAD).toFixed(1)} phi ${(S.eul[0]*RAD).toFixed(1)} lon ${IN.lon.toFixed(2)} lat ${IN.lat.toFixed(2)} apE ${E.AP.posE} hold ${TUTOR.hold.toFixed(1)}`);}
-      if(L.title[1].startsWith('Approach')&&si===0){/* approach: descend toward the pad */ g.climbTo=Math.max(60,Math.hypot(E.S.pos[0],E.S.pos[1])*0.11/FT);}
+      if(process.env.TRACE&&L.title===process.env.TRACE&&si===+(process.env.STEP||0)&&Math.round(t/DT)%720===0){const S=E.S;console.log(`    t ${t.toFixed(0)} N ${S.pos[0].toFixed(1)} E ${S.pos[1].toFixed(1)} vb ${S.vb[0].toFixed(2)} ${S.vb[1].toFixed(2)} th ${(S.eul[1]*RAD).toFixed(1)} phi ${(S.eul[0]*RAD).toFixed(1)} lon ${IN.lon.toFixed(2)} lat ${IN.lat.toFixed(2)} apE ${E.AP.posE} hold ${TUTOR.hold.toFixed(1)}`);}
+      if(L.title.startsWith('Approach')&&si===0){/* approach: descend toward the pad */ g.climbTo=Math.max(60,Math.hypot(E.S.pos[0],E.S.pos[1])*0.11/FT);}
     }
     const ok=TUTOR.si!==si||TUTOR.lessonDone;
     console.log(`  ${ok?'OK   ':'ERROR'} step ${si+1}: ${(t).toFixed(1)} s  (agl ${E.S.hAGL.toFixed(1)} m, ias ${(E.S.ias/KT).toFixed(0)} kt, hdg ${(E.S.eul[2]*RAD).toFixed(0)}, d ${Math.hypot(E.S.pos[0],E.S.pos[1]).toFixed(1)} m${E.S.crash?', CRASH '+E.S.crash:''})`);

@@ -16,6 +16,10 @@ function fenInit(f){f.A=Math.PI*f.R*f.R;f.r=[];f.dr=f.R*0.8/f.Ne;for(let j=0;j<f
   f.Am=f.A/(4*f.sd*f.sd);}                                 // momentum area of the fan alone
 function fenState(){return {vi:20,T:0,Tfan:0,Q:0,P:0,th:0,stall:0,Vax:0,duct:1};}
 function fenStep(f,st,dt,vb,om,wb,rho,aSound,OmMain,ped,wake){
+  /* Tail drive failure: the fan no longer turns with the rotor; it gives
+     no thrust and takes no power. What is left against the rotor torque
+     is the fin, the fuselage and the pilot's collective. */
+  if(st.failed){st.T=0;st.Tfan=0;st.Q=0;st.P=0;st.stall=0;st.th=0;st.Vax=0;return {F:[0,0,0],M:[0,0,0],P:0};}
   const Om=OmMain*f.ratio;
   const vt=vsub(vadd(vb,vcross(om,f.pos)),wb);                    // tail velocity relative to air, body axes
   /* Axial flow through the duct in the wake direction (+y): moving left
@@ -69,14 +73,15 @@ function engState(e){const a=[];for(let i=0;i<e.n;i++)a.push({P:0,cmd:0,on:true,
    rotor run-up take the better part of a minute. */
 function engStart(st){for(const en of st.e){if(!en.on&&!en.fail){en.on=true;en.startT=25;en.N1=0;}}}
 function engStop(st){for(const en of st.e){en.on=false;en.startT=0;}}
-function engStep(e,st,dt,NRpct,Pload,dCol,colRate,Pcap){
+function engStep(e,st,dt,NRpct,Pload,dCol,colRate,Pcap,lapse){
+  const kL=Math.min(1,lapse===undefined?1:lapse);st.lapse=kL;
   const err=100-NRpct;
   for(const en of st.e)if(en.startT>0)en.startT-=dt;
   const nRun=st.e.filter(x=>x.on&&!x.fail&&x.startT<=0).length;
   const nStart=st.e.filter(x=>x.on&&!x.fail&&x.startT>0).length;
   st.mode=nRun===2?'twin':nRun===1?'oei':nStart?'start':'off';
   // per-engine rating and transmission share
-  const perMax=nRun===2?e.top:e.oei30, perMcp=nRun===2?e.mcp:e.oeiCont;
+  const perMax=(nRun===2?e.top:e.oei30)*kL, perMcp=(nRun===2?e.mcp:e.oeiCont)*kL;   // ratings in the present air
   const xmsn=nRun===2?e.xmsnTop:e.oei30;   // OEI: the 30-second rating is what the gearbox tolerates
   const totalMax=Math.min(xmsn,perMax*nRun);
   st.Pavail=totalMax;
@@ -102,7 +107,10 @@ function engStep(e,st,dt,NRpct,Pload,dCol,colRate,Pcap){
     Ptot+=en.P;
   }
   // first-limit indicator: 10 = MCP, 11 = TOP (twin); per engine in OEI
-  st.fli=nRun===2?Ptot/e.xmsnMcp*10:nRun===1?Ptot/e.oeiCont*10:0;
+  // first limit indicator: 10 = maximum continuous of whichever limit is closer (gearbox torque or turbine)
+  // one scale for both limits: their take-off ratings sit on the same mark (xmsnTop/xmsnMcp)
+  const rT=e.xmsnTop/e.xmsnMcp;
+  st.fli=nRun===2?Ptot/Math.min(e.xmsnMcp,2*perMax/rT)*10:nRun===1?Ptot/perMcp*10:0;
   st.limit=nRun===2?(Ptot>e.xmsnMcp?'TOP':''):nRun===1?(Ptot>e.oeiCont?'OEI 30s':'OEI'):'OFF';
   return Ptot;
 }

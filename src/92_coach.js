@@ -7,7 +7,7 @@
    the collective and the pedals, and one short word. Rotor limits come
    first, then sink rate, then drift, then heading. Hysteresis keeps it
    from nagging. K toggles it. */
-const COACH={on:true,voice:true,ap:null,cue:{lon:0,lat:0,ped:0,col:0},hint:'',long:'',hintLevel:0,hintT:0,alive:false,hdgRef:0,altRef:0,tick:0,spokenT:-10,spoken:'',legendT:0};
+const COACH={on:true,voice:false,ap:null,cue:{lon:0,lat:0,ped:0,col:0},hint:'',long:'',hintLevel:0,hintT:0,alive:false,hdgRef:0,altRef:0,tick:0,spokenT:-10,spoken:'',legendT:0};
 /* Spoken instruction (Web Speech API). Level-2 hints interrupt, level-1
    hints wait 3 s after the last utterance; the same sentence is not
    repeated within 8 s. */
@@ -16,7 +16,7 @@ function coachSay(text,lvl){
   const now=performance.now()/1000;
   if(lvl<2&&now-COACH.spokenT<3)return;
   if(text===COACH.spoken&&now-COACH.spokenT<8)return;
-  try{if(lvl>=2)speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang=cfg.lang==='de'?'de-DE':'en-US';u.rate=1.05;u.pitch=1;speechSynthesis.speak(u);COACH.spokenT=now;COACH.spoken=text;}catch(e){}
+  try{if(lvl>=2)speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang='en-US';u.rate=1.05;u.pitch=1;speechSynthesis.speak(u);COACH.spokenT=now;COACH.spoken=text;}catch(e){}
 }
 function coachSet(mode){ // 'off' | 'cues' | 'voice'
   COACH.on=mode!=='off';COACH.voice=mode==='voice';COACH.legendT=S?S.t:0;if(!COACH.on){COACH.hint='';COACH.long='';if(typeof speechSynthesis!=='undefined')speechSynthesis.cancel();}
@@ -58,24 +58,24 @@ function coachStep(dt){
   // intentional manoeuvres are not errors: no lateral/longitudinal cue while the student is deliberately translating in the tutor without a target
   COACH.alive=true;
   /* hint, by priority, with hold time: a short word for the screen, a sentence for the voice */
-  const de=cfg.lang==='de';let hint='',long='',lvl=0;
+  let hint='',long='',lvl=0;
   const power=S.eng.mode!=='off';
-  const dir=(k,v)=>{const m={lon:v>0?['Knüppel vor','Stick forward']:['Knüppel zurück','Stick back'],lat:v>0?['Knüppel rechts','Stick right']:['Knüppel links','Stick left'],ped:v>0?['Pedal rechts','Right pedal']:['Pedal links','Left pedal']}[k];return de?m[0]:m[1];};
-  if(power&&S.NR<H.nr.minPowerOn-1.5){hint=de?'NR fällt':'NR dropping';long=de?'Rotordrehzahl fällt. Kollektiv senken, sofort.':'Rotor speed is dropping. Lower the collective, now.';lvl=2;}
-  else if(!power&&S.NR<H.nr.minAuto+3){hint=de?'NR niedrig':'NR low';long=de?'Rotordrehzahl in der Autorotation zu niedrig. Kollektiv senken, Knüppel zurück.':'Rotor speed too low in autorotation. Collective down, aft stick.';lvl=2;}
-  else if(S.eng.fli>11.2){hint=de?'Überlast':'Overtorque';long=de?'Über Startleistung. Kollektiv etwas senken.':'Above take-off power. Ease the collective.';lvl=2;}
-  else if(S.rot.vrs>0.35){hint=de?'Wirbelring':'Vortex ring';long=de?'Wirbelringzustand. Knüppel nach vorn, aus dem eigenen Abwind heraus. Nicht mehr Kollektiv.':'Vortex ring state. Stick forward, fly out of your own downwash. No more collective.';lvl=2;}
-  else if(hover&&!onGround&&S.vs<-2.5&&S.hAGL<40){hint=de?'Sinkrate':'Sink rate';long=de?'Du sinkst schnell nahe dem Boden. Kollektiv rein.':'You are sinking fast near the ground. Collective in.';lvl=2;}
-  else if(S.fen.stall>0.6){hint=de?'Fenestron am Limit':'Fenestron limit';long=de?'Fenestron gesättigt. Leistung rausnehmen, Nase in den Wind.':'Fenestron saturated. Take power off, nose into wind.';lvl=2;}
+  const dir=(k,v)=>{const m={lon:v>0?'Stick forward':'Stick back',lat:v>0?'Stick right':'Stick left',ped:v>0?'Right pedal':'Left pedal'}[k];return m;};
+  if(power&&S.NR<H.nr.minPowerOn-1.5){hint='NR dropping';long='Rotor speed is dropping. Lower the collective, now.';lvl=2;}
+  else if(!power&&S.NR<H.nr.minAuto+3){hint='NR low';long='Rotor speed too low in autorotation. Collective down, aft stick.';lvl=2;}
+  else if(S.eng.fli>11.2){hint='Overtorque';long='Above take-off power. Ease the collective.';lvl=2;}
+  else if(S.rot.vrs>0.35){hint='Vortex ring';long='Vortex ring state. Stick forward firmly to fly out of your own downwash; collective up as power allows.';lvl=2;}
+  else if(hover&&!onGround&&S.vs<-2.5&&S.hAGL<40){hint='Sink rate';long='You are sinking fast near the ground. Collective in.';lvl=2;}
+  else if(S.fen.stall>0.6){hint='Fenestron limit';long='Fenestron saturated. Take power off, nose into wind.';lvl=2;}
   else if(hover&&!onGround&&Math.hypot(c.lon,c.lat)>0.14){
     const k=Math.abs(c.lon)>Math.abs(c.lat)?'lon':'lat',v=c[k];hint=dir(k,v);
-    const why=k==='lon'?(v>0?(de?'Du driftest rückwärts.':'You are drifting backwards.'):(de?'Du driftest nach vorn.':'You are drifting forward.')):(v>0?(de?'Du driftest nach links.':'You are drifting left.'):(de?'Du driftest nach rechts.':'You are drifting right.'));
-    long=why+' '+(de?`${hint}, ein wenig, bis der Driftpfeil kleiner wird, dann zurück zur Mitte.`:`${hint}, a little, until the drift arrow shrinks, then back to centre.`);lvl=1;}
-  else if(hover&&!onGround&&Math.abs(c.ped)>0.18){hint=dir('ped',c.ped);long=(c.ped>0?(de?'Die Nase dreht nach links. ':'The nose is turning left. '):(de?'Die Nase dreht nach rechts. ':'The nose is turning right. '))+hint+(de?', bis sie steht.':' until it stops.');lvl=1;}
-  else if(hover&&!onGround&&Math.abs(c.col)>0.10&&!lk.col){hint=c.col>0?(de?'Kollektiv rein':'Collective in'):(de?'Kollektiv raus':'Collective out');long=c.col>0?(de?'Du verlierst Höhe. Kollektiv ein wenig rein.':'You are losing height. A little collective in.'):(de?'Du steigst. Kollektiv ein wenig raus.':'You are climbing. A little collective out.');lvl=1;}
-  else if(!hover&&Math.abs(c.lon)>0.18){hint=c.lon>0?(de?'Nase runter':'Nose down'):(de?'Nase hoch':'Nose up');long=c.lon>0?(de?'Fahrt zu niedrig. Nase etwas runter.':'Speed too low. Nose a little down.'):(de?'Fahrt zu hoch. Nase etwas hoch.':'Speed too high. Nose a little up.');lvl=1;}
-  else if(!hover&&Math.abs(c.col)>0.12&&!lk.col){hint=c.col>0?(de?'Kollektiv rein':'Collective in'):(de?'Kollektiv raus':'Collective out');long=c.col>0?(de?'Du sinkst. Kollektiv rein, bis die Sinkrate null ist.':'You are sinking. Collective in until the vertical speed is zero.'):(de?'Du steigst. Kollektiv raus.':'You are climbing. Collective out.');lvl=1;}
-  else if(!hover&&Math.abs(c.ped)>0.2){hint=dir('ped',c.ped);long=(de?'Kugel aus der Mitte. ':'Ball off centre. ')+hint+'.';lvl=1;}
+    const why=k==='lon'?(v>0?('You are drifting backwards.'):('You are drifting forward.')):(v>0?('You are drifting left.'):('You are drifting right.'));
+    long=why+' '+(`${hint}, a little, until the drift arrow shrinks, then back to centre.`);lvl=1;}
+  else if(hover&&!onGround&&Math.abs(c.ped)>0.18){hint=dir('ped',c.ped);long=(c.ped>0?('The nose is turning left. '):('The nose is turning right. '))+hint+(' until it stops.');lvl=1;}
+  else if(hover&&!onGround&&Math.abs(c.col)>0.10&&!lk.col){hint=c.col>0?('Collective in'):('Collective out');long=c.col>0?('You are losing height. A little collective in.'):('You are climbing. A little collective out.');lvl=1;}
+  else if(!hover&&Math.abs(c.lon)>0.18){hint=c.lon>0?('Nose down'):('Nose up');long=c.lon>0?('Speed too low. Nose a little down.'):('Speed too high. Nose a little up.');lvl=1;}
+  else if(!hover&&Math.abs(c.col)>0.12&&!lk.col){hint=c.col>0?('Collective in'):('Collective out');long=c.col>0?('You are sinking. Collective in until the vertical speed is zero.'):('You are climbing. Collective out.');lvl=1;}
+  else if(!hover&&Math.abs(c.ped)>0.2){hint=dir('ped',c.ped);long=('Ball off centre. ')+hint+'.';lvl=1;}
   // hysteresis: a level-1 hint stays 1.5 s, level 2 replaces anything at once
   if(hint&&(lvl>=2||!COACH.hint||S.t-COACH.hintT>1.5||lvl>COACH.hintLevel)){if(hint!==COACH.hint){COACH.hintT=S.t;COACH.flash=S.t;coachSay(long,lvl);}COACH.hint=hint;COACH.long=long;COACH.hintLevel=lvl;}
   else if(!hint&&S.t-COACH.hintT>1.5){COACH.hint='';COACH.long='';COACH.hintLevel=0;}
@@ -85,9 +85,8 @@ function coachStep(dt){
 const COACH_GREEN='#49e36b';
 function coachDraw(x,W,Hh){
   if(!COACH.on||REPLAY.on)return;
-  const de=cfg.lang==='de';
   // legend for the first 20 s after switching on
-  if(S.t-COACH.legendT<20){x.font='12px "Arial Narrow",sans-serif';x.textAlign='center';x.fillStyle='rgba(13,12,10,0.7)';x.fillRect(W/2-250,Hh*0.86-50,500,22);x.fillStyle=COACH_GREEN;x.fillText(de?'Coach: grüner Pfeil = Knüppel in diese Richtung · Ring = Ziel · rot = Rotorgrenze · K schaltet um':'Coach: green arrow = move the stick this way · ring = target · red = rotor limit · K cycles',W/2,Hh*0.86-35);}
+  if(S.t-COACH.legendT<20){x.font='12px "Arial Narrow",sans-serif';x.textAlign='center';x.fillStyle='rgba(13,12,10,0.7)';x.fillRect(W/2-250,Hh*0.86-50,500,22);x.fillStyle=COACH_GREEN;x.fillText('Coach: green arrow = move the stick this way · ring = target · red = rotor limit · K cycles',W/2,Hh*0.86-35);}
   if(!COACH.alive)return;
   const c=COACH.cue;
   const cx0=W/2,cy0=Hh/2-40;const sx=cx0+(DEV.mouse.armed?DEV.mouse.vx*110:0),sy=cy0+(DEV.mouse.armed?DEV.mouse.vy*110:0);
@@ -97,12 +96,12 @@ function coachDraw(x,W,Hh){
     for(const [col,w] of [['rgba(13,12,10,0.8)',mag>0.2?8:6],[COACH_GREEN,mag>0.2?5:3]]){x.strokeStyle=col;x.lineWidth=w;x.globalAlpha=col===COACH_GREEN?pulse:1;x.beginPath();x.moveTo(sx,sy);x.lineTo(ex,ey);x.stroke();}
     x.fillStyle=COACH_GREEN;x.beginPath();x.moveTo(ex+10*Math.cos(a),ey+10*Math.sin(a));x.lineTo(ex-14*Math.cos(a-0.5),ey-14*Math.sin(a-0.5));x.lineTo(ex-14*Math.cos(a+0.5),ey-14*Math.sin(a+0.5));x.closePath();x.fill();x.globalAlpha=1;
     x.strokeStyle='#fff';x.lineWidth=2;x.beginPath();x.arc(ex,ey,11,0,7);x.stroke();
-    const lab=Math.abs(c.lon)>Math.abs(c.lat)?(c.lon>0?(de?'vor':'forward'):(de?'zurück':'back')):(c.lat>0?(de?'rechts':'right'):(de?'links':'left'));
+    const lab=Math.abs(c.lon)>Math.abs(c.lat)?(c.lon>0?('forward'):('back')):(c.lat>0?('right'):('left'));
     x.font='bold 14px "Arial Narrow",sans-serif';x.textAlign='center';x.fillStyle='#0d0c0a';x.fillText(lab,ex+1,ey-19);x.fillStyle=COACH_GREEN;x.fillText(lab,ex,ey-20);}
   // collective and pedal arrows beside the controls box, with words
   const bx=W/2-70,by=Hh-60;x.font='bold 12px "Arial Narrow",sans-serif';x.textAlign='center';
-  if(Math.abs(c.col)>0.06&&!(TUTOR.on&&TUTOR.lockCol)){const up=c.col>0,ax=bx+45,ay=up?by-44:by+40;x.fillStyle=COACH_GREEN;x.beginPath();x.moveTo(ax,ay+(up?-12:12));x.lineTo(ax-8,ay);x.lineTo(ax+8,ay);x.closePath();x.fill();x.fillText(up?(de?'Kollektiv rein':'collective in'):(de?'Kollektiv raus':'collective out'),ax,up?ay-18:ay+26);}
-  if(Math.abs(c.ped)>0.1&&!(TUTOR.on&&TUTOR.lockPed)){const d=c.ped>0?1:-1,ax=bx+100+d*56,ay=by+26;x.fillStyle=COACH_GREEN;x.beginPath();x.moveTo(ax+d*14,ay);x.lineTo(ax,ay-8);x.lineTo(ax,ay+8);x.closePath();x.fill();x.fillText(d>0?(de?'Pedal rechts':'right pedal'):(de?'Pedal links':'left pedal'),bx+100+d*60,ay+24);}
+  if(Math.abs(c.col)>0.06&&!(TUTOR.on&&TUTOR.lockCol)){const up=c.col>0,ax=bx+45,ay=up?by-44:by+40;x.fillStyle=COACH_GREEN;x.beginPath();x.moveTo(ax,ay+(up?-12:12));x.lineTo(ax-8,ay);x.lineTo(ax+8,ay);x.closePath();x.fill();x.fillText(up?('collective in'):('collective out'),ax,up?ay-18:ay+26);}
+  if(Math.abs(c.ped)>0.1&&!(TUTOR.on&&TUTOR.lockPed)){const d=c.ped>0?1:-1,ax=bx+100+d*56,ay=by+26;x.fillStyle=COACH_GREEN;x.beginPath();x.moveTo(ax+d*14,ay);x.lineTo(ax,ay-8);x.lineTo(ax,ay+8);x.closePath();x.fill();x.fillText(d>0?('right pedal'):('left pedal'),bx+100+d*60,ay+24);}
   // ghost stick in the controls box: green ring where the stick belongs
   if(!(TUTOR.on&&TUTOR.lockLon&&TUTOR.lockLat)){const gx=bx+(S.ctl.lat+c.lat)*28,gy=by-(S.ctl.lon+c.lon)*28;x.strokeStyle=COACH_GREEN;x.lineWidth=2;x.beginPath();x.arc(gx,gy,5,0,7);x.stroke();}
   // the word and the sentence

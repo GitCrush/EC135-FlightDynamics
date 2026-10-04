@@ -186,7 +186,7 @@ control position but acceleration through a chain of lags:
 
 A cyan cross in the controls box marks the hover trim (learned from the
 autopilot while it has the cyclic), a dashed cyan line on the ladder the
-hover attitude. German or English (setup). `node test/tutor.js` proves
+hover attitude. `node test/tutor.js` proves
 every step passable with an ideal student.
 
 ## Coach
@@ -203,7 +203,7 @@ a green ring in the controls box, as labelled arrows on the collective
 and the pedals, and at the top as a headline with a sentence that names
 the cause and the remedy ("Du driftest nach links. Knüppel rechts, ein
 wenig, bis der Driftpfeil kleiner wird, dann zurück zur Mitte."). With
-the voice on, the sentence is spoken (Web Speech API, German or English);
+the voice on (off by default), the sentence is spoken (Web Speech API);
 rotor-limit hints interrupt, others wait three seconds after the last
 utterance and are not repeated within eight. Priorities: NR, overtorque,
 vortex ring, Fenestron, sink rate near the ground, then drift, heading,
@@ -220,7 +220,7 @@ pedals. Holding C or the middle button steers the head instead (smoothed;
 orbits the camera in the chase view) while the stick is frozen. The mouse wheel or W/S is the
 collective, A/D the pedals, arrow keys the cyclic by attitude, E starts and
 stops the engines. A welcome card offers the tutor first; the interface
-follows the browser language (German or English). A gamepad works out of the box (right stick cyclic, left x
+A gamepad works out of the box (right stick cyclic, left x
 pedals, left y / triggers collective). The setup has a gamepad panel: every
 axis of every connected device as a live bar, the buttons, a scaled stick
 dead zone, presets (gamepad, joystick with twist and throttle) and a learn
@@ -311,3 +311,22 @@ source files directly, so the browser and the tests cannot diverge.
 ## Licence
 
 Apache-2.0, like Grenzbereich.
+
+## Limits of main and tail rotor (1.7)
+
+The turbine lapse k = 0.789 · δ · θ^-1.55 caps every rating; it was fitted to
+the published EC135 P2 hover ceilings out of ground effect at 2835 kg (2685 m
+ISA, 1785 m ISA+20) using the power this model needs there in a steady,
+non-turning hover (551 / 543 kW). An earlier fit was taken in a hover that was
+turning: near the ceiling a fast left yaw stalls the Fenestron in its own
+inflow and the rotation sustains itself, which is the unanticipated-yaw trap
+and has to be excluded from calibration. The fan's blade stall angle (16°) is
+set so that it keeps about a quarter of yaw-moment margin at the hover
+ceiling; with 14° it had 8 % and stalled at full pedal in calm air.
+
+In the developed vortex ring (depth above 0.55) collective beyond the entry
+value raises the inflow nearly one for one at 0.75 R, so thrust barely moves
+while the induced power grows. Scenario E4: from a developed ring at 2500 kg,
+collective alone loses 266 m and the sink grows to 4000 fpm, forward cyclic
+with collective 46 m, Vuichard (left cyclic, right pedal) 40 m; at 2910 kg
+ISA+20 near the ceiling collective alone does not get out within 20 s.

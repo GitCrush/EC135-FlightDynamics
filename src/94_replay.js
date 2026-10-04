@@ -54,5 +54,5 @@ function replayDraw(x,W,Hh){
   const px=bx+(L[REPLAY.i].t-t0)/dtT*bw;x.fillStyle=HUD_COL.amber;x.fillRect(px-2,by-4,4,16);
   x.textAlign='left';x.font='bold 13px "Arial Narrow",sans-serif';x.fillStyle=HUD_COL.amber;x.fillText('REPLAY',bx,by-12);
   x.font='12px "Arial Narrow",sans-serif';x.fillStyle=HUD_COL.mute;x.textAlign='right';
-  x.fillText(`${(L[REPLAY.i].t-t0).toFixed(1)} / ${dtT.toFixed(1)} s   ${T_('← → spulen · Space Wiedergabe · L zurück','← → scrub · Space play · L back')}`,bx+bw,by-12);
+  x.fillText(`${(L[REPLAY.i].t-t0).toFixed(1)} / ${dtT.toFixed(1)} s   ← → scrub · Space play · L back`,bx+bw,by-12);
 }

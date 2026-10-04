@@ -157,17 +157,40 @@ function rotorStep(rt,st,dt,vb,om,omd,wb,rho,aSound,hAGL,th0,thLon,thLat,Qdrive)
   const lam=lamc+l0;
   let lam0s=l0;
   const xa=lamc/vh0;                                        // axial ratio: negative = descending
-  let w=0;
+  let w=0;if(!(xa<0&&xa>-2.6))st.ctSlow=CT;
   if(xa<0&&xa>-2.6){
     const x=Math.max(xa,-2);
     const poly=1.15-1.125*x-1.372*x*x-1.718*x*x*x-0.655*x*x*x*x;
     w=Math.pow(1-clamp(mu/(1.3*vh0),0,1),2)*sm(0,0.5,-xa)*sm(-2.6,-2.0,xa);
     lam0s=lerp(lam0s,poly*vh0,w);
+    /* Two things the mean-inflow curve leaves out, after Johnson's VRS
+       model (NASA TP-2005-213477): (1) in the core the heave damping
+       vanishes: with the curve alone the net inflow falls as the descent
+       grows, so a deeper descent would give more thrust and the state
+       would cure itself; a term rising with the descent ratio removes that
+       and lets the sink accelerate until about 1.3 vh. (2) Collective is
+       ineffective: the extra thrust of a quick collective pull is fed back
+       into the recirculating wake as extra inflow (filtered thrust as the
+       reference, 4 s), so pulling alone does not stop the sink. */
+    st.ctSlow=st.ctSlow===undefined?CT:st.ctSlow+(CT-st.ctSlow)*Math.min(1,dt/4);
+    const core=w*sm(-0.45,-0.8,x)*sm(-1.7,-1.35,x);
+    lam0s+=core*0.40*vh0*(-x-0.6);
+    lam0s+=(0.5*w+3.5*core)*Math.max(0,CT-st.ctSlow)/(2*vh0);   // in the core a pull keeps about a quarter of its normal effect
     st.noiseT-=dt;
     if(st.noiseT<=0){st.noiseT=0.12+0.2*WST.rng();st.noiseTgt=(WST.rng()-0.5);}   // seeded: the harness must replay
     st.noise+=((st.noiseTgt||0)-st.noise)*Math.min(1,dt*6);
     lam0s+=w*0.35*vh0*st.noise;
   }
+  /* Power settling: inside the vortex ring, collective added beyond the
+     value at entry goes into a stronger recirculation instead of thrust.
+     The extra pitch raises the inflow nearly one for one at the reference
+     radius (0.75 R), so the blade angle of attack, and with it the thrust,
+     barely moves while the induced power grows. Forward or sideways speed
+     (mu) takes the aircraft out of the region and the term with it. */
+  /* only in the developed ring: in the incipient stage more collective still
+     works (Airbus: the classical technique is effective there) */
+  if(w<0.55||st.thVrs===undefined)st.thVrs=th0;
+  lam0s+=sm(0.55,0.9,w)*0.65*Math.max(0,th0-st.thVrs);
   st.vrs=w;
   let kG=1;
   if(hAGL>0){const z=Math.max(hAGL,0.35*R);kG=1-(R/(4*z))*(R/(4*z))/(1+Math.pow(mu/Math.max(st.lam0,0.01),2));}

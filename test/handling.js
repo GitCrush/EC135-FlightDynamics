@@ -6,7 +6,7 @@ const {loadFull}=require('./loadfull.js');
 let errors=0,warns=0;
 function check(name,val,lo,hi,unit='',warn=0){const ok=val>=lo&&val<=hi,w=!ok&&val>=lo-warn&&val<=hi+warn;if(!ok&&!w)errors++;if(w)warns++;
   console.log(`  ${ok?'OK   ':w?'WARN ':'ERROR'} ${name.padEnd(58)} ${(typeof val==='number'?val.toFixed(Math.abs(val)<10?2:0):val).toString().padStart(8)} ${unit.padEnd(5)} [${lo}..${hi}]`);}
-function fresh(kind){const F=loadFull();F.WIND.spd=0;F.WIND.turb=0;F.cfg.mass=2500;F.cfg.lang='en';Object.assign(F.cfg,{sas:true,attHold:true,hdgHold:true,hoverAssist:false,kbdCol:'metered',kbdPed:'heading',pedRate:25,mouse:true,mouseTravel:1600});F.uiReset(kind||'hover');return F;}
+function fresh(kind){const F=loadFull();F.WIND.spd=0;F.WIND.turb=0;F.cfg.mass=2500;Object.assign(F.cfg,{sas:true,attHold:true,hdgHold:true,hoverAssist:false,kbdCol:'metered',kbdPed:'heading',pedRate:25,mouse:true,mouseTravel:1600});F.uiReset(kind||'hover');return F;}
 function gs(F){const v=F.mrot(F.qmat(F.S.q),F.S.vb);return Math.hypot(v[0],v[1]);}
 /* one browser frame at 360 Hz: devices → tutor → AP demo → coach → physics */
 function run(F,sec,fn,rec){const n=Math.round(sec/F.DT);for(let i=0;i<n;i++){const t=i*F.DT;if(fn)fn(t);F.inputStep(F.DT);F.tutorStep(F.DT);F.apDemoStep(F.DT);F.coachStep(F.DT);const prev={lon:F.IN.lon,lat:F.IN.lat,ped:F.IN.ped,col:F.IN.col};F.step(F.DT);if(rec)rec(t,prev);}}
@@ -89,7 +89,7 @@ console.log('\n■ Gamepad mapping: learning, slider collective, dead zone, bloc
 {const F=fresh('hover');F.padPreset('gamepad');const pad={index:0,id:'t',connected:true,axes:[0,0,0,0],buttons:Array.from({length:16},()=>({value:0}))};F.pads[0]=pad;F.cfg.padDead=0.06;
  const vals=[];for(const a of [0.05,0.061,0.07,0.1]){pad.axes[2]=a;F.inputStep(F.DT);vals.push(F.IN.raw.lat);}
  check('dead zone: nothing below 6 %',Math.abs(vals[0]),0,0.0001,'');check('dead zone: no step at its edge (raw just above)',Math.abs(vals[1]),0,0.01,'');check('dead zone: scaled above it (10 % → ~4 %)',vals[3],0.03,0.05,'');F.pads[0]=null;}
-{const F=loadFull({throwPads:true});F.WIND.spd=0;F.cfg.lang='en';let threw=false;try{F.uiReset('hover');run(F,1);}catch(e){threw=true;}
+{const F=loadFull({throwPads:true});F.WIND.spd=0;let threw=false;try{F.uiReset('hover');run(F,1);}catch(e){threw=true;}
  check('Gamepad API blocked (embedded frame): no exception, flag set',(!threw&&F.PAD.blocked)?1:0,1,1,'');check('… and the keys still fly',Math.abs(F.S.eul[1])<0.3?1:0,1,1,'');}
 
 console.log('\n■ Forward flight with the keys: accelerate, release, trim with T');

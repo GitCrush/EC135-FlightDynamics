@@ -26,7 +26,7 @@ function hudDraw(dt){
       else{x.strokeStyle='rgba(232,226,214,0.85)';const m=[(a[0]+b[0])/2,(a[1]+b[1])/2];x.moveTo(m[0]+(a[0]-m[0])*0.5,m[1]+(a[1]-m[1])*0.5);x.lineTo(m[0]+(b[0]-m[0])*0.5,m[1]+(b[1]-m[1])*0.5);x.lineWidth=1;x.fillStyle=HUD_COL.ink;x.fillText(String(el),m[0]+(b[0]-m[0])*0.55,m[1]+(b[1]-m[1])*0.55);}
       x.stroke();}
     // hover attitude mark on the ladder while the tutor teaches the stick: nose 3° up, right skid 4° low
-    if(TUTOR.on&&(TUTOR.showTrim||(LESSONS[TUTOR.li].steps[TUTOR.si]||{}).tether)){const a=hp(psi-0.12,3*DEG),b=hp(psi+0.12,3*DEG);if(a&&b){x.strokeStyle=HUD_COL.ice;x.lineWidth=2;x.setLineDash([6,4]);x.beginPath();x.moveTo(a[0],a[1]);x.lineTo(b[0],b[1]);x.stroke();x.setLineDash([]);x.fillStyle=HUD_COL.ice;x.textAlign='left';x.fillText(T_('Schwebelage','hover attitude'),b[0]+6,b[1]);}}
+    if(TUTOR.on&&(TUTOR.showTrim||(LESSONS[TUTOR.li].steps[TUTOR.si]||{}).tether)){const a=hp(psi-0.12,3*DEG),b=hp(psi+0.12,3*DEG);if(a&&b){x.strokeStyle=HUD_COL.ice;x.lineWidth=2;x.setLineDash([6,4]);x.beginPath();x.moveTo(a[0],a[1]);x.lineTo(b[0],b[1]);x.stroke();x.setLineDash([]);x.fillStyle=HUD_COL.ice;x.textAlign='left';x.fillText('hover attitude',b[0]+6,b[1]);}}
     // aircraft reference: fixed on the screen where the 6° down cockpit line of sight lands the waterline
     const ref=project(vadd(R3.cam.pos,mrot(qmat(S.q),[1000,0,0])));
     if(ref){x.strokeStyle=HUD_COL.amber;x.lineWidth=2;x.beginPath();x.moveTo(ref[0]-40,ref[1]);x.lineTo(ref[0]-14,ref[1]);x.lineTo(ref[0]-7,ref[1]+7);x.lineTo(ref[0],ref[1]);x.lineTo(ref[0]+7,ref[1]+7);x.lineTo(ref[0]+14,ref[1]);x.lineTo(ref[0]+40,ref[1]);x.stroke();}
@@ -100,7 +100,7 @@ function hudDraw(dt){
     x.fillStyle=HUD_COL.amber;x.beginPath();x.arc(cx+S.ctl.lat*28,cy-S.ctl.lon*28,4,0,7);x.fill();
     x.fillStyle='#000';x.fillRect(cx+40,cy-30,10,60);x.fillStyle=HUD_COL.ok;x.fillRect(cx+40,cy+30,10,-S.ctl.col*60);
     x.fillStyle='#000';x.fillRect(cx+60,cy+22,80,8);x.fillStyle=HUD_COL.amber;x.fillRect(cx+100+S.ctl.ped*40-3,cy+20,6,12);
-    x.fillStyle=HUD_COL.mute;x.textAlign='left';x.fillText('COL '+(S.ctl.col*100).toFixed(0)+'%',cx+60,cy-24);x.fillText('PED '+(S.ctl.ped*100).toFixed(0)+'%',cx+60,cy+8);x.fillText(IN.raw.src==='mouse'?'mouse':IN.raw.src==='pad'?'gamepad':(cfg.mouse&&!DEV.mouse.armed?T_('Maus: klicken','mouse: click'):'keys'),cx+60,cy-8);
+    x.fillStyle=HUD_COL.mute;x.textAlign='left';x.fillText('COL '+(S.ctl.col*100).toFixed(0)+'%',cx+60,cy-24);x.fillText('PED '+(S.ctl.ped*100).toFixed(0)+'%',cx+60,cy+8);x.fillText(IN.raw.src==='mouse'?'mouse':IN.raw.src==='pad'?'gamepad':(cfg.mouse&&!DEV.mouse.armed?'mouse: click':'keys'),cx+60,cy-8);
     if(cfg.hoverAssist){x.fillStyle=HUD_COL.ice;x.fillText('HOVER ASSIST',cx-30,cy-36);}
     // skid loads while on the ground: which corner carries the aircraft (slope landings, rollover)
     if(S.gear.contact>0&&S.gear.loads){const W4=S.m*9.81/4;const pos=[[cx+126,cy-36],[cx+137,cy-36],[cx+126,cy-27],[cx+137,cy-27]];
@@ -123,15 +123,15 @@ function hudDraw(dt){
     const pulse=0.55+0.45*Math.sin(S.t*4);x.strokeStyle=`rgba(255,179,0,${pulse})`;x.lineWidth=2.5;
     for(const id of (st.hl||[])){const r=rects[id];if(r)x.strokeRect(r[0],r[1],r[2],r[3]);}
     const bw=Math.min(W-40,640),bx=W/2-bw/2,by=68;x.font='15px "Arial Narrow",sans-serif';
-    const lines=wrapText(x,T_(st.text[0],st.text[1]),bw-28);const bh=lines.length*20+64;
+    const lines=wrapText(x,st.text,bw-28);const bh=lines.length*20+64;
     x.fillStyle='rgba(13,12,10,0.86)';x.fillRect(bx,by,bw,bh);x.strokeStyle=HUD_COL.amber;x.lineWidth=1;x.strokeRect(bx,by,bw,bh);
     x.textAlign='left';x.fillStyle=HUD_COL.amber;x.font='bold 13px "Arial Narrow",sans-serif';
-    x.fillText(`${T_('Lektion','Lesson')} ${TUTOR.li+1}/${LESSONS.length} · ${T_(L.title[0],L.title[1])}   ·   ${T_('Schritt','Step')} ${TUTOR.si+1}/${L.steps.length}`,bx+14,by+16);
+    x.fillText(`Lesson ${TUTOR.li+1}/${LESSONS.length} · ${L.title}   ·   Step ${TUTOR.si+1}/${L.steps.length}`,bx+14,by+16);
     x.fillStyle=HUD_COL.ink;x.font='15px "Arial Narrow",sans-serif';lines.forEach((l,i)=>x.fillText(l,bx+14,by+40+i*20));
     if(TUTOR.prog>0&&TUTOR.passed<=0){x.fillStyle='#2a2620';x.fillRect(bx+14,by+bh-18,bw-28,6);x.fillStyle=HUD_COL.ice;x.fillRect(bx+14,by+bh-18,(bw-28)*TUTOR.prog,6);}
-    x.fillStyle=HUD_COL.mute;x.font='11px "Arial Narrow",sans-serif';x.textAlign='right';x.fillText(st.manual?T_('N weiter · B zurück · Q beendet den Tutor','N next · B back · Q quits the tutor'):T_('B zurück · N überspringen · Q beendet den Tutor','B back · N skips · Q quits the tutor'),bx+bw-12,by+bh-8);
+    x.fillStyle=HUD_COL.mute;x.font='11px "Arial Narrow",sans-serif';x.textAlign='right';x.fillText(st.manual?'N next · B back · Q quits the tutor':'B back · N skips · Q quits the tutor',bx+bw-12,by+bh-8);
     if(TUTOR.passed>0||TUTOR.lessonDone){x.textAlign='center';x.font='bold 22px "Arial Narrow",sans-serif';x.fillStyle=HUD_COL.ok;
-      x.fillText(TUTOR.lessonDone?T_('Lektion abgeschlossen – N für die nächste','Lesson complete – N for the next one'):T_('✓ Gut','✓ Good'),W/2,by+bh+26);}
+      x.fillText(TUTOR.lessonDone?'Lesson complete – N for the next one':'✓ Good',W/2,by+bh+26);}
   }
   /* ---- incident banner ---- */
   if(S.incident&&S.incident.t!==HUD.incT){HUD.incT=S.incident.t;HUD.incText=S.incident.text;HUD.incId=S.incident.id;HUD.incShow=S.t;}
@@ -143,8 +143,7 @@ function hudDraw(dt){
     x.fillStyle='rgba(13,12,10,0.88)';x.fillRect(bx,by,bw,bh);x.strokeStyle=HUD_COL.ice;x.lineWidth=1;x.strokeRect(bx,by,bw,bh);
     x.textAlign='left';x.fillStyle=HUD_COL.ice;x.font='bold 14px "Arial Narrow",sans-serif';x.fillText(d.title,bx+14,by+18);x.font='13px "Arial Narrow",sans-serif';
     d.rows.forEach(([k,v],i)=>{x.fillStyle=HUD_COL.mute;x.textAlign='left';x.fillText(k,bx+14,by+42+i*20);x.fillStyle=HUD_COL.ink;x.textAlign='right';x.fillText(v,bx+bw-14,by+42+i*20);});}
-  if(UI.showKeys){const de=cfg.lang==='de';const K=de?[['Maus','Klick in die Sicht fängt sie als Knüppel; Tasten links/rechts = Pedale'],['C · Mitteltaste','halten und umschauen'],['Esc','Maus freigeben'],['Rad · W S','Kollektiv'],['A D','Pedale'],['Pfeile','Knüppel'],['T','Trimm auf die jetzige Lage'],['Shift + Pfeile','Trimm verstellen (Beep)'],['Y','zurück zur Schwebetrimmung'],['E','Triebwerke starten/abstellen'],['H','Hover Assist'],['V','Autopilot fliegt vor'],['K','Coach: aus / Hinweise / Hinweise + Stimme'],['1 2 3','Cockpit · Verfolger · Tower'],['F','Flugwegmarker'],['P · Leertaste','Pause'],['R','Reset wiederholen'],['G','Triebwerksausfall'],['L','Replay der letzten 20 s'],['X','CSV-Export'],['N B Q','Tutor weiter · zurück · Ende'],['?','diese Liste']]
-      :[['Mouse','a click into the view captures it as the stick; buttons left/right = pedals'],['C · middle button','hold and look around'],['Esc','release the mouse'],['Wheel · W S','collective'],['A D','pedals'],['Arrows','stick'],['T','trim to the present attitude'],['Shift + arrows','beep trim'],['Y','back to the hover trim'],['E','engines start/stop'],['H','hover assist'],['V','autopilot demonstration'],['K','coach: off / cues / cues + voice'],['1 2 3','cockpit · chase · tower'],['F','flight path marker'],['P · Space','pause'],['R','repeat reset'],['G','engine failure'],['L','replay of the last 20 s'],['X','CSV export'],['N B Q','tutor next · back · quit'],['?','this list']];
+  if(UI.showKeys){const K=[['Mouse','a click into the view captures it as the stick; buttons left/right = pedals'],['C · middle button','hold and look around'],['Esc','release the mouse'],['Wheel · W S','collective'],['A D','pedals'],['Arrows','stick'],['T','trim to the present attitude'],['Shift + arrows','beep trim'],['Y','back to the hover trim'],['E','engines start/stop'],['H','hover assist'],['V','autopilot demonstration'],['K','coach: off / cues / cues + voice'],['1 2 3','cockpit · chase · tower'],['F','flight path marker'],['P · Space','pause'],['R','repeat reset'],['G','engine failure'],['L','replay of the last 20 s'],['X','CSV export'],['N B Q','tutor next · back · quit'],['?','this list']];
     const bw=420,bh=K.length*18+40,bx=W/2-bw/2,by=Hh/2-bh/2-30;x.fillStyle='rgba(13,12,10,0.9)';x.fillRect(bx,by,bw,bh);x.strokeStyle=HUD_COL.amber;x.strokeRect(bx,by,bw,bh);
     x.font='13px "Arial Narrow",sans-serif';K.forEach(([k,v],i)=>{x.textAlign='right';x.fillStyle=HUD_COL.amber;x.fillText(k,bx+110,by+26+i*18);x.textAlign='left';x.fillStyle=HUD_COL.ink;x.fillText(v,bx+124,by+26+i*18);});}
   // mouse stick: a small cross shows the virtual stick around the centre of the view; without capture, say so
@@ -152,12 +151,12 @@ function hudDraw(dt){
     if(DEV.mouse.armed){const cx0=W/2,cy0=Hh/2-40;const sx=cx0+DEV.mouse.vx*110,sy=cy0+DEV.mouse.vy*110;
       x.strokeStyle='rgba(232,226,214,0.25)';x.lineWidth=1;x.strokeRect(cx0-110,cy0-110,220,220);
       x.strokeStyle='rgba(255,179,0,0.85)';x.lineWidth=1.5;x.beginPath();x.arc(sx,sy,7,0,7);x.moveTo(sx-12,sy);x.lineTo(sx-4,sy);x.moveTo(sx+4,sy);x.lineTo(sx+12,sy);x.moveTo(sx,sy-12);x.lineTo(sx,sy-4);x.moveTo(sx,sy+4);x.lineTo(sx,sy+12);x.stroke();}
-    else if(DEV.mouse.on&&!UI.paused){x.textAlign='center';x.font='13px "Arial Narrow",sans-serif';x.fillStyle=HUD_COL.amber;x.fillText(T_('Klick in die Sicht fängt die Maus als Knüppel – Esc gibt sie frei','Click into the view to capture the mouse as the stick – Esc releases it'),W/2,Hh*0.86-70);}
+    else if(DEV.mouse.on&&!UI.paused){x.textAlign='center';x.font='13px "Arial Narrow",sans-serif';x.fillStyle=HUD_COL.amber;x.fillText('Click into the view to capture the mouse as the stick – Esc releases it',W/2,Hh*0.86-70);}
   }
-  if(DEV.look.on){x.textAlign='center';x.font='12px "Arial Narrow",sans-serif';x.fillStyle=HUD_COL.mute;x.fillText(T_('Umschauen – loslassen kehrt zur Sicht nach vorn zurück, der Knüppel bleibt, wo er war','Looking around – release returns the view forward, the stick stays where it was'),W/2,Hh*0.86-52);}
-  if(UI.apDemo&&!REPLAY.on){x.textAlign='center';x.font='bold 15px "Arial Narrow",sans-serif';x.fillStyle=HUD_COL.ice;x.fillText(T_('AUTOPILOT FLIEGT – V gibt dir die Steuer zurück','AUTOPILOT FLYING – V hands the controls back'),W/2,Hh*0.86-52);}
-  if(UI.paused&&!REPLAY.on){x.textAlign='center';x.font='bold 24px "Arial Narrow",sans-serif';x.fillStyle=HUD_COL.amber;x.fillText(T_('PAUSE','PAUSED'),W/2,Hh/2-120);x.font='13px "Arial Narrow",sans-serif';x.fillStyle=HUD_COL.mute;x.fillText(T_('P oder Klick in die Sicht','P or click into the view'),W/2,Hh/2-100);}
-  if(S.crash){x.textAlign='center';x.fillStyle='rgba(255,59,31,0.9)';x.fillRect(W/2-190,Hh/2-24,380,54);x.fillStyle='#0d0c0a';x.font='bold 20px "Arial Narrow",sans-serif';x.fillText(S.crash,W/2,Hh/2-4);x.font='13px "Arial Narrow",sans-serif';x.fillText(T_('R = Neustart an derselben Stelle · L = Replay der letzten 20 s','R = restart at the same place · L = replay of the last 20 s'),W/2,Hh/2+18);}
-  if(typeof SND!=='undefined'&&!SND.on&&cfg.sound&&!(document.getElementById('welcome')&&document.getElementById('welcome').style.display!=='none')){x.textAlign='center';x.font='12px "Arial Narrow",sans-serif';x.fillStyle=HUD_COL.mute;x.fillText(T_('Klick in die Sicht schaltet den Ton ein','Click into the view to enable sound'),W/2,Hh*0.86-10);}
+  if(DEV.look.on){x.textAlign='center';x.font='12px "Arial Narrow",sans-serif';x.fillStyle=HUD_COL.mute;x.fillText('Looking around – release returns the view forward, the stick stays where it was',W/2,Hh*0.86-52);}
+  if(UI.apDemo&&!REPLAY.on){x.textAlign='center';x.font='bold 15px "Arial Narrow",sans-serif';x.fillStyle=HUD_COL.ice;x.fillText('AUTOPILOT FLYING – V hands the controls back',W/2,Hh*0.86-52);}
+  if(UI.paused&&!REPLAY.on){x.textAlign='center';x.font='bold 24px "Arial Narrow",sans-serif';x.fillStyle=HUD_COL.amber;x.fillText('PAUSED',W/2,Hh/2-120);x.font='13px "Arial Narrow",sans-serif';x.fillStyle=HUD_COL.mute;x.fillText('P or click into the view',W/2,Hh/2-100);}
+  if(S.crash){x.textAlign='center';x.fillStyle='rgba(255,59,31,0.9)';x.fillRect(W/2-190,Hh/2-24,380,54);x.fillStyle='#0d0c0a';x.font='bold 20px "Arial Narrow",sans-serif';x.fillText(S.crash,W/2,Hh/2-4);x.font='13px "Arial Narrow",sans-serif';x.fillText('R = restart at the same place · L = replay of the last 20 s',W/2,Hh/2+18);}
+  if(typeof SND!=='undefined'&&!SND.on&&cfg.sound&&!(document.getElementById('welcome')&&document.getElementById('welcome').style.display!=='none')){x.textAlign='center';x.font='12px "Arial Narrow",sans-serif';x.fillStyle=HUD_COL.mute;x.fillText('Click into the view to enable sound',W/2,Hh*0.86-10);}
 }
 function wrapText(x,text,maxW){const words=text.split(' ');const lines=[];let cur='';for(const w of words){const t=cur?cur+' '+w:w;if(x.measureText(t).width>maxW){lines.push(cur);cur=w;}else cur=t;}if(cur)lines.push(cur);return lines;}

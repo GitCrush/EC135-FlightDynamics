@@ -8,6 +8,6 @@
     "test": "node test/consistency.js && node test/tutor.js && node test/handling.js",
     "browser": "python3 test/browser.py",
     "controls": "node test/controls.js",
-    "scenarios": "node test/scenarios.js A && node test/scenarios.js B && node test/scenarios.js C"
+    "scenarios": "node test/scenarios.js A && node test/scenarios.js B && node test/scenarios.js C && node test/scenarios.js D && node test/scenarios.js E"
   }
 }

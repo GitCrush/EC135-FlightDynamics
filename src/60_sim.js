@@ -1,13 +1,11 @@
 /* ═══════════════ SIMULATION ═══════════════ */
 const DT=1/360;                                   // 55 steps per rotor revolution at 100 % NR
-const T_=(de,en)=>cfg.lang==='de'?de:en;         // text in the pilot's language
 const cfg={
   mass:2500, cgx:0.0, dT:0, qnh:1013,             // aircraft & atmosphere
   sas:true, attHold:true, hdgHold:true, hoverAssist:false, assistK:1,   // stability augmentation (training aids); assistK blends hover assist with the raw stick
   kbdCol:'metered', kbdPed:'heading', pedRate:25,            // keyboard pilot models; yaw rate per pedal key, °/s
   mouse:true, mouseMode:'stick', mouseTravel:1600, mouseButtons:true, padDead:0.06,   // px of mouse movement for full stick (real stick: 80 mm lateral, 108 mm longitudinal per side)
   view:'cockpit', hud:true, rotorDisc:true, fpm:true, sound:true, cloud:0.4,
-  lang:(typeof navigator!=='undefined'&&/^de/i.test(navigator.language||''))?'de':'en',
   engFail:'none',
 };
 const IN={col:0.45,lon:0,lat:0,ped:0,             // controls after the pilot models, [0..1] / [-1..1]
@@ -89,7 +87,8 @@ function step(dt){
      Above that there is no cap: a drooping rotor in an overpitch must
      still get full power, the FLI sits at the limit while NR bleeds. */
   const qCap=S.NR<60?H.eng.qMax+Math.pow(S.NR/60,3)*26000:1e9;
-  const Ptot=engStep(H.eng,S.eng,dt,S.NR,S.Pload,0,(IN.col-S.ctl.col),qCap*Math.max(st.Om,1)+H.eng.idle*2);
+  const lapse=H.eng.thk*(at.p/101325)*Math.pow(at.T/288.15,-H.eng.thb);   // turbine power in the present air
+  const Ptot=engStep(H.eng,S.eng,dt,S.NR,S.Pload,0,(IN.col-S.ctl.col),qCap*Math.max(st.Om,1)+H.eng.idle*2,lapse);
   const Qeng=Math.min(Math.max(0,Ptot)/Math.max(st.Om,5),qCap);                  // freewheel
   const Qload=st.Q+Pfen/Math.max(st.Om,5)+H.eng.acc/rt.Om0+H.eng.qFric*Math.min(1,st.Om/2);   // accessories as constant torque
   S.eng.Qdrive=Qeng;
@@ -150,11 +149,11 @@ function step(dt){
       const psi=st.psi+2*Math.PI*k/rt.N, b=st.beta[k];
       const ph=[-Math.cos(psi)*rt.R*Math.cos(b),-rt.s*Math.sin(psi)*rt.R*Math.cos(b),-rt.R*Math.sin(b)];
       const pw=vadd(S.pos,mrot(R,vadd(rt.hub,mrot(rt.Rbh,ph))));
-      if(pw[2]+terrainH(pw[0],pw[1])>0){S.crash=T_('Rotorblatt hat den Boden berührt','Blade strike');break;}
+      if(pw[2]+terrainH(pw[0],pw[1])>0){S.crash='Blade strike';break;}
     }
-    if(ge.contact&&(Math.abs(S.eul[0])>0.9||Math.abs(S.eul[1])>0.9))S.crash=T_('Umgekippt','Rolled over');
-    if(ge.contact&&inLake(S.pos[0],S.pos[1]))S.crash=T_('Im See gelandet','Ditched in the lake');
-    if(ge.contact&&ge.maxSink>6)S.crash=T_('Absturz','Crash landing');
+    if(ge.contact&&(Math.abs(S.eul[0])>0.9||Math.abs(S.eul[1])>0.9))S.crash='Rolled over';
+    if(ge.contact&&inLake(S.pos[0],S.pos[1]))S.crash='Ditched in the lake';
+    if(ge.contact&&ge.maxSink>6)S.crash='Crash landing';
   }
   if(S.crash){st.Om=Math.max(0,st.Om-dt*8);for(const en of S.eng.e)en.fail=true;}
   S.t+=dt;S.frame++;
@@ -178,31 +177,27 @@ function logger(dt){
    the textbook condition; the message tells the pilot what the rotor is
    doing and the standard recovery. */
 const INC_RULES=[
+  {id:'tailfail',test:r=>S.fen.failed&&!S.onGround,
+   text:r=>`Tail drive failure: no anti-torque. In the hover, lower the collective at once (less torque, less spin) and land. In cruise keep the airspeed, the fin holds the nose; plan a run-on landing and close the throttles at touchdown if the yaw cannot be held.`},
   {id:'vrs',test:r=>r.vrs>0.35&&r.vs<-500&&r.ias<30,
-   text:r=>T_(`Wirbelringzustand: ${(-r.vs).toFixed(0)} fpm Sinken bei ${r.ias.toFixed(0)} kt, der Rotor saugt seinen eigenen Nachlauf an. Mehr Kollektiv bringt weniger Schub. Rausfliegen: Knüppel nach vorn oder zur Seite (Vuichard: rechts mit linkem Pedal), Kollektiv halten.`,
-             `Vortex ring state: sinking ${(-r.vs).toFixed(0)} fpm at ${r.ias.toFixed(0)} kt, the rotor is recirculating its own wake. Thrust drops as collective rises. Fly out: forward or sideways cyclic (Vuichard: right cyclic with left pedal), collective steady.`)},
+   text:r=>`Vortex ring state: sinking ${(-r.vs).toFixed(0)} fpm at ${r.ias.toFixed(0)} kt, the rotor is recirculating its own wake. More collective alone does not stop it. Recover as Airbus advises: forward cyclic decisively to gain airspeed, collective up as power allows. With no room ahead (Vuichard, clockwise rotor): take-off power, left cyclic to a 15–20° bank, right pedal to hold the heading.`},
   {id:'lownr',test:r=>r.nr<H.nr.minPowerOn-2.5&&r.fli>9.5&&S.eng.mode!=='start',
-   text:r=>T_(`Rotordrehzahl ${r.nr.toFixed(1)} %: das Kollektiv verlangt mehr Leistung, als ${S.eng.mode==='oei'?'ein Triebwerk':'die Triebwerke'} liefern (FLI ${r.fli.toFixed(1)}). Kollektiv senken, bis NR zurück ist, dann Fahrt gegen Höhe tauschen.`,
-             `Rotor speed ${r.nr.toFixed(1)} %: the collective demands more power than ${S.eng.mode==='oei'?'one engine':'the engines'} can deliver (FLI ${r.fli.toFixed(1)}). Lower the collective to recover NR, then trade airspeed for height.`)},
+   text:r=>`Rotor speed ${r.nr.toFixed(1)} %: the collective demands more power than ${S.eng.mode==='oei'?'one engine':'the engines'} can deliver (FLI ${r.fli.toFixed(1)}). Lower the collective to recover NR, then trade airspeed for height.`},
   {id:'lownrauto',test:r=>r.nr<H.nr.minAuto&&r.fli<3&&S.eng.mode!=='off'&&S.eng.mode!=='start'&&!S.onGround,
-   text:r=>T_(`Rotordrehzahl ${r.nr.toFixed(1)} % in der Autorotation: die Scheibe wird zu wenig angetrieben. Kollektiv senken, Knüppel zurück, um den Rotor zu belasten.`,
-             `Rotor speed ${r.nr.toFixed(1)} % in autorotation: the disc is not driven enough. Lower the collective, aft cyclic to load the rotor.`)},
+   text:r=>`Rotor speed ${r.nr.toFixed(1)} % in autorotation: the disc is not driven enough. Lower the collective, aft cyclic to load the rotor.`},
   {id:'overspeed',test:r=>r.nr>H.nr.maxAuto,
-   text:r=>T_(`Rotorüberdrehzahl ${r.nr.toFixed(1)} %: Kollektiv heben, um die Scheibe zu belasten.`,`Rotor overspeed ${r.nr.toFixed(1)} %: raise the collective to load the disc.`)},
+   text:r=>`Rotor overspeed ${r.nr.toFixed(1)} %: raise the collective to load the disc.`},
   {id:'rbs',test:r=>r.stall>0.28&&r.ias>90,
-   text:r=>T_(`Strömungsabriss am rücklaufenden Blatt bei ${r.ias.toFixed(0)} kt: die rücklaufende Seite ist über dem Abrisswinkel, die Nase geht hoch und die Maschine rollt zur rücklaufenden Seite. Kollektiv und Fahrt reduzieren, g rausnehmen.`,
-             `Retreating blade stall at ${r.ias.toFixed(0)} kt: the retreating side of the disc is beyond its stall angle, the nose pitches up and the aircraft rolls toward the retreating side. Reduce collective and airspeed, ease the g.`)},
+   text:r=>`Retreating blade stall at ${r.ias.toFixed(0)} kt: the retreating side of the disc is beyond its stall angle, the nose pitches up and the aircraft rolls toward the retreating side. Reduce collective and airspeed, ease the g.`},
   {id:'fen',test:r=>r.fen>0.6&&Math.abs(r.ped)>0.9,
-   text:r=>T_(`Fenestron am Limit: Pedal ${(r.ped*100).toFixed(0)} %, Blätter gestallt. Keine Gierautorität, bis Leistung weg oder Fahrt da ist. Kollektiv senken, Nase in den Wind.`,
-             `Fenestron at its limit: pedal ${(r.ped*100).toFixed(0)} %, blades stalled. Yaw authority is gone until power comes off or airspeed comes on. Reduce collective, get the nose into wind.`)},
+   text:r=>`Fenestron at its limit: pedal ${(r.ped*100).toFixed(0)} %, blades stalled. Yaw authority is gone until power comes off or airspeed comes on. Reduce collective, get the nose into wind.`},
   {id:'overtorque',test:r=>r.fli>11.5,
-   text:r=>T_(`Über Startleistung (FLI ${r.fli.toFixed(1)}): Overtorque. Kollektiv senken.`,`Above take-off power (FLI ${r.fli.toFixed(1)}): overtorque. Lower the collective.`)},
+   text:r=>`Above take-off power (FLI ${r.fli.toFixed(1)}): overtorque. Lower the collective.`},
   {id:'rollover',test:r=>S.onGround&&S.gear.contact<4&&S.gear.contact>0&&Math.abs(r.phi)>7&&Math.sign(r.p)===Math.sign(r.phi)&&Math.abs(r.p)>4,
-   text:r=>T_(`Dynamisches Überrollen: die Maschine kippt bei ${Math.abs(r.phi).toFixed(0)}° um eine Kufe, der Rotor zieht seitlich. Kollektiv sanft senken. Der Knüppel allein hält es jenseits des kritischen Winkels nicht mehr.`,
-             `Dynamic rollover: pivoting on one skid at ${Math.abs(r.phi).toFixed(0)}° with the rotor pulling sideways. Lower the collective smoothly. Cyclic alone cannot stop it once the critical angle is passed.`)},
+   text:r=>`Dynamic rollover: pivoting on one skid at ${Math.abs(r.phi).toFixed(0)}° with the rotor pulling sideways. Lower the collective smoothly. Cyclic alone cannot stop it once the critical angle is passed.`},
   {id:'hard',test:r=>S.touch&&S.touch.t&&S.t-S.touch.t<0.5&&S.touch.vs>H.gear.hardVs&&!S.touch.air,
-   text:r=>T_(`Harte Landung: ${(S.touch.vs/FPM).toFixed(0)} fpm beim Aufsetzen.`,`Hard landing: ${(S.touch.vs/FPM).toFixed(0)} fpm at touchdown.`)},
-  {id:'vne',test:r=>r.ias>H.vne+3,text:r=>T_(`Über Vne (${H.vne} kt).`,`Above Vne (${H.vne} kt).`)},
+   text:r=>`Hard landing: ${(S.touch.vs/FPM).toFixed(0)} fpm at touchdown.`},
+  {id:'vne',test:r=>r.ias>H.vne+3,text:r=>`Above Vne (${H.vne} kt).`},
   {id:'crash',test:r=>!!S.crash,text:r=>S.crash+'.'},
 ];
 const INC_LAST={};

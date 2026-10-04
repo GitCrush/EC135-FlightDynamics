@@ -53,7 +53,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [A, B, C]
+        group: [A, B, C, D, E]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

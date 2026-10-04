@@ -23,16 +23,16 @@ The simulator is the single file [`index.html`](index.html), served by GitHub Pa
 The hard part of flying a helicopter is the hover, and the hard part of the hover is that the stick does not control where you are. It tilts the rotor, the tilt rotates the fuselage, the attitude accelerates the aircraft, and only the velocity that builds up moves you, each step a little late. Whoever watches the position reacts four seconds behind and starts to oscillate. The simulator is built around making that chain learnable:
 
 - **A tutor with 13 lessons** that hands over the collective, then the pedals, then the stick in five stages: a calm hover hands-off, a tether that lets the aircraft tilt but not drift, one axis at a time, the stick as a velocity command with the help faded out, and finally the raw stick. Each step names one thing to do and checks itself.
-- **A coach** (off / cues / cues + voice) that runs a shadow autopilot alongside you and shows the stick input it would add *now*: a green arrow from your stick to where it should be, arrows on the collective and pedals, and one sentence naming the cause and the remedy — rotor limits first.
+- **A coach** (off / cues / cues + voice; cues by default, speech is opt-in because browser voices vary a lot) that runs a shadow autopilot alongside you and shows the stick input it would add *now*: a green arrow from your stick to where it should be, arrows on the collective and pedals, and one sentence naming the cause and the remedy — rotor limits first.
 - **A trimmed hand-over**: every airborne start begins in a hover that stands still hands-off, so you first learn what calm looks like.
 - **Instruments that make the limit legible**: rotor speed and power (FLI) with their limits, a drift vector for the hover, a rotor-state map with the angle of attack over the whole disc, and an incident detector that names the mechanism — vortex ring, retreating blade stall, low rotor speed, Fenestron at its limit, dynamic rollover — and the standard recovery.
 - **A flight recorder**: a 20-second strip chart that freezes after an incident, a replay through the same renderer and HUD, a debrief card after every landing, and CSV export.
-- **Exercises** beyond the tutor: cold start, lift-off, pedal turns, quick stop, slope landing, a hospital rooftop pad, a confined area, autorotation, vortex ring recovery, an approach behind a phantom aircraft and an engine failure in the hover.
+- **Exercises** beyond the tutor: cold start, lift-off, pedal turns, quick stop, slope landing, a hospital rooftop pad, a confined area, autorotation, vortex ring recovery, an approach behind a phantom aircraft and an engine failure in the hover. Failures: one engine, both engines, and the tail drive (no anti-torque).
 
 ## Getting started
 
 1. Open the [live page](https://gitcrush.github.io/EC135-FlightDynamics/) on a desktop browser.
-2. Choose *Start the tutor – lesson 1*. The interface follows your browser language (English or German) and can be switched in the setup.
+2. Choose *Start the tutor – lesson 1*.
 3. Click into the view: the mouse is captured as the cyclic stick (`Esc` releases it). `W`/`S` or the mouse wheel is the collective, `A`/`D` or the mouse buttons are the pedals.
 4. If something feels hard, press `V`: the autopilot flies and you watch how small its inputs are. `V` again hands the aircraft back.
 
@@ -78,11 +78,11 @@ The model is a textbook rotorcraft model rather than a game-tuned flight model. 
 
 **Main rotor** — blade-element model, time-marching per blade: four blades, eight elements each, every blade a rigid beam on an offset flap hinge. The flap equation comes from the Euler equation of the blade with the hub rotating at body rates, so rotor damping, the control phase, flapback with speed, the cross-coupling off nominal rotor speed and the hub moment that makes a hingeless rotor crisp all fall out of the same loop. Section aerodynamics with Mach-dependent stall and drag divergence, tip loss, linear twist and flap/pitch coupling.
 
-**Inflow** — Pitt-Peters dynamic inflow: a uniform state with apparent mass, the Glauert skew gradient and moment-driven gradient states. The vortex-ring region uses Leishman's empirical curve with seeded unsteadiness; ground effect after Cheeseman and Bennett.
+**Inflow** — Pitt-Peters dynamic inflow: a uniform state with apparent mass, the Glauert skew gradient and moment-driven gradient states. The vortex-ring region uses Leishman's empirical curve with seeded unsteadiness, and in the developed ring collective added beyond the entry value goes into recirculation instead of thrust (power settling); ground effect after Cheeseman and Bennett.
 
-**Fenestron** — ducted-fan momentum theory: the fan carries about half the static thrust and the shroud the rest, the shroud's share fades with in-plane flow and does not work for reverse thrust; three blade elements with stall; the main-rotor wake at the tail.
+**Fenestron** — ducted-fan momentum theory: the fan carries about half the static thrust and the shroud the rest, the shroud's share fades with in-plane flow and does not work for reverse thrust; three blade elements with stall; the main-rotor wake at the tail. It takes its power from the main rotor, so at the power limit a pedal turn in the rotor's direction droops the rotor; in a fast left yaw the fan's own inflow can stall it, the unanticipated-yaw trap. A tail drive failure leaves the fin and the collective.
 
-**Engines and rotor speed** — two turbines as power lags with acceleration limits, a FADEC governor with load feed-forward, engine and gearbox ratings (maximum continuous, take-off, OEI 30 s), a freewheel that lets the rotor autorotate, a start sequence with a run-up torque schedule, shutdown, fuel burn.
+**Engines and rotor speed** — two turbines as power lags with acceleration limits, a FADEC governor with load feed-forward, engine and gearbox ratings (maximum continuous, take-off, OEI 30 s), a freewheel that lets the rotor autorotate, a start sequence with a run-up torque schedule, shutdown, fuel burn. Every engine rating lapses with the air (k = 0.789 · δ · θ^-1.55, fitted to the published hover ceilings): at sea level the gearbox limits, higher or hotter the turbines do, and the FLI shows whichever is closer.
 
 **Airframe and ground** — fuselage drag by axis with the side area spread along cabin and tail boom (a spinning aircraft drags its boom sideways, which is the main yaw damping), destabilising fuselage moments, rotor download, a stabiliser with the rotor-wake hump through transition, a cambered fin that unloads the Fenestron in cruise and keeps resisting beyond its stall. Four skid contact points and a tail bumper with anisotropic friction, so dynamic rollover, blade strike and tail strike are consequences, not scripts.
 
@@ -102,28 +102,31 @@ From the test suites, 2500 kg, ISA, calm:
 | Hover attitude | 3.5° nose up, 4.1° right skid low | right skid low for a clockwise rotor |
 | Power in ground effect (skids at 0.3 m) | −11 % | Cheeseman–Bennett, 10–18 % |
 | Level flight power: 60 / 100 / 120 / 135 kt | 256 / 348 / 469 / 597 kW | bucket at 55–70 kt, maximum continuous ~640 kW |
-| Climb at Vy, take-off power | 2320 fpm | ~2000 fpm at this weight (estimate) |
+| Climb at Vy, take-off power | 2200 fpm | ~2000 fpm at this weight (estimate) |
 | Autorotation, 65 kt | 2070 fpm, NR 100 % | 1700–2200 fpm |
 | Vne 155 kt in a shallow descent | 10 % forward stick left, advancing tip Mach 0.82 | control margin at Vne |
 | Retreating blade stall, 140 kt and 1.8 g | nose up 18°, roll to the right | roll to the retreating side |
 | Low g (0.16 g) | full roll control | hingeless rotor, no mast bumping |
-| Vortex ring, vertical descent 1600 fpm | detected; forward-flight recovery stops the sink | |
+| Hover ceiling out of ground effect, 2835 kg | holds at ~2685 m ISA, sinks above ~1750 m ISA+20 | 2685 m ISA, 1785 m ISA+20 (EC135 P2 data) |
+| Vortex ring, developed (2500 kg) | collective only: 266 m lost, sink grows to 4000 fpm; classical 46 m; Vuichard 40 m | collective alone deepens it; Vuichard least height |
+| Tail drive failure | hover: 175 °/s left after 2 s; 100 kt: fin holds at 7° sideslip; yaw lost below ~47 kt | run-on landing with speed |
 | Engine failure in the hover, pedals still | nose yaws right at ~100 °/s | torque reaction gone |
 | One engine inoperative in the hover | held, NR minimum 98 % | Category A performance class |
 | Autorotation flared at 120 ft | touchdown 280 fpm, NR peak 109 % | below the hard-landing limit |
 | Cold start to 100 % NR / rotor stop | 53 s / 73 s | about a minute each |
+| Pedal turn at the power limit | right (rotor direction) droops NR; left is mild | turns in the rotor direction cost power |
 
 ## Sources and calibration
 
-Rotor, controls, stabiliser and Fenestron data come from Kampa, Enenkl, Polz, Roth (Eurocopter Deutschland), *Aeromechanic Aspects in the Design of the EC135*, 23rd European Rotorcraft Forum, Dresden 1997 (ERF archive): rotor moment capacity of about 2000 Nm per degree of flapping, 10° twist, 7.5° flap/pitch coupling, cyclic ranges and stick travel, pitch and roll bandwidth, stabiliser and fin geometry, Fenestron geometry. The model form follows Seher-Weiß, *ACT/FHS System Identification Including Rotor and Engine Dynamics*, Journal of the American Helicopter Society 64, 2019 (DLR). Still estimates: the inertias, the fuselage drag areas, the split of the longitudinal cyclic range, the P2+ gearbox limits, the Fenestron duct factor. The calibration table is in [`docs/TECHNICAL.md`](docs/TECHNICAL.md).
+Rotor, controls, stabiliser and Fenestron data come from Kampa, Enenkl, Polz, Roth (Eurocopter Deutschland), *Aeromechanic Aspects in the Design of the EC135*, 23rd European Rotorcraft Forum, Dresden 1997 (ERF archive): rotor moment capacity of about 2000 Nm per degree of flapping, 10° twist, 7.5° flap/pitch coupling, cyclic ranges and stick travel, pitch and roll bandwidth, stabiliser and fin geometry, Fenestron geometry. The hover ceilings (EC135 P2 at 2835 kg: 2685 m ISA, 1785 m ISA+20, out of ground effect) come from a public type datasheet and calibrate the turbine lapse. The vortex-ring recovery advice follows Airbus Helicopters Safety Information Notice 3463-S-00 (classical technique first; Vuichard, for a clockwise rotor left cyclic with right pedal, where there is no room ahead). The model form follows Seher-Weiß, *ACT/FHS System Identification Including Rotor and Engine Dynamics*, Journal of the American Helicopter Society 64, 2019 (DLR). Still estimates: the inertias, the fuselage drag areas, the split of the longitudinal cyclic range, the P2+ gearbox limits, the Fenestron duct factor and its blade stall angle (16°, set so that the fan keeps a yaw-control margin at the hover ceiling), and the strength of the power-settling term. The calibration table is in [`docs/TECHNICAL.md`](docs/TECHNICAL.md).
 
 ## Known limitations
 
-- The aircraft data is partly estimated (see above); handling qualities are plausible against the published bandwidths, not certified against flight-test data.
+- The aircraft data is partly estimated (see above); handling qualities are plausible against the published bandwidths, not certified against flight-test data. The Dutch roll comes out stiff (period about 1 s against the 2–4 s typical of light helicopters); that needs data.
 - No flight model of the airframe's structural modes, no blade lag, no rotor icing, no weather beyond wind and turbulence.
 - One aircraft, one area of about 3 × 3 km. No night lighting, no shadows from trees and buildings; the power line is visual only.
 - The keyboard is a compromise: every key goes through a pilot model. A gamepad or joystick is recommended.
-- Speech for the coach uses the browser's built-in voices; Firefox needs a system voice installed.
+- Speech for the coach is off by default; it uses the browser's built-in voices, whose quality varies.
 - In an embedded frame some browsers block the Gamepad API; the gamepad panel says so. Download the file and open it locally.
 
 ---
@@ -134,7 +137,7 @@ The physics and the browser code run headless in Node against DOM stubs; the bro
 
 ```
 npm test                 # physics reference + tutor + handling
-npm run scenarios        # scenario analysis, groups A, B, C
+npm run scenarios        # scenario analysis, groups A to E
 node test/controls.js    # open-loop control response audit
 ```
 
@@ -143,7 +146,7 @@ node test/controls.js    # open-loop control response audit
 | `test/consistency.js` | 70+ physics reference checks: hover trim, free response, governor, ground effect, power curve, climb, autorotation, vortex ring, control response, OEI, crosswind, MTOW cruise, cold start, ground handling and dynamic rollover, determinism, invariants |
 | `test/tutor.js` | every one of the 48 tutor steps is passable by an ideal student, on the complete real code |
 | `test/handling.js` | the human control path: keys, mouse and gamepad through the input models and control laws; jumps, swing-back, overshoot, asymmetry, wind-up, hand-overs, gamepad mapping and dead zone, blocked Gamepad API |
-| `test/scenarios.js A\|B\|C` | signs and magnitudes in normal and limit manoeuvres (yaw and pedals; cyclic, blade stall, low g, Vne, quick stop, autorotation landings; the aids in those manoeuvres) |
+| `test/scenarios.js A\|B\|C\|D\|E` | signs and magnitudes in normal and limit manoeuvres: A yaw and pedals; B cyclic, blade stall, low g, Vne, quick stop, autorotation landings; C the aids in those manoeuvres; D main and tail rotor at the power limit, tail drive failure, weathercock, loss of yaw authority; E hover and cruise modes, transverse flow, vortex-ring recoveries |
 | `test/browser.py` | headless Chromium smoke test (Playwright) |
 | `test/uishot.py` | renders the screenshots in this README |
 
