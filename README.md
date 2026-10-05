@@ -1,33 +1,16 @@
-# EC135 Flight Dynamics — Helicopter Trainer
+# EC135 Flight Dynamics
 
-A browser-based helicopter simulator built as a **trainer for learning to hover and fly**, not as a game. One HTML file, no dependencies, no assets: a twin-engine EC135 P2+ (2.5 t, bearingless four-blade rotor, Fenestron tail, two turbines with FADEC) flown with mouse, keyboard, gamepad or joystick.
+**Learn to hover and fly a helicopter, one step at a time, right in your browser.**
 
-A helicopter has four controls that all talk to each other, which is why nobody learns them at once. The simulator hands them over one at a time in a step-by-step tutor, an instructor in the left seat points at the correction you owe (on screen and by voice), and the physics underneath is a blade-element rotor model measured against published data for the type.
+![Hovering over the hospital's rooftop pad, 22 m up](docs/screenshots/hospital-rooftop.png)
 
-**[Fly it here](https://gitcrush.github.io/EC135-FlightDynamics/)** — desktop browser recommended. Click *Start the tutor – lesson 1*.
+The hover is the first thing a helicopter pilot learns, and the hardest. Four controls act on each other, and the aircraft answers every input a little late: the stick tilts the rotor, the rotor tilts the fuselage, and only the speed that builds up moves you. If you watch your position, you react four seconds behind and start to oscillate.
 
-The simulator is the single file [`index.html`](index.html), served by GitHub Pages. Nothing to install: open that address, or download the file and open it locally.
+EC135 Flight Dynamics teaches that chain one piece at a time. A tutor hands you the controls one by one, starting from a hover that stands still on its own. A coach in the left seat shows the correction you owe right now as an arrow on the screen. Underneath runs a real rotor model of the twin-engine EC135, measured against published data for the type.
 
-![Chase view of a trimmed hover over the pad](docs/screenshots/chase-hover.png)
+It is a trainer, not a game, and not a certified flight training device.
 
-| The tutor hands the controls over one axis at a time | The coach points at the correction you owe |
-|---|---|
-| ![](docs/screenshots/tutor-calm-hover.png) | ![](docs/screenshots/coach-cue.png) |
-| **Retreating blade stall at 140 kt: the rotor map shows where the disc stalls** | **Replay of the last 20 seconds through the same instruments** |
-| ![](docs/screenshots/retreating-blade-stall.png) | ![](docs/screenshots/replay.png) |
-
----
-
-## What it is for
-
-The hard part of flying a helicopter is the hover, and the hard part of the hover is that the stick does not control where you are. It tilts the rotor, the tilt rotates the fuselage, the attitude accelerates the aircraft, and only the velocity that builds up moves you, each step a little late. Whoever watches the position reacts four seconds behind and starts to oscillate. The simulator is built around making that chain learnable:
-
-- **A tutor with 13 lessons** that hands over the collective, then the pedals, then the stick in five stages: a calm hover hands-off, a tether that lets the aircraft tilt but not drift, one axis at a time, the stick as a velocity command with the help faded out, and finally the raw stick. Each step names one thing to do and checks itself.
-- **A coach** (off / cues / cues + voice; cues by default, speech is opt-in because browser voices vary a lot) that runs a shadow autopilot alongside you and shows the stick input it would add *now*: a green arrow from your stick to where it should be, arrows on the collective and pedals, and one sentence naming the cause and the remedy — rotor limits first.
-- **A trimmed hand-over**: every airborne start begins in a hover that stands still hands-off, so you first learn what calm looks like.
-- **Instruments that make the limit legible**: rotor speed and power (FLI) with their limits, a drift vector for the hover, a rotor-state map with the angle of attack over the whole disc, and an incident detector that names the mechanism — vortex ring, retreating blade stall, low rotor speed, Fenestron at its limit, dynamic rollover — and the standard recovery.
-- **A flight recorder**: a 20-second strip chart that freezes after an incident, a replay through the same renderer and HUD, a debrief card after every landing, and CSV export.
-- **Exercises** beyond the tutor: cold start, lift-off, pedal turns, quick stop, slope landing, a hospital rooftop pad, a confined area, autorotation, vortex ring recovery, an approach behind a phantom aircraft and an engine failure in the hover. Failures: one engine, both engines, and the tail drive (no anti-torque).
+**[▶ Fly it here](https://gitcrush.github.io/EC135-FlightDynamics/)**: desktop browser recommended, nothing to install. Click *Start the tutor – lesson 1*.
 
 ## Getting started
 
@@ -36,7 +19,32 @@ The hard part of flying a helicopter is the hover, and the hard part of the hove
 3. Click into the view: the mouse is captured as the cyclic stick (`Esc` releases it). `W`/`S` or the mouse wheel is the collective, `A`/`D` or the mouse buttons are the pedals.
 4. If something feels hard, press `V`: the autopilot flies and you watch how small its inputs are. `V` again hands the aircraft back.
 
-![Welcome card](docs/screenshots/welcome.png)
+## What you get
+
+- **13 lessons** from a hands-off hover to the raw stick: first the collective, then the pedals, then the stick in five stages. Each step names one thing to do and checks itself.
+- **A coach** that flies a shadow autopilot alongside you and shows the input it would add now, as arrows on the stick, collective and pedals, with one sentence naming the cause and the remedy. Spoken cues are optional.
+- **An autopilot demonstration** (`V`): watch how calm a good hover looks, then take over.
+- **Instruments that show the limits**: rotor speed and power with their limits, a drift vector for the hover, and a map of the angle of attack over the whole rotor disc.
+- **An incident detector** that names what went wrong (vortex ring, retreating blade stall, low rotor speed, Fenestron at its limit, dynamic rollover) together with the standard recovery.
+- **A flight recorder**: the last 20 seconds as a strip chart that freezes after an incident and as a replay through the same instruments, a debrief card after every landing, and CSV export.
+- **Exercises** beyond the tutor: cold start, autorotation, a hospital rooftop pad, a confined area, an engine failure in the hover and more. One or both engines, or the tail drive, can be failed at the press of a button.
+- **Mouse, keyboard, gamepad or joystick**, with a setup panel that learns your controller from a single movement.
+
+| The coach shows the correction you owe | Retreating blade stall near 140 kt: the detector names it, the rotor map shows where the disc stalls |
+|---|---|
+| ![](docs/screenshots/coach-cue.png) | ![](docs/screenshots/retreating-blade-stall.png) |
+
+The simulator is the single file [`index.html`](index.html), served by GitHub Pages: no libraries, no assets, nothing loaded from anywhere else. You can open the [live page](https://gitcrush.github.io/EC135-FlightDynamics/) or download the file and open it locally.
+
+---
+
+## Under the hood
+
+The rest of this page is for readers who want to know how it works. The aircraft is an EC135 P2+: 2.5 t, a bearingless four-blade rotor, a Fenestron tail and two turbines with FADEC.
+
+**Tutor and coach.** The tutor hands over the stick in five stages: a calm hover hands-off, a tether that lets the aircraft tilt but not drift, one axis at a time, the stick as a velocity command with the help faded out, and finally the raw stick. Every airborne start begins in a hover trimmed to stand still hands-off, so you first learn what calm looks like. The coach (`K`) cycles through off, cues, and cues + voice. Cues are on by default; speech is opt-in, because browser voices vary a lot. Its sentence names rotor limits first.
+
+**Exercises**: cold start, lift-off, pedal turns, quick stop, slope landing, a hospital rooftop pad, a confined area, autorotation, vortex ring recovery, an approach behind a phantom aircraft and an engine failure in the hover. Failures: one engine, both engines, and the tail drive (no anti-torque).
 
 ## Controls
 
@@ -51,26 +59,19 @@ The hard part of flying a helicopter is the hover, and the hard part of the hove
 
 A key is on or off, a hand is not, so each keyboard control has a pilot model: the collective is metered against the power and the rotor speed (and thrown down when the rotor droops or the engines quit), the pedal keys command a yaw rate with heading hold, and the arrow keys move the stick in two stages so that a tap stays fine. Real controls are analog; a gamepad or joystick is the bigger step. The setup has a **gamepad panel** that shows every axis and button live, learns each function from a single movement, and stores the mapping in the browser.
 
-![Gamepad panel in the setup](docs/screenshots/gamepad-panel.png)
-
 ### Training aids
 
 On by default, each can be switched off in the setup: **SAS** (rate damping with the trim fed forward), **attitude command** (a centred stick holds the trim attitude; fine around the centre, 28° pitch and 40° bank at the stops), **heading hold** (rate command and heading hold in the hover, turn coordination with a roll-axis heading hold above 45 kt) and **hover assist** (the stick commands a ground velocity). Two couplings a pilot's hands and feet take out are mixed in with the aids on: pedal with collective, and in the hover the roll attitude with collective.
 
 ## What you see
 
-| | |
-|---|---|
-| ![](docs/screenshots/cockpit-hover.png) | **Cockpit view**: heading tape, airspeed and radar altitude, a horizon and pitch ladder drawn with the scene's own projection, the flight path marker. Bottom left the rotor speed (NR) and the first limit indicator (FLI: 10 = maximum continuous, 11 = take-off power) with lamps for vortex ring, stall, Fenestron limit, ground effect and drag divergence. Bottom centre the stick, collective and pedal positions, the skid loads on the ground and the drift vector. Bottom right the rotor-state map. |
-| ![](docs/screenshots/debrief.png) | **Side panel**: the large numbers, the coach and tutor controls, the exercise brief, a 20-second strip chart of NR, FLI, vertical speed, vortex ring and stall, resets and engine failures, the last incident. After every landing a debrief card shows the touchdown rate, the power and rotor-speed band and the incidents. |
+Three views (`1` `2` `3`): cockpit, chase and tower.
+
+**Cockpit view**: heading tape, airspeed and radar altitude, a horizon and pitch ladder drawn with the scene's own projection, the flight path marker. Bottom left the rotor speed (NR) and the first limit indicator (FLI: 10 = maximum continuous, 11 = take-off power) with lamps for vortex ring, stall, Fenestron limit, ground effect and drag divergence. Bottom centre the stick, collective and pedal positions, the skid loads on the ground and the drift vector. Bottom right the rotor-state map.
+
+**Side panel**: the large numbers, the coach and tutor controls, the exercise brief, a 20-second strip chart of NR, FLI, vertical speed, vortex ring and stall, resets and engine failures, the last incident. After every landing a debrief card shows the touchdown rate, the power and rotor-speed band and the incidents.
 
 The scene is drawn with WebGL and no libraries: an airfield with runway, taxiway, apron and pad markings, fields with crop rows and hedgerows, about 6,700 trees, a village, a lake, wind turbines that turn with the wind, a power line, a control tower, a hospital with a rooftop pad and a ridge on the horizon, under a cloud layer that drifts with the wind.
-
-| Hospital rooftop pad, 22 m up | Lake and hills |
-|---|---|
-| ![](docs/screenshots/hospital-rooftop.png) | ![](docs/screenshots/scenery-lake.png) |
-
----
 
 ## Physics model
 
