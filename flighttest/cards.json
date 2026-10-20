@@ -1,0 +1,1356 @@
+{
+ "author_note": "Method: expectations written blind from published data and textbook physics, without access to the simulator. Numbers come from EC135-specific sources where they exist (Kampa et al. ERF 1997 for rotor stiffness, roll damping and control sensitivity, bandwidth and blade-loading limits; DLR ACT/FHS system identification for derivatives and identified modes; EASA TCDS and RFM extracts in AAIB AAR 3/2015 for limits, rotor decay and autorotation; Airbus safety and information notices), and otherwise from the BO-105 analogue (NASA CR-3144 derivatives) and the author's momentum/linear-model calculations. Ranges are deliberately wide where only analogues exist. IMPORTANT, ROTOR DIRECTION: the plan says the EC135 main rotor turns clockwise seen from above. That is wrong for the real aircraft. Airbus SIN 3298-S-00 lists the EC135 P2+ under 'main rotor rotating counter clockwise'. Airbus IN 3540-I-00 groups the EC135 with the BO105 and BK117 as helicopters 'with a main rotor rotating counterclockwise when seen from above'. The EC135 RFM (quoted in AAIB AAR 3/2015 App. A) gives 'yawing motion nose left' at double engine failure, which only fits a counterclockwise rotor. The DLR-identified hover derivative Lu > 0 (forward speed gives right roll, i.e. right transverse-flow roll) is also consistent with a counterclockwise rotor. All cards are therefore written for the real counterclockwise rotor: hangs left skid low, left pedal with power, nose right with collective, nose left at power loss, retreating blade on the left. Every expectation whose sign depends on the rotor direction is tagged [ROT]. If the model was built with the clockwise rotor stated in the plan, all [ROT] lateral and directional signs will mirror. That would be a configuration error against the real EC135, not necessarily a dynamics error, and the evaluator should report it as such. Off-axis (pitch-roll) coupling signs of this bearingless rotor are not predicted: they depend on the unpublished swashplate phase angle and on whether the rotor lies in the BO105-like regime. Only bounds are given for them. Input conversions used: lat 0.10 = 0.75 deg = 8 mm; lon 0.10 = 1.09 deg; col 0.05 = 0.73 deg. Pedal gearing is unpublished, so pedal-driven magnitudes are low confidence.",
+ "sources": [
+  {
+   "key": "EASA_TCDS_R009",
+   "ref": "EASA Type-Certificate Data Sheet No. EASA.R.009 (EC135), Issue 20, 9 Dec 2025, Section 4 'EC135 P2+' (III.2 description, III.5.3 torque limits, III.8 VNE, III.9 rotor speed limits, III.12 max mass, III.13 CG range)",
+   "url": "https://www.easa.europa.eu/en/downloads/7943/en"
+  },
+  {
+   "key": "Kampa1997",
+   "ref": "Kampa K., Enenkl B., Polz G., Roth G., 'Aeromechanic Aspects in the Design of the EC135', 23rd European Rotorcraft Forum, Dresden, 1997, Paper 38 (Table 1 main data; p.38.2 hub moment 2000 Nm/deg = 8.7 % equivalent hinge offset; Table 2; Fig. 18-20 Dutch roll/phugoid; Fig. 22 blade-loading limits; Fig. 23 roll damping vs roll control sensitivity; Tables 3-4 control ranges, bandwidth)",
+   "url": "https://dspace-erf.nlr.nl/items/e1c8c86b-8593-4290-9bb7-4cbeba1b0c72"
+  },
+  {
+   "key": "AirbusSIN3298",
+   "ref": "Airbus Helicopters Safety Information Notice 3298-S-00 Rev 0 (2019-07-03), 'Unanticipated right yaw (main rotor rotating counter clockwise), commonly referred to as LTE' - aircraft concerned include EC135 P2+",
+   "url": "https://www.airbus.com/sites/g/files/jlcbta136/files/2021-10/3298-S-00-Rev-0-EN.pdf"
+  },
+  {
+   "key": "AirbusIN3540",
+   "ref": "Airbus Helicopters Information Notice 3540-I-00 Rev 0 (2020-09-15), 'Fenestron versus Conventional Tail Rotor for helicopters equipped with a main rotor rotating counterclockwise when seen from above' (BO105, BK117, EC135); Fig. 1 thrust vs pedal, Fig. 2 pedal hover vs cruise",
+   "url": "https://www.airbus.com/sites/g/files/jlcbta136/files/2021-10/IN-3540-00-Rev0-EN.pdf"
+  },
+  {
+   "key": "AirbusSIN3463",
+   "ref": "Airbus Helicopters Safety Information Notice 3463-S-00 Rev 2 (2021-09-28), 'Vortex Ring State / training recommendations and considerations about the Vuichard recovery technique'",
+   "url": "https://www.airbus.com/sites/g/files/jlcbta136/files/2022-04/3463-S-00-Rev-2-EN.pdf"
+  },
+  {
+   "key": "AAIB_AAR3_2015",
+   "ref": "UK AAIB Aircraft Accident Report 3/2015, EC135 T2+ G-SPAO, Glasgow, 29 Nov 2013: para 1.16.4 (manufacturer simulation of double engine failure, Nr decay), 1.17.3.2 (stabilised autorotation ~2,000 ft/min at 75 kt), Appendix A (EC135 T2+ RFM extracts: single/double engine failure 'yaw ... nose left'; autorotation 75 KIAS, min rate of descent 60 KIAS), Appendix G (Nr decays to transient power-off minimum in ~2 s)",
+   "url": "https://www.gov.uk/aaib-reports/aircraft-accident-report-aar-3-2015-g-spao-29-november-2013"
+  },
+  {
+   "key": "FAA_HFH2019",
+   "ref": "FAA Helicopter Flying Handbook FAA-H-8083-21B (2019): Ch.2 pp.2-14..2-15 (translating tendency, 'hangs left skid low ... opposite for clockwise'), p.2-20 (retreating blade stall, roll left for CCW rotors), pp.2-21..2-23 (blowback, ETL 16-24 kt, translational thrust, transverse flow effect); Ch.3 (antitorque pedals); Ch.11 pp.11-1..11-2 (autorotation, min ROD ~50-60 kt), pp.11-9..11-10 (vortex ring state), p.11-10 (retreating blade stall)",
+   "url": "https://www.faa.gov/regulations_policies/handbooks_manuals/aviation/helicopter_flying_handbook"
+  },
+  {
+   "key": "SeherWeiss2007",
+   "ref": "Seher-Weiss S., von Gruenhagen W., 'EC135 System Identification for Model Following Control and Turbulence Modeling', 1st CEAS European Air and Space Conference, Berlin, 2007, CEAS-2007-275, Table 2 (identified poles at 60 kt: Dutch roll [0.24-0.28, 1.80-1.86 rad/s], phugoid [-0.23..-0.29, 0.37 rad/s], spiral 1/T = -0.065)",
+   "url": "https://www.fzt.haw-hamburg.de/pers/Scholz/ewade/2007/CEAS2007/papers2007/ceas-2007-275.pdf"
+  },
+  {
+   "key": "SeherWeiss2017",
+   "ref": "Seher-Weiss S., 'ACT/FHS System Identification Including Rotor and Engine Dynamics', AHS 73rd Annual Forum, Fort Worth, 2017, Fig. 13 (identified EC135 moment derivatives vs speed: hover Lu ~ +0.25, Lv ~ -0.2, Mu ~ +0.11, Mv ~ +0.11 1/(m s); Mw rising to ~ +0.05..0.07 at 90-120 kt; Nr ~ -0.5 hover, -1.3..-2 at 90-120 kt; Np ~ -0.2..-0.35 at 30-90 kt)",
+   "url": "https://rotorcraft.arc.nasa.gov/Publications/files/73_2017_0017.pdf"
+  },
+  {
+   "key": "Heffley1979",
+   "ref": "Heffley R.K., Jewell W.F., Lehman J.M., Van Winkle R.A., 'A Compilation and Analysis of Helicopter Handling Qualities Data, Vol. 1: Data Compilation', NASA CR-3144, 1979, Section III (BO-105C, hingeless, CCW rotor), Table III-3 trim and derivatives, cases 29 (hover), 31-37 (20-145 kt), sea level, 2096 kg (Boeing-Vertol Y-92 model data)",
+   "url": "https://ntrs.nasa.gov/citations/19800002851"
+  },
+  {
+   "key": "Johnson2004VRS",
+   "ref": "Johnson W., 'Model for Vortex Ring State Influence on Rotorcraft Flight Dynamics', AHS 4th Decennial Specialist's Conference on Aeromechanics, San Francisco, Jan 2004 (also NASA TP-2005-213477): Overview (unstable heave for Vz/vh ~ -0.5..-1.5; recovery needs collective reduction + forward cyclic), review of Drees, Stewart, Taghizad et al. 2002 (SA365N Dauphin flight tests), Padfield's Wessex data (height loss ~150 ft vs ~500 ft), H-60 NATOPS, unsteadiness section",
+   "url": "https://rotorcraft.arc.nasa.gov/Publications/files/Johnson%20AHS-SF2004.pdf"
+  },
+  {
+   "key": "Padfield2007",
+   "ref": "Padfield G.D., Helicopter Flight Dynamics, 2nd ed., Blackwell, 2007: Ch.3 (centre-spring rotor flapping, flap frequency ratio, hub moment), Ch.4 (trim, linearised stability, hover modes). Used for theory only; numeric BO105 values in these cards come from Heffley1979 because Padfield's tables could not be checked here",
+   "url": null
+  },
+  {
+   "key": "Leishman2006",
+   "ref": "Leishman J.G., Principles of Helicopter Aerodynamics, 2nd ed., Cambridge University Press, 2006: momentum theory, figure of merit, induced velocity in descent (Ch.2); forward-flight power build-up (Ch.5)",
+   "url": null
+  },
+  {
+   "key": "AuthorCalc",
+   "ref": "Author's own calculations (momentum/blade-element power build-up; linear 3- and 4-DOF hover, short-period and phugoid models with derivatives taken or scaled from the sources above). Scripts: /tmp/ft-author/calc/est.py, hover.py, h23.py, sp.py, f5.py",
+   "url": null
+  }
+ ],
+ "cards": [
+  {
+   "id": "H1",
+   "expectations": [
+    {
+     "id": "H1.1",
+     "quantity": "trimmed roll attitude phi in the OGE hover",
+     "type": "sign",
+     "expected": "[ROT] Left skid low: phi between -4.5 and -1.0 deg (negative). (Sign: high confidence. Magnitude band: medium.)",
+     "low": -4.5,
+     "high": -1.0,
+     "unit": "deg",
+     "basis": "The rotor turns counterclockwise, so the torque reaction is nose right and the Fenestron pushes the tail to the right (+y). The disc must tilt left to cancel that side force. With a stiff hingeless hub the fuselage follows the disc: phi ~ -T_fen/T ~ -(Q/l_t)/W ~ -3.5 deg, minus a small hub-moment correction. The FAA states that counterclockwise helicopters hang left skid low. The BO-105C (CCW, hingeless) trims at phi = -2.97 deg in the hover.",
+     "source": "FAA_HFH2019 Ch.2 pp.2-14..2-15; Heffley1979 Table III-3 case 29; AirbusSIN3298; AuthorCalc",
+     "confidence": "high"
+    },
+    {
+     "id": "H1.2",
+     "quantity": "trimmed pitch attitude theta in the OGE hover",
+     "type": "range",
+     "expected": "Slightly nose up: +1 to +6 deg.",
+     "low": 1.0,
+     "high": 6.0,
+     "unit": "deg",
+     "basis": "BO-105C (3 deg forward shaft tilt, mid CG) hovers at +2.6 deg. The EC135 shaft tilt and the hub position relative to mid CG are not published. The stiff hub (2000 Nm/deg) reduces CG sensitivity to about 1 deg per 10 cm of CG offset.",
+     "source": "Heffley1979 Table III-3 case 29; Kampa1997 p.38.2; Padfield2007 Ch.4",
+     "confidence": "low"
+    },
+    {
+     "id": "H1.3",
+     "quantity": "total shaft power required (both engines, incl. Fenestron and transmission/accessory losses)",
+     "type": "range",
+     "expected": "About 500 kW; range 440-570 kW. Main rotor alone about 380-470 kW, Fenestron 40-70 kW. This is about 0.72-0.92 of the AEO take-off power of 2x308 kW quoted for the 1997 EC135.",
+     "low": 440,
+     "high": 570,
+     "unit": "kW",
+     "basis": "Inputs: T = 1.03 W, vh = 11.5 m/s (rho = 1.190), kappa = 1.15, sigma = 0.0719, Cd0 = 0.0105 (FM ~0.69), Fenestron as a ducted fan with FM 0.6, losses 4 % + 8 kW. Cross-check: the same model gives ~600 kW at 3700 m and 2630 kg, which matches the published HOGE ceiling of 3700 m with a 616 kW TOP.",
+     "source": "AuthorCalc; Kampa1997 Table 1; Leishman2006",
+     "confidence": "medium"
+    },
+    {
+     "id": "H1.4",
+     "quantity": "pedal position relative to centre",
+     "type": "sign",
+     "expected": "[ROT] Left of centre, about -0.7 to +0.05. Firm part: clearly left of every forward-flight trim pedal position (see F1.6 and T1.5). (Relative to forward-flight pedal: high confidence. Relative to centre: low.)",
+     "low": -0.7,
+     "high": 0.05,
+     "unit": "fraction of travel",
+     "basis": "With a CCW rotor, left pedal raises Fenestron thrust (anti-torque). Airbus states that the Fenestron needs more left pedal in hover, and that in cruise the pedal comes back toward the zero-thrust position, further right. Pedal centre and gearing are not published.",
+     "source": "AirbusIN3540 Fig.1-2; AirbusSIN3298; FAA_HFH2019 Ch.3",
+     "confidence": "medium"
+    },
+    {
+     "id": "H1.5",
+     "quantity": "rotor speed NR",
+     "type": "range",
+     "expected": "100 % +/- 1 %. The FADEC governs NR; the power-on limits are 97-104 %.",
+     "low": 99,
+     "high": 101,
+     "unit": "%",
+     "basis": "FADEC-governed twin-turboshaft installation; limits from the TCDS.",
+     "source": "EASA_TCDS_R009 III.9; Kampa1997",
+     "confidence": "high"
+    },
+    {
+     "id": "H1.6",
+     "quantity": "collective position (fraction of full range from the bottom stop)",
+     "type": "range",
+     "expected": "Roughly 0.5-0.8 of the full range. Hover theta_0.75 is about 9.5-11 deg out of a ~14.5 deg range; the bottom-stop pitch is unpublished.",
+     "low": 0.5,
+     "high": 0.8,
+     "unit": "fraction of range",
+     "basis": "BEMT: theta_0.75 = 6 CT/(sigma a) + 1.5 lambda_i = ~9.6 deg (+1 deg for tip loss and non-uniform inflow).",
+     "source": "AuthorCalc; Leishman2006",
+     "confidence": "low"
+    }
+   ],
+   "red_flags": [
+    "Right skid low with left pedal applied: an internally inconsistent tail force.",
+    "Right skid low together with right pedal for power ([ROT]): consistent with a clockwise-rotor model, but not with the real EC135. Report as a rotation-direction error.",
+    "Hover power below 350 kW or above 700 kW at 2500 kg, 1000 ft ISA.",
+    "Hover pitch attitude more nose-down than -3 deg at mid CG.",
+    "NR outside 97-104 % in a steady hover."
+   ],
+   "notes": "Standard hover OGE, 2500 kg, 1000 ft ISA, mid CG. Lateral and longitudinal cyclic positions relative to centre are not predicted: swashplate rigging offsets are unpublished. If the model's power output excludes the Fenestron or the transmission losses, compare against the main-rotor-only band of 380-470 kW."
+  },
+  {
+   "id": "H2",
+   "expectations": [
+    {
+     "id": "H2.1",
+     "quantity": "peak roll rate p during the 1 s lateral pulse (lat +0.10 = 0.75 deg)",
+     "type": "range",
+     "expected": "Right roll. Peak p between +7 and +12 deg/s, reached at 0.7-1.15 s. p rises with a time constant of ~0.2 s after an ~0.08 s delay. (Direction: high confidence. Magnitude: medium.)",
+     "low": 7,
+     "high": 12,
+     "unit": "deg/s",
+     "basis": "Kampa Fig. 23 (EC135, hover to 80 kt): roll damping Lp = -4.0 to -5.2 1/s and roll control sensitivity 2.25-2.45 rad/s^2 per inch. The input is 8 mm = 0.315 in, giving 0.71-0.77 rad/s^2; p_ss = 0.74/4.6 = 0.16 rad/s = 9 deg/s. Table 4 gives an 80 ms delay. Cross-check: quasi-steady theory p/theta_1c ~ gamma*Omega/16 gives ~10 deg/s.",
+     "source": "Kampa1997 Fig.23, Table 4; AuthorCalc",
+     "confidence": "medium"
+    },
+    {
+     "id": "H2.2",
+     "quantity": "roll attitude phi after the pulse and decay of p after stick return",
+     "type": "shape",
+     "expected": "phi peaks at +6 to +12 deg about 1.2-2 s after the start. After the stick returns, p falls to near zero within ~0.5-0.8 s. The bank is held (rate response, no attitude spring-back).",
+     "low": 6,
+     "high": 12,
+     "unit": "deg",
+     "basis": "First-order rate response with tau_roll ~0.2 s. A bare helicopter has no attitude stiffness in hover.",
+     "source": "Kampa1997 Fig.23; AuthorCalc",
+     "confidence": "medium"
+    },
+    {
+     "id": "H2.3",
+     "quantity": "lateral ground speed and later roll motion (2-6 s)",
+     "type": "shape",
+     "expected": "Lateral speed builds to the right (positive) and peaks at 1.5-4 m/s around 2-4 s. The bank then decreases through dihedral effect (left-roll moment from sideslip). By 6 s phi is at least ~4 deg below its peak and may have passed through zero: the start of the hover lateral oscillation.",
+     "low": 1.5,
+     "high": 4.0,
+     "unit": "m/s (peak lateral speed)",
+     "basis": "Identified EC135 hover Lv ~ -0.2 1/(m s) (BO-105: -0.21). A 3-DOF lateral model with Yv = -0.04, Lv = -0.12 to -0.3 and Lp = -4 to -5.2 gives v_max 1.9-3.6 m/s and phi reversing before 6 s.",
+     "source": "SeherWeiss2017 Fig.13; Heffley1979 case 29; AuthorCalc",
+     "confidence": "low"
+    },
+    {
+     "id": "H2.4",
+     "quantity": "off-axis pitch response (q, theta) during the first 3 s",
+     "type": "range",
+     "expected": "Small compared with roll: |q|peak at most ~50 % of p_peak (<= ~5 deg/s) and |delta theta| <= 5 deg in the first 3 s. Sign not predicted.",
+     "low": 0,
+     "high": 5,
+     "unit": "deg/s (|q| peak)",
+     "basis": "Hingeless phase lag 90 deg - atan(kappa) with kappa = 8(lambda_beta^2-1)/gamma ~ 0.2 (8.7 % offset) gives ~0.2x cross moment, unless the unpublished swashplate phase cancels it. The rate coupling Mp can have either sign for a rotor near kappa*16/gamma ~ 1: the BO-105 has Mp < 0 despite a CCW rotor. DLR's 60 kt model shows strong pitch-roll coupling.",
+     "source": "Padfield2007 Ch.3; Heffley1979 case 29 (Lq = +2.3, Mp = -0.84); SeherWeiss2007 Table 2; AuthorCalc",
+     "confidence": "low"
+    },
+    {
+     "id": "H2.5",
+     "quantity": "yaw rate r",
+     "type": "range",
+     "expected": "|r| < 5 deg/s throughout.",
+     "low": 0,
+     "high": 5,
+     "unit": "deg/s (|r|)",
+     "basis": "No direct yaw input. Hover roll-yaw coupling is weak.",
+     "source": "AuthorCalc; Heffley1979",
+     "confidence": "low"
+    }
+   ],
+   "red_flags": [
+    "Roll to the left in response to right stick.",
+    "Roll rate keeps increasing after the stick returns (no roll damping).",
+    "phi springs back to zero within ~1 s (spurious attitude stiffness).",
+    "p_peak above 25 deg/s or below 3 deg/s for this 0.75 deg input.",
+    "Pitch response larger than the roll response."
+   ],
+   "notes": "Bare airframe from hover trim. The longer-term motion (>2 s) is the start of the unstable hover lateral oscillation, so values after ~3 s are sensitive to small differences in Lv and Yv."
+  },
+  {
+   "id": "H3",
+   "expectations": [
+    {
+     "id": "H3.1",
+     "quantity": "peak pitch rate q during the 1 s forward pulse (lon +0.10 = 1.09 deg)",
+     "type": "range",
+     "expected": "Nose down. q_peak between -13 and -5 deg/s, near the end of the pulse (0.9-1.2 s). q is still building at release: the pitch time constant is 0.45-0.85 s, much slower than in roll.",
+     "low": -13,
+     "high": -5,
+     "unit": "deg/s",
+     "basis": "The hub moment per degree of tilt is the same in pitch and roll (2000 Nm/deg plus thrust tilt), so pitch figures are the roll figures scaled by Ixx/Iyy (0.27-0.37; BO-105 0.29-0.37). That gives M_delta = 0.29-0.40 rad/s^2 for 1.09 deg and Mq = -1.2 to -2.2 1/s (BO-105 hover Mq/Lp = 0.37).",
+     "source": "Kampa1997 p.38.2, Fig.23; Heffley1979 case 29; AuthorCalc",
+     "confidence": "medium"
+    },
+    {
+     "id": "H3.2",
+     "quantity": "minimum pitch attitude (relative to trim)",
+     "type": "range",
+     "expected": "theta reaches -5 to -15 deg at 1.5-2.6 s. Pitch keeps moving for ~0.5-1 s after the stick returns.",
+     "low": -15,
+     "high": -5,
+     "unit": "deg",
+     "basis": "3-DOF hover model (u, q, theta) with the ranges above and Mu = 0.035-0.11.",
+     "source": "AuthorCalc",
+     "confidence": "medium"
+    },
+    {
+     "id": "H3.3",
+     "quantity": "forward ground speed and return of the nose",
+     "type": "shape",
+     "expected": "Forward speed peaks at 2-7 m/s at 3-5.5 s. Speed stability (Mu > 0, rotor flapback) then raises the nose back through the trim attitude between ~2.5 and 6 s, so at 6 s theta is likely nose up relative to trim (the hover phugoid has been excited).",
+     "low": 2,
+     "high": 7,
+     "unit": "m/s (peak forward speed)",
+     "basis": "Identified EC135 hover Mu ~ +0.11 1/(m s) (BO-105 +0.066); flapback theory gives ~0.035.",
+     "source": "SeherWeiss2017 Fig.13; Heffley1979; AuthorCalc",
+     "confidence": "low"
+    },
+    {
+     "id": "H3.4",
+     "quantity": "off-axis roll response",
+     "type": "range",
+     "expected": "|p|peak at most ~60 % of |q|peak (<= ~6 deg/s) and |delta phi| <= 6 deg by 3 s. Sign not predicted.",
+     "low": 0,
+     "high": 6,
+     "unit": "deg/s (|p| peak)",
+     "basis": "Same cross-coupling arguments as H2.4. The lower roll inertia makes pitch-to-roll coupling relatively more visible.",
+     "source": "Padfield2007 Ch.3; Heffley1979; AuthorCalc",
+     "confidence": "low"
+    }
+   ],
+   "red_flags": [
+    "Nose-up response to forward stick.",
+    "Pitch rate decays in less than ~0.2 s after release (pitch damping as high as roll damping is not physical for Iyy ~ 3.5 Ixx).",
+    "No tendency for the nose to return while forward speed grows past 5 m/s (Mu <= 0).",
+    "Aircraft accelerates backwards."
+   ],
+   "notes": "Bare airframe. The pitch inertia (Iyy) of the EC135 is unpublished; the BO-105 ratio was scaled, which is the main magnitude uncertainty."
+  },
+  {
+   "id": "H4",
+   "expectations": [
+    {
+     "id": "H4.1",
+     "quantity": "yaw rate r at 1, 2 and 4 s (right pedal +0.10 held 4 s)",
+     "type": "range",
+     "expected": "Nose right (r > 0). r(1 s) = +5 to +25, r(2 s) = +8 to +40, r(4 s) = +10 to +55 deg/s. The rate is still rising or just levelling at 4 s (yaw time constant 1.4-3 s). The low/high fields give the r(4 s) band. (Direction, nose right: high confidence. Magnitudes: low, pedal gearing unpublished.)",
+     "low": 10,
+     "high": 55,
+     "unit": "deg/s",
+     "basis": "Yaw acceleration estimated at 0.2-0.45 rad/s^2 for 10 % pedal: a Fenestron thrust span of ~5-6.5 kN over full travel, 6 m arm, Izz 5000-7000 kg m^2. BO-105: N_ped ~0.28 rad/s^2 for a similar input. Hover yaw damping Nr = -0.35 to -0.7 (identified EC135 hover ~ -0.5).",
+     "source": "SeherWeiss2017 Fig.13; Heffley1979 case 29; AirbusIN3540 Fig.1; AuthorCalc",
+     "confidence": "low"
+    },
+    {
+     "id": "H4.2",
+     "quantity": "heading change and decay after pedal release",
+     "type": "shape",
+     "expected": "The heading change at 6 s is +40 to +250 deg. After release at 4 s, r decays smoothly with a 1.4-3 s time constant. No yaw oscillation in hover (no weathercock stiffness).",
+     "low": 40,
+     "high": 250,
+     "unit": "deg",
+     "basis": "First-order yaw rate response in hover.",
+     "source": "AuthorCalc",
+     "confidence": "low"
+    },
+    {
+     "id": "H4.3",
+     "quantity": "Fenestron power",
+     "type": "sign",
+     "expected": "[ROT] Decreases with right pedal: right pedal unloads the anti-torque Fenestron of a CCW rotor. Drop of 15-45 % of its trim value (about -8 to -25 kW). Total shaft power falls by ~2-5 % at constant NR. (Sign: high confidence. Magnitude: low.)",
+     "low": -45,
+     "high": -15,
+     "unit": "% of trim Fenestron power",
+     "basis": "For a CCW rotor the Fenestron thrust acts to the right; right pedal reduces it. Ideal ducted-fan power varies as T^1.5.",
+     "source": "AirbusSIN3298; AirbusIN3540; AuthorCalc",
+     "confidence": "high"
+    },
+    {
+     "id": "H4.4",
+     "quantity": "couplings: roll attitude, vertical speed, NR",
+     "type": "range",
+     "expected": "Small. |delta phi| < 5 deg in 6 s ([ROT] most likely a slight left roll and leftward drift as the Fenestron side force drops). |Vz| < 200 fpm. NR within +/-2 %.",
+     "low": 0,
+     "high": 5,
+     "unit": "deg (|delta phi|)",
+     "basis": "The Fenestron sits only slightly above the CG (fan-in-fin mounted low). The main rotor thrust is unchanged while the FADEC holds NR.",
+     "source": "Kampa1997 p.38.8; AuthorCalc",
+     "confidence": "low"
+    }
+   ],
+   "red_flags": [
+    "Nose-left yaw from right pedal.",
+    "Fenestron power rising with right pedal [ROT]: indicates a clockwise-rotor model or a sign error.",
+    "Yaw rate settling in under ~0.5 s (unrealistically high hover yaw damping), or a yaw oscillation in hover.",
+    "Large heave or roll response (|delta phi| > 10 deg, |Vz| > 500 fpm)."
+   ],
+   "notes": "Pedal gearing (pedal travel to Fenestron pitch) is unpublished, so all yaw-rate magnitudes are low confidence. Airbus notes the Fenestron thrust-versus-pedal curve is non-linear and most effective near the left stop. [ROT] items mirror for a clockwise-rotor model (Fenestron power would rise with right pedal)."
+  },
+  {
+   "id": "H5",
+   "expectations": [
+    {
+     "id": "H5.1",
+     "quantity": "heave response: initial vertical acceleration and climb rate at 6 s (col +0.05 = 0.73 deg)",
+     "type": "range",
+     "expected": "Climb. Initial upward acceleration of 0.8-1.6 m/s^2 (az negative, z down), peaking within 0.1-0.4 s, then decaying as the climb develops. Heave time constant 2.5-5 s (Zw = -0.2 to -0.4 1/s). Vz at 6 s = +250 to +700 fpm (climbing).",
+     "low": 250,
+     "high": 700,
+     "unit": "fpm (Vz at 6 s, climb positive)",
+     "basis": "BEMT in hover: dCT/dtheta with inflow feedback gives +9 to +11 % thrust for 0.73 deg (about +14 % before inflow builds). Zw = -2 sigma a rho A Omega R lambda / ((16 lambda + sigma a) m) = -0.29 1/s; BO-105 hover Zw = -0.33.",
+     "source": "AuthorCalc; Heffley1979 case 29; Leishman2006",
+     "confidence": "medium"
+    },
+    {
+     "id": "H5.2",
+     "quantity": "yaw rate due to collective with pedals fixed",
+     "type": "sign",
+     "expected": "[ROT] Nose right (r > 0), building steadily: r(6 s) = +8 to +50 deg/s. (Sign: high confidence. Magnitude: low.)",
+     "low": 8,
+     "high": 50,
+     "unit": "deg/s (r at 6 s)",
+     "basis": "Main rotor power rises 12-18 %, so torque rises by ~1.2-1.8 kNm. The reaction on a CCW rotor's fuselage is nose right; the Fenestron at fixed pitch does not compensate. Izz 5000-7000 kg m^2, hover Nr -0.35 to -0.7. The RFM states that power loss yaws the nose left, which confirms the reaction direction.",
+     "source": "AAIB_AAR3_2015 App.A; AirbusSIN3298; SeherWeiss2017 Fig.13; AuthorCalc",
+     "confidence": "high"
+    },
+    {
+     "id": "H5.3",
+     "quantity": "total power change",
+     "type": "range",
+     "expected": "Power steps up by +8 to +22 % of hover power within ~0.5 s and stays roughly there.",
+     "low": 8,
+     "high": 22,
+     "unit": "% of hover power",
+     "basis": "Induced power varies as T^1.5 at the step, and is then sustained by the climb (P = W(Vc/2 + sqrt((Vc/2)^2 + vh^2))).",
+     "source": "AuthorCalc; Leishman2006",
+     "confidence": "medium"
+    },
+    {
+     "id": "H5.4",
+     "quantity": "rotor speed droop",
+     "type": "range",
+     "expected": "Transient NR droop of 0.3-3 %, recovered within 2-5 s. NR stays at or above 97 %.",
+     "low": 0.3,
+     "high": 3,
+     "unit": "% NR droop",
+     "basis": "FADEC governing with collective anticipation; the step is small.",
+     "source": "EASA_TCDS_R009 III.9; Kampa1997",
+     "confidence": "low"
+    }
+   ],
+   "red_flags": [
+    "Nose-left yaw with collective up and pedals fixed [ROT] (would indicate a clockwise-rotor model).",
+    "Descent in response to collective up.",
+    "NR droop above 5 %.",
+    "No heave damping (acceleration persists undiminished for 6 s), or an instantaneous steady climb rate with no lag."
+   ],
+   "notes": "Bare airframe with pedals fixed. Mirror the [ROT] yaw sign for a clockwise-rotor model."
+  },
+  {
+   "id": "H6",
+   "expectations": [
+    {
+     "id": "H6.1",
+     "quantity": "character of the motion after the 2 deg/s nose-up disturbance (controls fixed, 25 s)",
+     "type": "shape",
+     "expected": "An oscillatory, divergent (unstable) motion: the hover 'phugoid' of a hingeless helicopter.",
+     "low": null,
+     "high": null,
+     "unit": null,
+     "basis": "Speed stability (Mu > 0, strong for hingeless and bearingless rotors) and gravity coupling through attitude give an unstable complex pair; pitch damping gives a fast stable real root. Kampa notes hingeless/bearingless rotors make the phugoid more unstable than articulated ones.",
+     "source": "Padfield2007 Ch.4; Kampa1997 p.38.8; Heffley1979 case 29; AuthorCalc",
+     "confidence": "high"
+    },
+    {
+     "id": "H6.2",
+     "quantity": "oscillation period",
+     "type": "range",
+     "expected": "7-16 s (central estimate 9-13 s).",
+     "low": 7,
+     "high": 16,
+     "unit": "s",
+     "basis": "BO-105 hover derivatives (Xu -0.017, Mu 0.066, Mq -3.40, Xq 0.49) give a longitudinal pair at 0.024 +/- 0.433i: period 14.5 s, time to double ~29 s. For the EC135, Mq is lower (-1.2 to -2.2; softer 8.7 % hub, Lp -4.6 vs -9.2) and Mu is 0.035-0.11. The 3-DOF cubic then gives a period of 8-15 s.",
+     "source": "Heffley1979 case 29; Kampa1997 Fig.23; SeherWeiss2017 Fig.13; AuthorCalc",
+     "confidence": "medium"
+    },
+    {
+     "id": "H6.3",
+     "quantity": "time to double amplitude",
+     "type": "range",
+     "expected": "3-30 s (central estimate 5-12 s). Shorter than the BO-105's ~29 s because of the EC135's lower pitch damping and the coupled lateral motion.",
+     "low": 3,
+     "high": 30,
+     "unit": "s",
+     "basis": "Same 3-DOF analysis: time to double 3-24 s across Mu 0.035-0.11 and Mq -1.1 to -1.9. Hover lon-lat cross-derivatives (Lu, Mv ~ +0.1..0.25) further destabilise the coupled motion.",
+     "source": "Heffley1979; SeherWeiss2017 Fig.13; AuthorCalc",
+     "confidence": "low"
+    },
+    {
+     "id": "H6.4",
+     "quantity": "initial response sequence",
+     "type": "shape",
+     "expected": "theta rises to +0.8 to +2 deg within 1-2.5 s as q decays. The aircraft then starts moving backwards (u < 0), and the nose subsequently pitches down through the trim attitude by ~4-8 s. Later swings exceed the first.",
+     "low": 0.8,
+     "high": 2.0,
+     "unit": "deg (first nose-up peak)",
+     "basis": "q0 / |Mq| ~ 2 deg/s / 1.5 1/s. The rearward thrust tilt accelerates the aircraft aft; Mu*u < 0 then pitches the nose down.",
+     "source": "AuthorCalc",
+     "confidence": "medium"
+    },
+    {
+     "id": "H6.5",
+     "quantity": "lateral-directional participation",
+     "type": "shape",
+     "expected": "Roll attitude and lateral velocity are excited too (coupled pitch-roll oscillation) and also grow. |phi| exceeds ~1 deg within 25 s.",
+     "low": 1,
+     "high": null,
+     "unit": "deg (|phi| max)",
+     "basis": "Identified hover cross-derivatives Lu ~ +0.25 and Mv ~ +0.11 1/(m s), plus rate coupling (Lq/Mp), couple the axes.",
+     "source": "SeherWeiss2017 Fig.13; Heffley1979",
+     "confidence": "low"
+    }
+   ],
+   "red_flags": [
+    "Non-oscillatory response (pure divergence or pure convergence).",
+    "A stable, decaying oscillation.",
+    "Period below 4 s or above 30 s.",
+    "The aircraft initially accelerates forward after a nose-up disturbance.",
+    "The motion stays purely longitudinal (no roll at all) for 25 s."
+   ],
+   "notes": "Padfield's own BO105 eigenvalue tables could not be checked here, so the BO-105 reference uses the NASA CR-3144 (Boeing-Vertol Y-92) derivatives. With a time to double of ~5-12 s the amplitude after 25 s can be large (tens of degrees), beyond the linear range. Judge period and growth from the first 1.5-2 cycles."
+  },
+  {
+   "id": "H7",
+   "expectations": [
+    {
+     "id": "H7.1",
+     "quantity": "yaw at torque loss (r at t = 1.0 s; later trend)",
+     "type": "sign",
+     "expected": "[ROT] Nose LEFT (r < 0). r(1.0 s) = -100 to -40 deg/s, and still growing in magnitude afterwards with pedals fixed. Heading change by 5 s exceeds 120 deg (most likely > 180 deg). (Sign: high confidence. Magnitude: medium-low.)",
+     "low": -100,
+     "high": -40,
+     "unit": "deg/s",
+     "basis": "The main rotor torque reaction (~10-11 kNm, nose right for a CCW rotor) disappears at once, while the Fenestron (driven by the rotor, pitch fixed) keeps its nose-left moment, decaying only as NR^2. Izz 5000-7000 kg m^2 gives 80-120 deg/s^2 at first; hover Nr is small (-0.35 to -0.7). The EC135 RFM lists 'yawing motion nose left' for double engine failure.",
+     "source": "AAIB_AAR3_2015 App.A (RFM extract); AirbusSIN3298; AuthorCalc",
+     "confidence": "high"
+    },
+    {
+     "id": "H7.2",
+     "quantity": "rotor speed in the first second (lever fixed)",
+     "type": "range",
+     "expected": "NR decays at about 10-22 %/s initially. NR(1.0 s) = 78-90 %.",
+     "low": 78,
+     "high": 90,
+     "unit": "%",
+     "basis": "Hover torque 11-13 kNm against rotor polar inertia ~1400-2200 kg m^2. The inertia is inferred from Airbus simulation data (40 kt, full collective: Nr 60-70 % in 2-3 s, 50 % at 4.5 s, consistent with an Omega^2 law) and operator guidance (transient power-off minimum in ~2 s). Omega(t) = Omega0 / (1 + k t), k = 0.12-0.23 1/s.",
+     "source": "AAIB_AAR3_2015 para 1.16.4, App.G; AuthorCalc",
+     "confidence": "medium"
+    },
+    {
+     "id": "H7.3",
+     "quantity": "rotor speed after the lever goes down (1-5 s)",
+     "type": "shape",
+     "expected": "The decay rate falls sharply as the lever drops. Minimum NR 72-90 % at 1.3-2.5 s, then NR recovers as the descent builds. NR at 5 s = 85-105 % and rising.",
+     "low": 72,
+     "high": 90,
+     "unit": "% (minimum NR)",
+     "basis": "At full-down collective the torque demand collapses; the growing upflow then drives the rotor (windmill/autorotative state).",
+     "source": "FAA_HFH2019 Ch.11 p.11-1; AuthorCalc",
+     "confidence": "medium"
+    },
+    {
+     "id": "H7.4",
+     "quantity": "vertical acceleration and vertical speed",
+     "type": "shape",
+     "expected": "Downward acceleration of ~0.1-0.35 g by t = 1 s (thrust falls with NR^2). It reaches 0.6-0.95 g while and just after the lever goes down (1.5-2.5 s), then decreases as the descent builds. Descent rate at 5 s = 1,800-4,500 fpm.",
+     "low": 1800,
+     "high": 4500,
+     "unit": "fpm (descent at 5 s)",
+     "basis": "With the collective full down, thrust almost vanishes until the upflow builds. A steady vertical autorotation would need ~1.7-2 vh, about 4,000-4,500 fpm.",
+     "source": "AuthorCalc; Leishman2006",
+     "confidence": "low"
+    }
+   ],
+   "red_flags": [
+    "Nose-right yaw at power loss [ROT] (clockwise-rotor model or sign error).",
+    "No yaw at all with pedals fixed.",
+    "NR not decaying while the lever is held at the hover setting.",
+    "NR below 60 % within the first second.",
+    "NR still falling after the lever is fully down and a descent above ~2,000 fpm is established.",
+    "Vertical acceleration above 1 g downward."
+   ],
+   "notes": "A real pilot would never hold the lever and pedals fixed for 1 s after a double failure in hover. The card is still meaningful as a bare-airframe check. Rotor inertia is not published and was inferred, so NR numbers are medium confidence. [ROT] yaw sign mirrors for a clockwise-rotor model."
+  },
+  {
+   "id": "H8a",
+   "expectations": [
+    {
+     "id": "H8a.1",
+     "quantity": "descent rate after the collective raise (collective alone, zero ground speed held)",
+     "type": "shape",
+     "expected": "The sink is NOT promptly arrested. A brief reduction in sink rate in the first 1-3 s is possible, but 5 s after the raise the descent rate is still at least ~1,000 fpm. Over the 20 s it typically stays between ~1,200 and ~4,000 fpm (may increase). Collective-only recovery inside 20 s is unlikely but cannot be excluded.",
+     "low": 1000,
+     "high": null,
+     "unit": "fpm (descent at t = 5 s)",
+     "basis": "1800 fpm = 9.1 m/s = 0.80 vh (vh = 11.5 m/s at 2500 kg, 1000 ft). That is in the middle of the heave-unstable VRS band (Vz/vh -0.5 to -1.5; Drees roughness -0.62 to -1.53). SA365N Dauphin flight tests (Taghizad 2002): 'increasing collective did not stop the Vz fall', 'for the majority of tests a collective increase alone did not permit the helicopter to leave VRS'; collective above the hover value worked 'in a few cases, but not predictably'. In the RAE Wessex test the descent rate 'increased through 2000 ft/min in spite of increasing power to the hover torque'. The FAA states that added collective increases the descent rate.",
+     "source": "Johnson2004VRS (Overview; Taghizad, Drees, Padfield/Wessex reviews); FAA_HFH2019 Ch.11 pp.11-9..11-10; AirbusSIN3463",
+     "confidence": "medium"
+    },
+    {
+     "id": "H8a.2",
+     "quantity": "height lost in the 20 s record",
+     "type": "range",
+     "expected": "300-1,500 ft.",
+     "low": 300,
+     "high": 1500,
+     "unit": "ft",
+     "basis": "Average descent of ~900-4,500 fpm sustained over 20 s, given the above.",
+     "source": "Johnson2004VRS; FAA_HFH2019 Ch.11",
+     "confidence": "low"
+    },
+    {
+     "id": "H8a.3",
+     "quantity": "thrust fluctuation (or the equivalent normal-acceleration fluctuation)",
+     "type": "shape",
+     "expected": "Large low-frequency thrust fluctuations while in VRS: peak-to-peak ~10-40 % of mean thrust (about +/-0.05-0.2 g), with irregular periods of ~1-6 s. Accompanied by uncommanded pitch/roll/yaw wandering.",
+     "low": 10,
+     "high": 40,
+     "unit": "% of mean thrust (peak-to-peak)",
+     "basis": "Wind-tunnel dT/T peaks reach 40-80 %; full-scale flight shows 'roughness', thrust fluctuations and wallowing. The characteristic frequency scales as omega ~ 0.6 vh/R (Brinson & Ellenrieder), about 1.4 rad/s for the EC135, i.e. ~4-5 s.",
+     "source": "Johnson2004VRS (Unsteadiness in VRS); AirbusSIN3463",
+     "confidence": "low"
+    },
+    {
+     "id": "H8a.4",
+     "quantity": "power and NR after the raise",
+     "type": "shape",
+     "expected": "Power rises to at or above hover power (raised collective in high inflow), possibly to the AEO take-off limit. If the engines saturate, NR droops (a few %, possibly below 97 %).",
+     "low": null,
+     "high": null,
+     "unit": null,
+     "basis": "+0.15 collective (2.2 deg) from a descent setting about 1 deg below hover leaves the collective ~1.2 deg above hover. In clean air that would demand ~1.2-1.4x hover power.",
+     "source": "AuthorCalc; Kampa1997 Table 1",
+     "confidence": "low"
+    }
+   ],
+   "red_flags": [
+    "The sink is arrested within ~3 s and a clean climb follows, with no thrust fluctuation: the model behaves like plain momentum theory with no VRS modelling.",
+    "Steady, smooth thrust (no fluctuation) throughout the descent at 0.8 vh.",
+    "Height lost under 100 ft."
+   ],
+   "notes": "The entry condition (1800 fpm vertical, zero ground speed) is deep inside the VRS region, where heave is unstable. The scripted pilot may not be able to establish a steady 1800 fpm before t = 0. Real-aircraft behaviour here is chaotic (Taghizad: 'two VRS flights starting from close conditions could imply very different helicopter reactions'). Judge H8a mainly against H8b (see H8b.4) rather than on absolute numbers. The pilot's lateral/longitudinal position-holding keeps the rotor in its own wake, which is the worst case."
+  },
+  {
+   "id": "H8b",
+   "expectations": [
+    {
+     "id": "H8b.1",
+     "quantity": "time to gain airspeed and leave VRS",
+     "type": "range",
+     "expected": "Airspeed exceeds ~15-22 kt (Vx ~ 0.7-1.0 vh) within 3-6 s of the 10 deg nose-down pitch.",
+     "low": 3,
+     "high": 6,
+     "unit": "s",
+     "basis": "A ~10 deg tilt gives ~1.7-2 m/s^2 of forward acceleration. VRS effects disappear beyond Vx/vh ~ 1 (Taghizad); H-60 NATOPS gives the VRS band as 0-20 kt. The SIN classical recovery aims for 20-30 kt.",
+     "source": "Johnson2004VRS (Taghizad; NATOPS); AirbusSIN3463",
+     "confidence": "medium"
+    },
+    {
+     "id": "H8b.2",
+     "quantity": "descent rate recovery",
+     "type": "shape",
+     "expected": "The descent rate falls rapidly once the rotor reaches clean air: below 500 fpm within 4-10 s, and a climb (Vz > 0) is established within ~12 s.",
+     "low": 4,
+     "high": 10,
+     "unit": "s (time to Vz > -500 fpm)",
+     "basis": "In the RAE Wessex test, 'applying full power produced a rapid reduction of rate of descent as soon as the rotor moved into clear air'. With the collective 1.2 deg above hover, a climb follows once out of VRS.",
+     "source": "Johnson2004VRS (Padfield/Wessex); AuthorCalc",
+     "confidence": "low"
+    },
+    {
+     "id": "H8b.3",
+     "quantity": "height lost",
+     "type": "range",
+     "expected": "80-400 ft.",
+     "low": 80,
+     "high": 400,
+     "unit": "ft",
+     "basis": "Wessex: about 150 ft when collective was applied before or with lowering the nose, about 500 ft when the collective was first lowered. The first ~3-5 s are still at about 1,800-2,500 fpm.",
+     "source": "Johnson2004VRS (Padfield/Wessex)",
+     "confidence": "low"
+    },
+    {
+     "id": "H8b.4",
+     "quantity": "comparison with H8a",
+     "type": "order",
+     "expected": "Height lost in H8b is clearly smaller than in H8a, by at least a factor of ~2. Recovery time (time to Vz > 0) is shorter in H8b.",
+     "low": null,
+     "high": null,
+     "unit": null,
+     "basis": "Forward speed, not collective, is the reliable way out of VRS (FAA, Airbus SIN, Taghizad, Johnson).",
+     "source": "FAA_HFH2019 Ch.11; AirbusSIN3463; Johnson2004VRS",
+     "confidence": "high"
+    }
+   ],
+   "red_flags": [
+    "H8b loses as much height as H8a, or more.",
+    "Thrust fluctuations persist after airspeed exceeds ~25 kt.",
+    "No reduction of descent rate within 10 s despite 20+ kt and raised collective."
+   ],
+   "notes": "The airspeed reached after 20 s depends on how long the scripted pilot keeps the 10 deg nose-down attitude. If it is held throughout, 50-80 kt is plausible. No expectation is set for the 20 s airspeed."
+  },
+  {
+   "id": "T1",
+   "expectations": [
+    {
+     "id": "T1.1",
+     "quantity": "total power versus airspeed, 0-40 kt (~1 kt/s, height held)",
+     "type": "shape",
+     "expected": "Power falls with speed beyond ~5-10 kt, most steeply through ~10-30 kt (translational lift, ETL ~16-24 kt). At 40 kt, power is 0.55-0.80 of hover power (including ~25 kW for the 1 kt/s acceleration).",
+     "low": 0.55,
+     "high": 0.8,
+     "unit": "ratio P(40 kt)/P(hover)",
+     "basis": "Glauert induced velocity (vi/vh = 0.53 at V/vh = 1.8) plus profile, parasite and Fenestron power gives level-flight P(40 kt) = 310 kW vs 504 kW in hover (0.62).",
+     "source": "FAA_HFH2019 Ch.2 p.2-22; AuthorCalc; Leishman2006",
+     "confidence": "medium"
+    },
+    {
+     "id": "T1.2",
+     "quantity": "longitudinal cyclic versus airspeed",
+     "type": "shape",
+     "expected": "Increasingly forward stick with speed to counter flapback ('blowback'). At 40 kt it is +0.05 to +0.30 relative to the hover trim.",
+     "low": 0.05,
+     "high": 0.3,
+     "unit": "fraction of travel (lon, + forward)",
+     "basis": "BO-105 trim: B1s -0.42 deg (hover), +0.33 (20 kt), +1.08 deg (40 kt), i.e. ~1.5 deg forward. EC135 rigging is ~1.1 deg per 0.1. The FAA describes continuous forward cyclic through ETL.",
+     "source": "Heffley1979 cases 29,31,32; FAA_HFH2019 Ch.2 pp.2-20..2-21",
+     "confidence": "medium"
+    },
+    {
+     "id": "T1.3",
+     "quantity": "pitch attitude during the acceleration",
+     "type": "range",
+     "expected": "2-6 deg more nose-down than the hover attitude (acceleration ~0.05 g needs ~3 deg; the trim change to 40 kt is ~1 deg).",
+     "low": -6,
+     "high": -2,
+     "unit": "deg (relative to hover attitude)",
+     "basis": "BO-105 trim attitude change hover to 40 kt is -1 deg; atan(0.51/9.81) = 3 deg for the acceleration.",
+     "source": "Heffley1979; AuthorCalc",
+     "confidence": "medium"
+    },
+    {
+     "id": "T1.4",
+     "quantity": "lateral cyclic versus airspeed (wings held level)",
+     "type": "shape",
+     "expected": "[ROT] A LEFT lateral cyclic excursion relative to the hover trim, concentrated at ~10-25 kt (transverse flow effect: right-roll tendency for a CCW rotor). Magnitude 0.02-0.25 of lateral travel. (Direction: medium confidence. Magnitude: low.)",
+     "low": -0.25,
+     "high": -0.02,
+     "unit": "fraction of travel (lat, + right)",
+     "basis": "FAA (CCW rotor): transverse flow causes a right roll near 20 kt, and 'forward and left lateral cyclic' is needed through ETL. The identified EC135 hover Lu ~ +0.25 1/(m s) (right roll with forward speed) supports this. Theoretical inflow-skew estimate: Lu ~ 0.26.",
+     "source": "FAA_HFH2019 Ch.2 pp.2-22..2-23; SeherWeiss2017 Fig.13; AuthorCalc",
+     "confidence": "medium"
+    },
+    {
+     "id": "T1.5",
+     "quantity": "pedal versus airspeed",
+     "type": "shape",
+     "expected": "[ROT] Pedal moves RIGHT (less anti-torque) as speed increases, mostly between ~10 and 40 kt. At 40 kt it is right of the hover position by 0.05-0.5 of travel. (Direction: high confidence. Magnitude: low.)",
+     "low": 0.05,
+     "high": 0.5,
+     "unit": "fraction of travel (ped, + right)",
+     "basis": "Power and torque fall, Fenestron efficiency rises (translational thrust: nose-left tendency, so right pedal for a CCW rotor), and the fin begins to carry anti-torque. Airbus: the Fenestron pedal moves from a left hover position toward the zero-thrust position in cruise.",
+     "source": "AirbusIN3540 Fig.2; FAA_HFH2019 Ch.2 pp.2-22..2-23",
+     "confidence": "high"
+    },
+    {
+     "id": "T1.6",
+     "quantity": "collective versus airspeed",
+     "type": "shape",
+     "expected": "Collective falls with speed, roughly tracking power. At 40 kt it is 1.5-4 deg (0.1-0.28 of range) below hover.",
+     "low": -0.28,
+     "high": -0.1,
+     "unit": "fraction of range (relative to hover)",
+     "basis": "BO-105 trim collective 14.3 deg (hover) vs 12.5 deg (40 kt).",
+     "source": "Heffley1979 cases 29,32; AuthorCalc",
+     "confidence": "medium"
+    }
+   ],
+   "red_flags": [
+    "Power increases with speed between 10 and 40 kt (no translational lift).",
+    "Aft cyclic needed as speed increases.",
+    "Pedal moving left with increasing speed [ROT].",
+    "Collective increasing with speed below 40 kt.",
+    "Weak flag: no lateral cyclic excursion at all through 10-25 kt (transverse flow not modelled)."
+   ],
+   "notes": "Closed-loop pilot task, OGE. [ROT] signs mirror for a clockwise-rotor model: right cyclic and left pedal. The magnitude of the lateral excursion depends strongly on the inflow-skew model; the hingeless phase shift of flapback can reduce it."
+  },
+  {
+   "id": "F1",
+   "expectations": [
+    {
+     "id": "F1.1",
+     "quantity": "shape of the power-required curve",
+     "type": "shape",
+     "expected": "A bucket. Minimum-power speed 55-85 kt. P_min/P_hover = 0.45-0.65. Power rises steeply above ~100 kt. (Bucket shape: high confidence. Speed band: medium.)",
+     "low": 55,
+     "high": 85,
+     "unit": "kt (minimum-power speed)",
+     "basis": "Power build-up (induced with Glauert inflow, kappa 1.15-1.25; profile with 1 + 4.65 mu^2; parasite f = 1.2-1.5 m^2; Fenestron; 4 % + 8 kW losses). The parasite-area range is consistent with the published ~137-141 kt cruise at MCP. The RFM's 60 KIAS minimum-rate-of-descent speed implies the same power bucket.",
+     "source": "AuthorCalc; Kampa1997 Table 1; AAIB_AAR3_2015 App.A; Leishman2006",
+     "confidence": "medium"
+    },
+    {
+     "id": "F1.2",
+     "quantity": "total shaft power at 0/40/60/80/100/120/135 kt (2500 kg, 1000 ft ISA)",
+     "type": "range",
+     "expected": "Central (range) in kW: 0 kt 505 (440-570); 40 kt 310 (270-380); 60 kt 265 (225-320); 80 kt 270 (225-330); 100 kt 315 (265-380); 120 kt 400 (330-480); 135 kt 505 (420-600). The low/high fields give the 100 kt band.",
+     "low": 265,
+     "high": 380,
+     "unit": "kW (at 100 kt)",
+     "basis": "As F1.1; the spread covers f = 1.2-1.5 m^2 and Cd0/kappa uncertainty. Compressibility is added above advancing-tip Mach 0.8 (~20 kW at 135 kt).",
+     "source": "AuthorCalc; Kampa1997 Table 1",
+     "confidence": "low"
+    },
+    {
+     "id": "F1.3",
+     "quantity": "power at 135 kt relative to hover power",
+     "type": "range",
+     "expected": "0.8-1.2 of hover power.",
+     "low": 0.8,
+     "high": 1.2,
+     "unit": "ratio",
+     "basis": "Parasite power ~270 kW at 135 kt dominates. The EC135 cruises at ~137 kt on MCP (2x283 kW in 1997) at a higher weight, which bounds the value.",
+     "source": "AuthorCalc; Kampa1997 Table 1",
+     "confidence": "medium"
+    },
+    {
+     "id": "F1.4",
+     "quantity": "pitch attitude versus speed",
+     "type": "shape",
+     "expected": "Monotonically more nose-down with speed. Relative to the hover attitude: -0.5 to -4 deg at 60 kt, -3 to -8 deg at 100 kt, -6 to -13 deg at 135 kt. The low/high fields give the 100 kt band.",
+     "low": -8,
+     "high": -3,
+     "unit": "deg (theta(100 kt) - theta(hover))",
+     "basis": "The disc must tilt forward by ~D/W: 1.8 deg (60 kt), 5 deg (100 kt), 9 deg (135 kt) for f = 1.35 m^2. BO-105 trim: +2.6 (hover), +0.6 (60), -2.8 (100), -5.3 (120), -8.8 deg (145 kt).",
+     "source": "Heffley1979 cases 29-37; AuthorCalc",
+     "confidence": "medium"
+    },
+    {
+     "id": "F1.5",
+     "quantity": "collective versus speed",
+     "type": "shape",
+     "expected": "A bucket like power: minimum at 50-90 kt, 1.5-4 deg (0.1-0.28 of range) below hover. At 135 kt within -1.5 to +2.5 deg of the hover value (most likely above it).",
+     "low": null,
+     "high": null,
+     "unit": null,
+     "basis": "BO-105 collective: 14.3 deg (hover), 12.3 (60), 12.6 (80), 13.8 (100), 15.6 (120), 19.1 deg (145 kt).",
+     "source": "Heffley1979 cases 29-37",
+     "confidence": "medium"
+    },
+    {
+     "id": "F1.6",
+     "quantity": "pedal versus speed",
+     "type": "shape",
+     "expected": "[ROT] At every forward speed >= 40 kt the pedal is well right of the hover position. Most right typically between 60 and 120 kt. The variation over 60-135 kt is smaller than the change from 0 to 60 kt.",
+     "low": null,
+     "high": null,
+     "unit": null,
+     "basis": "Airbus: on the Fenestron EC135 the large fin takes the anti-torque in cruise, and 'the pedal needs to be brought back to the zero thrust position'. Torque also falls toward the bucket.",
+     "source": "AirbusIN3540 Fig.2; Heffley1979 (BO-105 tail-rotor pitch 10.2 deg hover, 4.5-5 deg at 60-100 kt)",
+     "confidence": "medium"
+    }
+   ],
+   "red_flags": [
+    "Power rising monotonically from hover.",
+    "Minimum-power speed below 40 kt or above 100 kt.",
+    "P_min/P_hover above 0.8.",
+    "Pitch attitude becoming more nose-up with speed above 60 kt.",
+    "Pedal in cruise left of the hover pedal position [ROT].",
+    "Power at 135 kt below 300 kW or above 750 kW."
+   ],
+   "notes": "Values are total shaft power. If the model reports main-rotor power only, subtract roughly 60-90 kW in hover and 20-35 kW in cruise. Absolute pitch attitude depends on the unpublished shaft tilt; compare changes relative to hover."
+  },
+  {
+   "id": "F2",
+   "expectations": [
+    {
+     "id": "F2.1",
+     "quantity": "pitch rate q during the doublet (lon +/-0.05 = +/-0.55 deg, 100 kt)",
+     "type": "shape",
+     "expected": "Nose down first: q negative in the first second, peaking -2 to -6 deg/s. q then reverses to a positive peak of +2 to +5 deg/s in the second second. The low/high fields give the first (negative) peak.",
+     "low": -6,
+     "high": -2,
+     "unit": "deg/s",
+     "basis": "Pitch control sensitivity 0.30-0.42 rad/s^2 per deg. Mq -2.5 to -3.6 1/s in forward flight (bandwidth 1.84 rad/s with 125 ms delay at 75 kt implies a first-order time constant of ~0.34 s). 2-DOF short-period runs with Zw -0.9 and Mw 0-0.08.",
+     "source": "Kampa1997 Table 4; Heffley1979 case 35 (BO-105 100 kt: Mq -3.6, Mw +0.08); SeherWeiss2017 Fig.13; AuthorCalc",
+     "confidence": "medium"
+    },
+    {
+     "id": "F2.2",
+     "quantity": "pitch attitude",
+     "type": "shape",
+     "expected": "Minimum of -1.5 to -5 deg at ~1.0-1.6 s, back near trim by ~2.5-3 s. After the doublet only a slow drift: |delta theta| < 6 deg at 8 s, with no fast divergence. The bare EC135 is near-neutral in angle-of-attack stability at 100 kt (Mw > 0 offset by a large stabiliser and pitch damping).",
+     "low": -5,
+     "high": -1.5,
+     "unit": "deg (minimum theta)",
+     "basis": "Identified EC135 Mw rises to ~+0.05 by 90-100 kt. Kampa reports level 1-2 pitch ratings without augmentation in forward flight and design measures for Malpha (stabiliser with Gurney flaps, delta3 = 7.5 deg).",
+     "source": "Kampa1997 Table 2, Fig.20, p.38.10; SeherWeiss2017 Fig.13; AuthorCalc",
+     "confidence": "low"
+    },
+    {
+     "id": "F2.3",
+     "quantity": "load factor",
+     "type": "range",
+     "expected": "Drops during the forward half (minimum 0.75-0.92 g) and rises during the aft half (maximum 1.03-1.2 g).",
+     "low": 0.75,
+     "high": 0.92,
+     "unit": "g (minimum)",
+     "basis": "Forward cyclic lowers disc angle of attack and thrust directly (Z_delta ~ Zw*V per rad of disc tilt). The pitch-rate contribution follows.",
+     "source": "AuthorCalc",
+     "confidence": "low"
+    },
+    {
+     "id": "F2.4",
+     "quantity": "airspeed and roll coupling",
+     "type": "range",
+     "expected": "Airspeed changes by less than 5 kt over 8 s. Off-axis |p|peak is no larger than |q|peak (sign not predicted).",
+     "low": 0,
+     "high": 5,
+     "unit": "kt (|delta V|)",
+     "basis": "A small symmetric input. Coupling: see H2.4.",
+     "source": "AuthorCalc; SeherWeiss2007 Table 2",
+     "confidence": "low"
+    }
+   ],
+   "red_flags": [
+    "Initial nose-up response to forward stick.",
+    "A lightly damped pitch oscillation with a period under 1.5 s.",
+    "Divergence with time to double under 2 s.",
+    "Load-factor excursions above +/-0.5 g for this small input."
+   ],
+   "notes": "Bare airframe at 100 kt. Whether the residual drift after the doublet goes nose-up or nose-down depends on small asymmetries and the sign of the near-zero short-period stability. Only its size is bounded."
+  },
+  {
+   "id": "F3",
+   "expectations": [
+    {
+     "id": "F3.1",
+     "quantity": "peak roll rate (lat +0.10 = 0.75 deg for 1 s, 100 kt)",
+     "type": "range",
+     "expected": "Right roll. p_peak = +6 to +13 deg/s at 0.7-1.1 s.",
+     "low": 6,
+     "high": 13,
+     "unit": "deg/s",
+     "basis": "Same rotor roll damping and control sensitivity as in hover (Kampa Fig. 23 covers hover to 80 kt: Lp -4..-5.2 1/s, 2.25-2.45 rad/s^2/inch). Forward flight raises both slightly.",
+     "source": "Kampa1997 Fig.23, Table 4",
+     "confidence": "medium"
+    },
+    {
+     "id": "F3.2",
+     "quantity": "bank angle after the pulse",
+     "type": "shape",
+     "expected": "phi = +5 to +13 deg after the pulse, and the bank largely persists for several seconds (spiral mode near neutral or weakly unstable). No rapid return to wings level within 8 s.",
+     "low": 5,
+     "high": 13,
+     "unit": "deg",
+     "basis": "Identified EC135 spiral at 60 kt is unstable with 1/T = -0.065 (time to double ~11 s). Dihedral (Lv < 0) only acts once sideslip builds.",
+     "source": "SeherWeiss2007 Table 2; SeherWeiss2017 Fig.13",
+     "confidence": "low"
+    },
+    {
+     "id": "F3.3",
+     "quantity": "yaw rate r",
+     "type": "shape",
+     "expected": "A small initial adverse yaw (nose left, |r| < 4 deg/s) during the roll-in. r then turns positive as the aircraft turns right and sideslip builds; r is +1 to +5 deg/s at 4-8 s (coordinated rate for a 10 deg bank at 100 kt = 1.9 deg/s).",
+     "low": 1,
+     "high": 5,
+     "unit": "deg/s (r at 4-8 s)",
+     "basis": "Identified EC135 Np = -0.2 to -0.35 1/s at 30-90 kt (adverse). Weathercock stability (Nv > 0) then turns the nose into the sideslip.",
+     "source": "SeherWeiss2017 Fig.13; AuthorCalc",
+     "confidence": "low"
+    },
+    {
+     "id": "F3.4",
+     "quantity": "sideslip",
+     "type": "sign",
+     "expected": "Positive sideslip (wind from the right, slip toward the low wing), peaking +1 to +7 deg, with some superimposed Dutch-roll oscillation (period 2.5-4.5 s).",
+     "low": 1,
+     "high": 7,
+     "unit": "deg",
+     "basis": "Bank without pedal produces a sideslip toward the low wing; adverse yaw adds to it.",
+     "source": "SeherWeiss2007 Table 2; AuthorCalc",
+     "confidence": "low"
+    },
+    {
+     "id": "F3.5",
+     "quantity": "pitch coupling",
+     "type": "range",
+     "expected": "|q|peak at most ~60 % of p_peak. Sign not predicted.",
+     "low": 0,
+     "high": 8,
+     "unit": "deg/s (|q| peak)",
+     "basis": "See H2.4.",
+     "source": "Padfield2007 Ch.3; SeherWeiss2007",
+     "confidence": "low"
+    }
+   ],
+   "red_flags": [
+    "Left roll from right stick.",
+    "A large initial yaw (|r| > 10 deg/s).",
+    "The bank returning to wings level within ~2 s (spurious roll stiffness).",
+    "Sideslip toward the high wing that grows with time."
+   ],
+   "notes": "Bare airframe. The EC135 without yaw SAS has weak directional damping (Kampa), so yaw and sideslip traces will carry a Dutch-roll ripple."
+  },
+  {
+   "id": "F4",
+   "expectations": [
+    {
+     "id": "F4.1",
+     "quantity": "yaw rate during the doublet (ped +0.10 for 1 s, then -0.10 for 1 s, 100 kt)",
+     "type": "shape",
+     "expected": "Nose right first: r positive, peaking +4 to +15 deg/s in the first second. Then a negative peak of -4 to -18 deg/s in the second second. The low/high fields give the first peak.",
+     "low": 4,
+     "high": 15,
+     "unit": "deg/s",
+     "basis": "Yaw control power 0.2-0.45 rad/s^2 for 10 % pedal (see H4.1). Identified Nr at 90-100 kt ~ -1.3 to -1.6 1/s. Directional stiffness from the Dutch-roll frequency ~1.8 rad/s.",
+     "source": "SeherWeiss2017 Fig.13; SeherWeiss2007 Table 2; AuthorCalc",
+     "confidence": "low"
+    },
+    {
+     "id": "F4.2",
+     "quantity": "sideslip",
+     "type": "shape",
+     "expected": "Negative first (nose right, so wind from the left): -1.5 to -7 deg, then reversing.",
+     "low": -7,
+     "high": -1.5,
+     "unit": "deg (first peak)",
+     "basis": "A heading change against an inertial flight path.",
+     "source": "AuthorCalc",
+     "confidence": "medium"
+    },
+    {
+     "id": "F4.3",
+     "quantity": "Dutch-roll period and damping after release",
+     "type": "range",
+     "expected": "A lightly damped yaw/roll oscillation: period 2.5-4.5 s, damping ratio 0.05-0.35. At least ~1.5 cycles are visible within the 10 s after release.",
+     "low": 2.5,
+     "high": 4.5,
+     "unit": "s (period)",
+     "basis": "Identified EC135 Dutch roll at 60 kt: [zeta 0.24-0.28, omega 1.80-1.86 rad/s], period ~3.5 s. At 100 kt the frequency is similar or higher. Kampa reports low Dutch-roll damping on the unaugmented EC135, hence the yaw SAS.",
+     "source": "SeherWeiss2007 Table 2; Kampa1997 pp.38.7-38.8, 38.12",
+     "confidence": "medium"
+    },
+    {
+     "id": "F4.4",
+     "quantity": "roll due to sideslip",
+     "type": "shape",
+     "expected": "Roll goes right while sideslip is negative (dihedral effect, Lv < 0), so phi oscillates roughly in phase with -beta. Amplitude 1-6 deg; |p|/|r| in the oscillation 0.3-2 (a 'rolling' Dutch roll).",
+     "low": 1,
+     "high": 6,
+     "unit": "deg (phi amplitude)",
+     "basis": "Identified Lv -0.2 to -0.33 1/(m s) at 90-120 kt. Kampa: the EC135 Dutch roll is mainly yaw and roll, and Lv strongly affects its damping.",
+     "source": "SeherWeiss2017 Fig.13; Kampa1997 Fig.18, p.38.7",
+     "confidence": "low"
+    },
+    {
+     "id": "F4.5",
+     "quantity": "net heading change after the doublet",
+     "type": "range",
+     "expected": "Small: |delta psi(12 s)| < 8 deg.",
+     "low": 0,
+     "high": 8,
+     "unit": "deg",
+     "basis": "A symmetric doublet with positive directional stability.",
+     "source": "AuthorCalc",
+     "confidence": "low"
+    }
+   ],
+   "red_flags": [
+    "Nose-left response to right pedal.",
+    "No oscillation at all (aperiodic, heavily damped yaw).",
+    "A divergent Dutch roll with time to double under 5 s.",
+    "Period under 1.5 s or over 8 s.",
+    "Roll opposite to the dihedral effect (left roll while sideslip is negative)."
+   ],
+   "notes": "Pedal gearing is unpublished, so amplitudes are low confidence. Period and damping are the meaningful checks."
+  },
+  {
+   "id": "F5",
+   "expectations": [
+    {
+     "id": "F5.1",
+     "quantity": "direction of the pitch response after a +5 m/s speed increase (controls fixed, 80 kt)",
+     "type": "sign",
+     "expected": "Nose UP: q > 0 and theta increasing within the first 2 s.",
+     "low": 0,
+     "high": null,
+     "unit": "deg/s (q sign)",
+     "basis": "Positive speed stability. The rotor flaps back with speed, and the downloaded (inverted-airfoil) horizontal stabiliser gives a further nose-up moment as dynamic pressure rises. Kampa lists the bearingless rotor stiffness, airfoil Cm and stabiliser as favourable for Mu. The identified EC135 Mu is small but non-negative in forward flight; the BO-105 has +0.05 at 80 kt.",
+     "source": "Kampa1997 Table 2, Fig.20; SeherWeiss2017 Fig.13; Heffley1979 case 34; FAA_HFH2019 Ch.2 p.2-21",
+     "confidence": "high"
+    },
+    {
+     "id": "F5.2",
+     "quantity": "pitch rate peak and attitude excursion",
+     "type": "range",
+     "expected": "q_peak = +0.5 to +7 deg/s at 0.6-3 s. theta rises by +2 to +20 deg (maximum within 10 s). The low/high fields give the q peak.",
+     "low": 0.5,
+     "high": 7,
+     "unit": "deg/s",
+     "basis": "4-DOF longitudinal runs with Mu 0.01-0.05, Mw 0-0.05, Mq -2.5 to -3.5, Zu -0.05 to -0.2.",
+     "source": "AuthorCalc; Heffley1979 case 34",
+     "confidence": "low"
+    },
+    {
+     "id": "F5.3",
+     "quantity": "vertical speed",
+     "type": "sign",
+     "expected": "A climb develops (positive vertical speed), peaking at +300 to +2,000 fpm within 10 s.",
+     "low": 300,
+     "high": 2000,
+     "unit": "fpm",
+     "basis": "The excess kinetic energy (~22 m equivalent height) is traded into climb through the nose-up attitude.",
+     "source": "AuthorCalc",
+     "confidence": "low"
+    },
+    {
+     "id": "F5.4",
+     "quantity": "airspeed trend",
+     "type": "shape",
+     "expected": "Airspeed falls from the disturbed ~89.7 kt; at 10 s it is between 70 and 84 kt (most likely below 80 kt). This is the first half-cycle of a long-period phugoid; the identified 60 kt phugoid has a period of ~17 s and is slightly unstable.",
+     "low": 70,
+     "high": 84,
+     "unit": "kt (at 10 s)",
+     "basis": "Identified EC135 phugoid at 60 kt: [zeta -0.23, omega 0.37 rad/s].",
+     "source": "SeherWeiss2007 Table 2; AuthorCalc",
+     "confidence": "low"
+    }
+   ],
+   "red_flags": [
+    "Nose-DOWN response to a speed increase (negative speed stability): strong flag.",
+    "Airspeed continuing to increase after the disturbance.",
+    "An immediate oscillation with a period under 3 s."
+   ],
+   "notes": "An instantaneous +5 m/s step in u is a large disturbance. The size of the nose-up response is sensitive to the small and uncertain Mu and Mw of the EC135 at 80 kt, so only the sign is high confidence."
+  },
+  {
+   "id": "F6",
+   "expectations": [
+    {
+     "id": "F6.1",
+     "quantity": "yaw at the failure (first 1-1.5 s, controls fixed)",
+     "type": "sign",
+     "expected": "[ROT] Nose LEFT (r < 0), |r|peak 10-50 deg/s within 0.5-1.5 s. Sideslip builds positive (wind from the right), up to +5 to +25 deg before the pilot's pedal correction. The low/high fields give the r peak. (Sign: high confidence. Magnitude: low.)",
+     "low": -50,
+     "high": -10,
+     "unit": "deg/s",
+     "basis": "The main rotor torque reaction (~7-8 kNm at 100 kt, nose right) is lost while the fin and Fenestron anti-torque moment remains. This is restrained at speed by Nr (~ -1.4 1/s) and directional stability. The RFM gives 'yawing motion nose left' for double engine failure.",
+     "source": "AAIB_AAR3_2015 App.A; SeherWeiss2017 Fig.13; AuthorCalc",
+     "confidence": "high"
+    },
+    {
+     "id": "F6.2",
+     "quantity": "rotor speed: decay and recovery",
+     "type": "shape",
+     "expected": "Initial decay ~6-15 %/s. NR(1.0 s) = 85-94 %. Minimum 82-93 % at 1.2-2.5 s, then recovery. Steady autorotation NR with the collective full down (65 kt, 2500 kg) is 95-112 %. NR may transiently exceed the 106 % power-off limit during the cyclic flare from 100 to 65 kt. The low/high fields give the minimum NR.",
+     "low": 82,
+     "high": 93,
+     "unit": "% (minimum NR)",
+     "basis": "Cruise torque ~7.5-8.5 kNm against polar inertia 1400-2200 kg m^2. Power-off limits are 85-106 %; the RFM asks the pilot to use collective to keep NR within limits, implying full-down collective can overspeed at lighter weights.",
+     "source": "EASA_TCDS_R009 III.9; AAIB_AAR3_2015 para 1.16.4, App.A, App.G; AuthorCalc",
+     "confidence": "medium"
+    },
+    {
+     "id": "F6.3",
+     "quantity": "steady autorotation rate of descent at 65 kt",
+     "type": "range",
+     "expected": "1,400-2,300 fpm (central ~1,800).",
+     "low": 1400,
+     "high": 2300,
+     "unit": "fpm",
+     "basis": "AAIB: the EC135's normal stabilised autorotation descent rate at 75 kt is ~2,000 ft/min (operational, heavier). The RFM minimum-rate-of-descent speed is 60 KIAS. P/W from the power curve (~265 kW at 65 kt) gives ~1,750-2,100 fpm at 2500 kg.",
+     "source": "AAIB_AAR3_2015 para 1.17.3.2, App.A; FAA_HFH2019 Ch.11 p.11-1; AuthorCalc",
+     "confidence": "medium"
+    },
+    {
+     "id": "F6.4",
+     "quantity": "pedal position in steady autorotation",
+     "type": "shape",
+     "expected": "[ROT] The pilot applies RIGHT pedal to centre the ball. The steady autorotation pedal is right of the 100 kt powered trim position by a large fraction of travel, and probably right of centre.",
+     "low": null,
+     "high": null,
+     "unit": null,
+     "basis": "In autorotation there is no torque, yet the cambered fin still produces anti-torque side force. Airbus notes that more negative Fenestron thrust is needed toward the right pedal stop in autorotation.",
+     "source": "AirbusIN3540 Fig.1; FAA_HFH2019 Ch.3",
+     "confidence": "medium"
+    },
+    {
+     "id": "F6.5",
+     "quantity": "time to reach steady autorotation",
+     "type": "range",
+     "expected": "Sink rate and NR roughly steady within 10-20 s after the lever is down.",
+     "low": 10,
+     "high": 20,
+     "unit": "s",
+     "basis": "Airspeed transition 100 to 65 kt plus phugoid-type settling.",
+     "source": "AuthorCalc",
+     "confidence": "low"
+    }
+   ],
+   "red_flags": [
+    "Nose-right yaw at failure [ROT].",
+    "NR continuing to fall below 80 % with the collective full down at 65 kt.",
+    "Steady sink rate below 1,000 fpm or above 3,000 fpm at 65 kt.",
+    "Left pedal needed in autorotation relative to the powered cruise position [ROT].",
+    "NR settling above ~115 %."
+   ],
+   "notes": "The EC135 RFM recommends 75 KIAS (90 kt for range, 60 kt for minimum rate of descent); 65 kt is a reasonable test speed. [ROT] signs mirror for a clockwise-rotor model."
+  },
+  {
+   "id": "F7",
+   "expectations": [
+    {
+     "id": "F7.1",
+     "quantity": "peak load factor (lon -0.25 = 2.7 deg aft for 2 s, 140 kt, 2910 kg)",
+     "type": "range",
+     "expected": "n_peak = 1.6-2.4 g at 1.0-2.3 s. The rise flattens once retreating-blade stall sets in at n ~ 1.6-1.9 g. (Stall-limited growth: medium confidence. Band: low.)",
+     "low": 1.6,
+     "high": 2.4,
+     "unit": "g",
+     "basis": "At 1 g, CT/sigma = 0.092 at mu = 0.34. Kampa Fig. 22 gives the EC135 advanced stall limit as CT/sigma ~ 0.155-0.16 at mu ~ 0.34 (manoeuvre data points), i.e. ~1.7 g. A linear short-period model without stall reaches ~2 g at 1 s and ~3 g at 2 s, so stall limits the peak.",
+     "source": "Kampa1997 Fig.22; AuthorCalc",
+     "confidence": "low"
+    },
+    {
+     "id": "F7.2",
+     "quantity": "pitch response",
+     "type": "shape",
+     "expected": "Strong nose-up: q_peak +12 to +35 deg/s; theta up +12 to +40 deg by ~2.5 s. Once stalled there is an additional nose-up tendency: q stays positive for at least ~0.3 s after the stick returns (no immediate recovery).",
+     "low": 12,
+     "high": 35,
+     "unit": "deg/s (q peak)",
+     "basis": "Aft cyclic 2.7 deg with Mq ~ -3 to -3.8 and Mw > 0 at high speed. Retreating-blade stall produces a nose pitch-up.",
+     "source": "FAA_HFH2019 Ch.2 p.2-20, Ch.11 p.11-10; SeherWeiss2017 Fig.13; AuthorCalc",
+     "confidence": "low"
+    },
+    {
+     "id": "F7.3",
+     "quantity": "roll response during stall",
+     "type": "sign",
+     "expected": "[ROT] Roll toward the retreating side, which is LEFT for a CCW rotor (p < 0) once stall develops. phi change -5 to -35 deg by 3-5 s. Before stall the pitch-rate-induced roll may be either sign. The low/high fields give the phi change. (Sign: medium confidence. Magnitude: low.)",
+     "low": -35,
+     "high": -5,
+     "unit": "deg (phi change by 3-5 s)",
+     "basis": "FAA: retreating blade stall gives 'pitching up of the nose and a roll in the direction of the retreating blade', 'usually to the left in helicopters with counterclockwise blade rotation'.",
+     "source": "FAA_HFH2019 Ch.2 p.2-20, Ch.11 p.11-10; AirbusSIN3298",
+     "confidence": "medium"
+    },
+    {
+     "id": "F7.4",
+     "quantity": "location of the stalled part of the disc",
+     "type": "shape",
+     "expected": "[ROT] On the retreating (left) side, roughly azimuth 200-340 deg (measured from the tail in the direction of rotation), outer 40-100 % radius. Possibly marginally present already in trim. It grows strongly once n exceeds ~1.4-1.8 g.",
+     "low": null,
+     "high": null,
+     "unit": null,
+     "basis": "At 140 kt and 2910 kg the trim already sits on Kampa's 'handling-qualities limit for cruise flight' (CT/sigma ~0.09 at mu 0.34). The retreating side has the lowest dynamic pressure and the highest angle of attack.",
+     "source": "Kampa1997 Fig.22; FAA_HFH2019 Ch.2 p.2-20; Leishman2006",
+     "confidence": "medium"
+    }
+   ],
+   "red_flags": [
+    "Stall appearing on the advancing side.",
+    "A nose-down pitch response coinciding with the onset of stall.",
+    "[ROT] Right roll dominating during the stall.",
+    "No stall at all even though n exceeds ~2.5 g at mu = 0.34.",
+    "A stall that produces no change in pitch or roll."
+   ],
+   "notes": "The trim condition is demanding: 140 kt at 2910 kg and 1000 ft is near the power available (roughly MCP to TOP) and on the EC135's blade-loading limit for cruise, where the real aircraft has an override collective stop. 140 kt is still below VNE (155 KIAS at MSL). The input (2.7 deg aft for 2 s) is far larger than any real test would use, so attitudes will become very large and partly non-linear. Read the expectations as directions and orders of magnitude. [ROT] signs mirror for a clockwise-rotor model (the retreating side would be the right)."
+  },
+  {
+   "id": "F8",
+   "expectations": [
+    {
+     "id": "F8.1",
+     "quantity": "minimum load factor in the pushover (lon +0.15 = 1.64 deg forward, 1 s, 100 kt)",
+     "type": "range",
+     "expected": "n_min = 0.3-0.75 g at 1.0-2.0 s.",
+     "low": 0.3,
+     "high": 0.75,
+     "unit": "g",
+     "basis": "Forward cyclic lowers disc angle of attack and thrust immediately, then the pitch rate (q ~ -8 to -15 deg/s) curves the flight path. Short-period runs with Zw -0.9, Mq -2.5 to -3.6, Mw 0-0.04 give 0.4-0.65 g.",
+     "source": "AuthorCalc; Heffley1979 case 35",
+     "confidence": "low"
+    },
+    {
+     "id": "F8.2",
+     "quantity": "roll rate response to lat +0.15 at low g",
+     "type": "range",
+     "expected": "Right roll, p_peak +8 to +17 deg/s, at least ~0.7x the response the same input would produce at 1 g (~10-17 deg/s).",
+     "low": 8,
+     "high": 17,
+     "unit": "deg/s",
+     "basis": "The bearingless hub carries ~2000 Nm/deg of moment independent of thrust. The thrust-tilt part (T*h ~ 30-37 kNm/rad) is only ~20-25 % of the 1 g total, so at 0.5 g roll control power is ~85-90 % of the 1 g value.",
+     "source": "Kampa1997 p.38.2, Fig.23; Padfield2007 Ch.3",
+     "confidence": "medium"
+    },
+    {
+     "id": "F8.3",
+     "quantity": "roll controllability at low g",
+     "type": "shape",
+     "expected": "The roll response follows the input sign and stays proportional. No loss of roll control, no reversal, and no large uncommanded roll at low g (unlike a teetering rotor).",
+     "low": null,
+     "high": null,
+     "unit": null,
+     "basis": "Hingeless and bearingless rotors keep hub moment capability at low and zero g.",
+     "source": "Padfield2007 Ch.3; Kampa1997 p.38.2",
+     "confidence": "high"
+    },
+    {
+     "id": "F8.4",
+     "quantity": "pitch during the pushover",
+     "type": "range",
+     "expected": "q_peak -6 to -15 deg/s; theta minimum -7 to -20 deg relative to trim. The low/high fields give the q peak.",
+     "low": -15,
+     "high": -6,
+     "unit": "deg/s",
+     "basis": "As F8.1.",
+     "source": "AuthorCalc",
+     "confidence": "low"
+    }
+   ],
+   "red_flags": [
+    "Roll response vanishing or much reduced (<50 %) at low g, i.e. teetering-rotor behaviour.",
+    "Roll reversal.",
+    "A large uncommanded roll (> 10 deg) at low g before the lateral input.",
+    "Load factor rising instead of falling with forward stick."
+   ],
+   "notes": "If the minimum load factor is not reached exactly when the scripted lateral input starts, compare the roll response with the ~1 g value scaled from F3 (1.5x the input)."
+  },
+  {
+   "id": "F9",
+   "expectations": [
+    {
+     "id": "F9.1",
+     "quantity": "turn rate in a steady 30 deg banked turn at 100 kt",
+     "type": "range",
+     "expected": "6.1-6.5 deg/s (g tan30 / V = 6.3 deg/s at 100 KTAS).",
+     "low": 6.1,
+     "high": 6.5,
+     "unit": "deg/s",
+     "basis": "Coordinated-turn kinematics.",
+     "source": "AuthorCalc",
+     "confidence": "high"
+    },
+    {
+     "id": "F9.2",
+     "quantity": "load factor",
+     "type": "range",
+     "expected": "1.14-1.17 g (1/cos 30 = 1.155).",
+     "low": 1.14,
+     "high": 1.17,
+     "unit": "g",
+     "basis": "Level coordinated turn.",
+     "source": "AuthorCalc",
+     "confidence": "high"
+    },
+    {
+     "id": "F9.3",
+     "quantity": "power increase relative to level flight at 100 kt",
+     "type": "range",
+     "expected": "+6 to +18 % (about +20 to +55 kW).",
+     "low": 6,
+     "high": 18,
+     "unit": "%",
+     "basis": "Induced power at 100 kt (~75 kW) scales with n^2 (+33 %, ~+25 kW). Profile power rises a few % with blade loading (CT/sigma 0.079 to 0.091). Parasite power is unchanged.",
+     "source": "AuthorCalc; Leishman2006",
+     "confidence": "medium"
+    },
+    {
+     "id": "F9.4",
+     "quantity": "sideslip with the ball centred",
+     "type": "range",
+     "expected": "|beta| <= 3 deg.",
+     "low": -3,
+     "high": 3,
+     "unit": "deg",
+     "basis": "Ball centred means near-zero lateral specific force. A small sideslip can remain from the Fenestron/fin side force.",
+     "source": "AuthorCalc",
+     "confidence": "medium"
+    }
+   ],
+   "red_flags": [
+    "Turn rate inconsistent with bank and speed (outside 5.5-7 deg/s).",
+    "Power decreasing in the turn.",
+    "Load factor differing from 1/cos(phi) by more than 0.05 g in a steady level turn."
+   ],
+   "notes": "Closed-loop pilot task. The checks are mostly kinematic; only the power increment is a model-dependent quantity."
+  }
+ ]
+}

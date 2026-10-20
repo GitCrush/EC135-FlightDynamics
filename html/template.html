@@ -65,6 +65,39 @@ select{width:100%}
 .row select{width:96px}
 .row b{width:54px;font-size:11px;color:var(--mute);text-align:right}
 .note{font-size:11px;line-height:1.45;color:var(--mute);margin:4px 0 8px}
+/* ---- autopilot menu (J): which controls it flies, what it holds, how much it shows ---- */
+#apTab{position:absolute;left:0;top:12px;background:var(--panel);border:1px solid #2e2924;border-left:0;padding:6px 10px;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ice);cursor:pointer;z-index:6}
+#apTab.hold{border-color:var(--ice)}
+#apMenu{position:absolute;left:12px;top:12px;width:316px;max-width:calc(100% - 32px);max-height:calc(100% - 24px);overflow-y:auto;background:rgba(19,18,16,.96);border:1px solid #2e2924;border-top:2px solid var(--ice);padding:10px 12px 12px;z-index:7;display:none}
+#apMenu.open{display:block}
+#apMenu .head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+#apMenu .head b{font-size:15px;letter-spacing:.06em;color:var(--ice)}
+#apMenu .head button{padding:2px 8px}
+#apMenu .lead{font-size:12px;line-height:1.4;color:var(--mute);margin:4px 0 8px}
+#apMenu .modes{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+#apMenu .mode{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:6px 7px 7px;text-align:left;min-width:0;border-left:3px solid var(--mc)}
+#apMenu .mode .st,#apMenu .mode .ctl{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
+#apMenu .mode b{font-size:14px;color:var(--mc)}
+#apMenu .mode span{font-size:11.5px;line-height:1.25;color:var(--mute)}
+#apMenu .mode em{font-style:normal;font-size:12px;color:var(--ink);font-variant-numeric:tabular-nums;min-height:15px}
+#apMenu .mode.on{border-color:var(--mc);background:rgba(255,255,255,.05)}
+#apMenu .mode.on .st{color:var(--mc)}
+#apMenu .axes{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+#apMenu .axis{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:7px 7px 8px;text-align:left;min-height:86px;min-width:0}
+#apMenu .axis .st{font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--mute)}
+#apMenu .axis b{font-size:14px}
+#apMenu .axis span{font-size:11.5px;line-height:1.25;color:var(--mute)}
+#apMenu .axis em{font-style:normal;font-size:12px;color:var(--ink);font-variant-numeric:tabular-nums}
+#apMenu .axis.on{border-color:var(--ice);background:rgba(111,211,224,.09)}
+#apMenu .axis.on .st,#apMenu .axis.on b{color:var(--ice)}
+#apMenu .btns button.on{border-color:var(--ice);color:var(--ice)}
+#apMenu button:disabled{opacity:.4;cursor:default;border-color:#2e2924}
+#apMenu .tg{display:grid;grid-template-columns:64px 30px 1fr 30px;align-items:center;gap:6px;font-size:12px;margin:4px 0;min-height:26px}
+#apMenu .tg b{text-align:center;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#apMenu .tg.pos{grid-template-columns:64px repeat(4,1fr)}
+#apMenu .tg.off{color:var(--mute)}
+#apMenu .tg.off b{font-weight:400}
+#apMenu .why{font-size:11.5px;line-height:1.4;color:var(--amber);margin-top:6px;min-height:0}
 /* ---- welcome ---- */
 #welcome{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(13,12,10,.55);z-index:8;cursor:default}
 #welcome .card{width:420px;background:var(--panel);border:1px solid #2e2924;padding:20px 22px 18px}
@@ -85,6 +118,26 @@ select{width:100%}
     <div id="setupBody"></div>
   </div>
   <div id="setupTab">Setup</div>
+  <div id="apTab" title="J: the autopilot menu">Autopilot</div>
+  <div id="apMenu" role="dialog" aria-label="Autopilot">
+    <div class="head"><b>AUTOPILOT</b><span class="eyebrow" style="flex:1;justify-content:flex-end"><span>J</span></span><button id="amClose" title="Close (J)">Close</button></div>
+    <p class="lead">Engage what it should hold; it picks the controls. Its target, the deviation it works against and its hand on the control show on the view in the mode's colour. Moving a control it drives gives that control back to you.</p>
+    <div class="modes">
+      <button id="amMalt" class="mode" data-mode="alt" style="--mc:#46d2ff"><span class="st">U</span><b>ALT</b><span>holds the height</span><em id="amTalt"></em><span class="ctl">collective</span></button>
+      <button id="amMvs" class="mode" data-mode="vs" style="--mc:#46d2ff"><span class="st">menu</span><b>V/S</b><span>holds a climb or descent rate</span><em id="amTvs"></em><span class="ctl">collective</span></button>
+      <button id="amMhdg" class="mode" data-mode="hdg" style="--mc:#ff6ad5"><span class="st">O</span><b>HDG</b><span>holds the heading</span><em id="amThdg"></em><span class="ctl" id="amChdg">pedals</span></button>
+      <button id="amMhov" class="mode" data-mode="hov" style="--mc:#8cf06e"><span class="st">I · below 40 kt</span><b>HOV</b><span>holds the position over the ground</span><em id="amThov"></em><span class="ctl">cyclic</span></button>
+      <button id="amMias" class="mode" data-mode="ias" style="--mc:#8cf06e"><span class="st">I · above 40 kt</span><b>IAS</b><span>holds the airspeed</span><em id="amTias"></em><span class="ctl">cyclic fore/aft</span></button>
+    </div>
+    <div class="sec">Targets</div>
+    <div class="tg" id="amRalt"><span>Height</span><button data-adj="alt" data-d="-1" title="lower">&minus;</button><b id="amValt">&ndash;</b><button data-adj="alt" data-d="1" title="higher">+</button></div>
+    <div class="tg" id="amRvs"><span>V/S</span><button data-adj="vs" data-d="-1" title="100 fpm less">&minus;</button><b id="amVvs">&ndash;</b><button data-adj="vs" data-d="1" title="100 fpm more">+</button></div>
+    <div class="tg" id="amRhdg"><span>Heading</span><button data-adj="hdg" data-d="-1" title="10° left">&minus;</button><b id="amVhdg">&ndash;</b><button data-adj="hdg" data-d="1" title="10° right">+</button></div>
+    <div class="tg" id="amRias"><span>Airspeed</span><button data-adj="ias" data-d="-1" title="5 kt slower">&minus;</button><b id="amVias">&ndash;</b><button data-adj="ias" data-d="1" title="5 kt faster">+</button></div>
+    <div class="tg pos" id="amRhov"><span>Spot 5 m</span><button data-adj="hov" data-d="f" title="move the hover spot 5 m ahead">ahead</button><button data-adj="hov" data-d="b" title="5 m back">back</button><button data-adj="hov" data-d="l" title="5 m left">left</button><button data-adj="hov" data-d="r" title="5 m right">right</button></div>
+    <div class="btns" style="margin-top:6px"><button id="amOff">All off</button></div>
+    <div class="why" id="amWhy"></div>
+  </div>
   <div id="welcome">
     <div class="card">
       <div class="eyebrow"><span>EC135 P2+</span><span>Helicopter trainer</span></div>
@@ -109,6 +162,8 @@ select{width:100%}
   <div id="gl" class="data"></div>
   <div class="eyebrow"><span>Coach</span><span>K cycles</span></div>
   <div class="btns"><button id="coachOff">Off</button><button id="coachCues">Cues</button><button id="coachVoice">Cues + voice</button></div>
+  <div class="eyebrow"><span>Autopilot</span><span>U I O · J menu</span></div>
+  <div class="btns"><button id="asAlt" title="U: ALT holds the height (collective)">ALT</button><button id="asHdg" title="O: HDG holds the heading (pedals in the hover, bank and pedals at speed)">HDG</button><button id="asSpd" title="I: HOV holds the position over the ground below 40 kt, IAS the airspeed above (cyclic)">HOV</button><button id="asMenu" title="J: the autopilot menu: V/S, the targets">Menu&hellip;</button></div>
   <div class="eyebrow"><span>Tutor</span><span>N next · B back · Q</span></div>
   <select id="tutorSel"></select>
   <div class="btns"><button id="tutorStart">Start lesson</button><button id="tutorStop">Stop</button></div>
@@ -125,6 +180,7 @@ select{width:100%}
   <div id="inc" title=""></div>
   <div id="keys">Keys and devices: see <b>Setup</b> (bottom right of the view)</div>
 </div>
+<script type="text/plain" id="engineSrc"><!--PHYSICS--></script>
 <script>
 <!--ENGINE-->
 </script>

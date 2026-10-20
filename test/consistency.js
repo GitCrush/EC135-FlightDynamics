@@ -22,23 +22,24 @@ console.log('\n■ Hover trim, 2500 kg, 1000 ft, ISA');
  check('vertical speed',S.vs/E.FPM,-30,30,'fpm');
  check('thrust / weight',S.rot.T/(E.cfg.mass*9.81),1.00,1.06,'');
  check('power required',S.Pload/1e3,380,470,'kW');
- check('FLI',S.eng.fli,5.5,7.5,'');
+ check('FLI (10 = maximum continuous, from the TCDS ratio and the turbine lapse)',S.eng.fli,6.5,8.5,'');
  check('collective (0..1)',S.ctl.col,0.42,0.56,'');
  check('blade pitch at 0.75R',(E.H.rotor.col0+S.ctl.col*(E.H.rotor.col1-E.H.rotor.col0))*E.RAD,8,10.5,'deg');
- check('pedal (right +)',S.ctl.ped,0.25,0.65,'');
+ check('pedal (left −: against the torque of the counterclockwise rotor)',S.ctl.ped,-0.65,-0.25,'');
  check('Fenestron thrust',S.fen.T,1300,2300,'N');
  check('Fenestron power share',S.fen.P/S.Pload,0.06,0.14,'');
- check('roll attitude (right skid low +)',S.eul[0]*E.RAD,1.5,6,'deg');
+ check('roll attitude (left skid low −)',S.eul[0]*E.RAD,-6,-1.5,'deg');
  check('pitch attitude',S.eul[1]*E.RAD,1,6,'deg');
  check('NR',S.NR,99.5,100.5,'%');
  check('coning',S.rot.beta.reduce((a,b)=>a+b,0)/4*E.RAD,2,4,'deg');
  check('mean induced inflow ratio',S.rot.lam0,0.048,0.062,'');
  check('lateral drift',Math.abs(S.vb[1]),0,0.3,'m/s');
 }
-console.log('\n■ Hover free response (controls frozen after trim)');
+console.log('\n■ Hover free response (controls frozen after trim, 2 °/s pitch-rate kick)');
 {const E=fresh();hover(E,40);const {IN,step,DT}=E;const S0={th:E.S.eul[1],phi:E.S.eul[0]};let tDouble=null,maxDev=0;
- for(let t=0;t<15;t+=DT){step(DT);const d=Math.abs(E.S.eul[1]-S0.th);if(d>maxDev)maxDev=d;if(!tDouble&&d>5*E.DEG)tDouble=t;}
- check('time to 5 deg pitch excursion',tDouble||15,4,15,'s');
+ E.S.om[1]+=2*E.DEG;   // a defined disturbance: without one the excursion depended on trim residue (until 1.7 this check could not fail)
+ for(let t=0;t<40;t+=DT){step(DT);const d=Math.abs(E.S.eul[1]-S0.th);if(d>maxDev)maxDev=d;if(!tDouble&&d>5*E.DEG)tDouble=t;}
+ check('time to 5 deg pitch excursion',tDouble===null?99:tDouble,3,25,'s');   // unstable but slow: seconds for the pilot (modes in test/qualities.js)
  check('NR held by FADEC through it',E.S.NR,98,102,'%');
 }
 console.log('\n■ Governor: +6 % collective step in hover');
@@ -50,7 +51,8 @@ console.log('\n■ Governor: +6 % collective step in hover');
 }
 console.log('\n■ Ground effect: hover power vs skid height');
 {const P={};for(const h of [0.3,3,30]){const E=fresh();E.reset('hover');E.S.pos[2]=-(h+1.3);E.AP.on=true;E.AP.mode='hover';E.AP.alt=h+1.3;E.AP.hdg=0;fly(E,60);P[h]=E.S.Pload;}
- // Cheeseman-Bennett with the induced share of the hover power (~2/3): 10-18 % at skid height
+ /* The model uses the Cheeseman-Bennett formula itself, so this guards the
+    implementation (induced share, height), it does not validate the formula. */
  check('power IGE (skids at 0.3 m) / OGE',P[0.3]/P[30],0.80,0.93,'');
  check('power at 3 m / OGE',P[3]/P[30],0.90,0.99,'');
 }
@@ -58,9 +60,13 @@ console.log('\n■ Level flight power (2500 kg, 1500 ft)');
 {const P={};for(const v of [40,60,80,100,120,135]){const E=fresh();cruise(E,v,80);P[v]=E.S.Pload/1e3;const S=E.S;if(process.env.V)console.log('   ',v,'kt',P[v].toFixed(0),'kW vs',(S.vs/E.FPM).toFixed(0),'ias',(S.ias/E.KT).toFixed(1));
   if(v===135){check('IAS reached',S.ias/E.KT,130,140,'kt');check('pitch attitude at 135 kt',S.eul[1]*E.RAD,-9,-3,'deg');check('retreating stall fraction',S.rot.stall,0,0.15,'');}}
  check('bucket power (60 kt)',P[60],230,320,'kW');
- check('power 100 kt',P[100],330,430,'kW');
- check('power 120 kt',P[120],430,560,'kW');
- check('power 135 kt (near MCP 640)',P[135],560,720,'kW');
+ /* bands: the flight-test author's power build-up (flighttest/cards.json, F1.2: total shaft power,
+    f = 1.2-1.5 m², Cd0 and kappa spread) less ~15 kW of accessories, which Pload leaves out.
+    (Until 1.8 330-430 / 430-560 / 560-720 kW, set when the Fenestron still carried the
+    anti-torque at speed: 40-60 kW of it.) */
+ check('power 100 kt',P[100],250,370,'kW');
+ check('power 120 kt',P[120],315,470,'kW');
+ check('power 135 kt (MCP at 2500 kg: ~610)',P[135],405,590,'kW');
  check('bucket below 40 kt power',P[60]/P[40],0.75,1.0,'');
 }
 console.log('\n■ Climb at Vy, take-off power');
@@ -72,9 +78,9 @@ console.log('\n■ Climb at Vy, take-off power');
 console.log('\n■ Autorotation, 65 kt');
 {const E=fresh();cruise(E,70,20);for(const en of E.S.eng.e)en.on=false;E.AP.auto=true;E.AP.ias=65;fly(E,25);const S=E.S;
  check('sink rate',-S.vs/E.FPM,1500,2300,'fpm');
- check('NR',S.NR,88,110,'%');
+ check('NR (TCDS power-off range 85–106 %)',S.NR,85,106,'%');
  check('collective',S.ctl.col,0,0.2,'');
- check('rotor power (driven by the air, <0)',S.rot.P/1e3,-40,10,'kW');
+ check('rotor power (driven by the air, <0)',S.rot.P/1e3,-60,10,'kW');   // it drives the Fenestron's reverse thrust against the cambered fin (until 1.8: -40)
 }
 console.log('\n■ Vortex ring state: vertical descent at 1600 fpm');
 {const E=fresh();E.reset('high');E.AP.on=true;E.AP.mode='hover';E.AP.alt=null;E.AP.vs=-8;E.AP.hdg=0;let vrsMax=0,inc=null;
@@ -91,10 +97,10 @@ console.log('\n■ Control response from hover (steps for 1 s)');
  check('roll rate for +20 % lateral',pMax,10,40,'°/s');
  const E2=fresh();hover(E2,30);const c2={...E2.IN};let qMin=0;for(let t=0;t<1;t+=DT){E2.IN.lon=c2.lon+0.2;E2.step(DT);qMin=Math.min(qMin,E2.S.om[1]*E2.RAD);}
  check('pitch rate for +20 % longitudinal (nose down)',-qMin,8,55,'°/s');
- const E3=fresh();hover(E3,30);const c3={...E3.IN};let rMax=0;for(let t=0;t<1;t+=DT){E3.IN.ped=c3.ped+0.3;E3.step(DT);rMax=Math.max(rMax,E3.S.om[2]*E3.RAD);}
- check('yaw rate for +30 % pedal (1 s)',rMax,20,70,'°/s');
- const E4=fresh();hover(E4,30);const c4={...E4.IN};let rM=0;for(let t=0;t<2;t+=DT){E4.IN.ped=c4.ped+0.5;E4.step(DT);rM=Math.max(rM,E4.S.om[2]*E4.RAD);}
- check('yaw rate for +50 % pedal (2 s)',rM,40,160,'°/s');   // a Fenestron is quick in yaw; the flight manual limits hover turns to 60 °/s operationally
+ const E3=fresh();hover(E3,30);const c3={...E3.IN};let rMax=0;for(let t=0;t<1;t+=DT){E3.IN.ped=c3.ped-0.3;E3.step(DT);rMax=Math.max(rMax,-E3.S.om[2]*E3.RAD);}
+ check('yaw rate for 30 % more left pedal (1 s)',rMax,20,70,'°/s');
+ const E4=fresh();hover(E4,30);const c4={...E4.IN};let rM=0;for(let t=0;t<2;t+=DT){E4.IN.ped=c4.ped-0.5;E4.step(DT);rM=Math.max(rM,-E4.S.om[2]*E4.RAD);}
+ check('yaw rate for 50 % more left pedal (2 s)',rM,40,160,'°/s');   // a Fenestron is quick in yaw (no published data)
 }
 console.log('\n■ One engine inoperative in hover');
 {const E=fresh();hover(E,30);E.S.eng.e[0].fail=true;let nrMin=200;fly(E,12,t=>{nrMin=Math.min(nrMin,E.S.NR);});const S=E.S;
@@ -114,9 +120,17 @@ console.log('\n■ On the ground');
  check('dynamic rollover with 60 % lateral at light skids',rolled?1:0,1,1,'');
  check('rollover/crash flagged',inc?1:0,1,1,'');
 }
+console.log('\n■ Rotor-speed governing (FADEC) in the hover: collective dump and pull, AP on the other axes');
+for(const [name,dc,tr] of [['dump to near flat pitch in 0.5 s',-0.35,0.5],['pull of 0.15 in 1 s (below the take-off limit)',0.15,1]]){
+ const E=fresh();hover(E,20);const {IN,DT}=E,c0=E.S.ctl.col;let mx=0,mn=200,late=0,cross=0,side=0;
+ for(let t=0;t<12;t+=DT){const o=E.apStep(DT);IN.lon=o.lon;IN.lat=o.lat;IN.ped=o.ped;IN.col=c0+dc*Math.min(1,t/tr);E.step(DT);const nr=E.S.NR;
+   mx=Math.max(mx,nr);mn=Math.min(mn,nr);if(t>6)late=Math.max(late,Math.abs(nr-100));const sd=nr>100.3?1:nr<99.7?-1:0;if(sd&&side&&sd!==side)cross++;if(sd)side=sd;}
+ check(`${name}: NR range, low`,mn,97,100.5,'%');check(`${name}: NR range, high`,mx,99.5,104,'%');
+ check(`${name}: NR settled after 6 s`,late,0,0.5,'%');check(`${name}: NR swings through 100 % (zeta)`,cross,0,2,'');}
 console.log('\n■ Crosswind hover, 25 kt (Fenestron margins)');
-{for(const [d,name] of [[270,'from the left (wake direction)'],[90,'from the right (against the wake)']]){const E=fresh();E.WIND.dir=d;E.WIND.spd=25;hover(E,45);const S=E.S;
-  check('pedal, wind '+name,S.ctl.ped,d===270?0.3:-0.4,d===270?0.9:0.4,'');check('Fenestron stall fraction, wind '+name,S.fen.stall,0,0.7,'');check('heading held, wind '+name,Math.abs(S.eul[2]*E.RAD),0,4,'deg');}}
+{for(const [d,name] of [[90,'from the right (wake direction)'],[270,'from the left (against the wake)']]){const E=fresh();E.WIND.dir=d;E.WIND.spd=25/E.windProfile(300);hover(E,45);const S=E.S;   // 25 kt at the aircraft (300 m), not at the 10 m reference
+
+  check('pedal, wind '+name,S.ctl.ped,d===90?-0.9:-0.4,d===90?-0.3:0.4,'');check('Fenestron stall fraction, wind '+name,S.fen.stall,0,0.7,'');check('heading held, wind '+name,Math.abs(S.eul[2]*E.RAD),0,4,'deg');}}
 console.log('\n■ Maximum take-off mass, 140 kt');
 {const E=fresh();E.cfg.mass=2910;cruise(E,135,70);const S=E.S;   // 140 kt at MTOW needs take-off power at 1000 ft once the turbines lapse with altitude
  check('IAS reached at MTOW',S.ias/E.KT,131,138,'kt');check('power at MTOW 135 kt (below the take-off limit, ~675 kW here)',S.Pload/1e3,560,675,'kW');check('forward cyclic margin',S.ctl.lon,0.4,0.9,'');check('NR',S.NR,98.5,101.5,'%');}
@@ -130,7 +144,7 @@ console.log('\n■ Determinism and invariants');
  check('identical runs with turbulence',a.S.pos[0]===b.S.pos[0]&&a.S.NR===b.S.NR?1:0,1,1,'');
  const E=fresh();hover(E,10);const {step,DT}=E;let ok=true,maxB=0;for(let t=0;t<10;t+=DT){step(DT);for(const bb of E.S.rot.beta)maxB=Math.max(maxB,Math.abs(bb));if(!isFinite(E.S.NR)||!isFinite(E.S.pos[2]))ok=false;}
  check('finite state',ok?1:0,1,1,'');check('max flap angle',maxB*E.RAD,0,12,'deg');
- check('power = torque x speed',Math.abs(E.S.rot.P-E.S.rot.Q*E.S.rot.Om)/Math.abs(E.S.rot.P)*100,0,0.1,'%');
+ check('bookkeeping: power = torque x speed (invariant, not validation)',Math.abs(E.S.rot.P-E.S.rot.Q*E.S.rot.Om)/Math.abs(E.S.rot.P)*100,0,0.1,'%');
 }
 console.log(`\n${errors?errors+' ERROR(s)':'all checks within range'}\n`);
 process.exit(errors?1:0);

@@ -5,13 +5,13 @@ const EXERCISES={
   pad:{name:'Lift off from the pad',reset:'pad',brief:'Rotor at 100 %, skids on the pad. Raise the collective slowly (W or wheel); the attitude hold takes the trim attitude as you lift. Keep the drift arrow in the circle.'},
   cold:{name:'Cold start',reset:'cold',brief:'Rotor stopped, blades drooped on the stops. E starts both engines: the starter needs 25 s, then the FADEC runs the rotor up over about 40 s. E again shuts down. Collective stays flat until NR is in the green.'},
   hover:{name:'Hover over the pad',reset:'hover',phantom:'hover',target:[0,0,3],brief:'Hold 3 m over the H, heading north. The phantom hovers 20 m to your right as a reference. Watch the drift vector, not the horizon.'},
-  pedal:{name:'Pedal turns',reset:'hover',brief:'From the hover, a full turn left and a full turn right at 15 °/s. The collective moves with the pedal: right pedal takes power, left pedal gives it back.'},
+  pedal:{name:'Pedal turns',reset:'hover',brief:'From the hover, a full turn left and a full turn right at 15 °/s. The collective moves with the pedal: left pedal takes power, right pedal gives it back (the EC135 rotor turns counterclockwise).'},
   quick:{name:'Quick stop',reset:'approach',brief:'From 70 kt at 500 ft, decelerate to a hover without climbing: aft cyclic and collective down together, then collective back in as the airspeed bleeds off. Watch the tail.'},
   slope:{name:'Slope landing',reset:'hover',target:[0,150,0],brief:'The mound 150 m east has 8° flanks. Land across the slope: upslope skid first, cyclic into the slope as the collective comes down. Beyond the critical angle the cyclic runs out.'},
   roof:{name:'Rooftop pad',reset:'approach',target:[-260,-420,3],brief:'The hospital pad, 22 m up at 500 m south-west of the field. No ground texture under the nose on short final: fly the approach on the pad markings and the perimeter lights, and keep an escape route until the skids are inside the ring.'},
   confined:{name:'Confined area',reset:'approach',brief:'The tree ring at 340 m to the south-east. A steep approach into it needs power in ground effect it will not have; plan the escape before committing.'},
   auto:{name:'Autorotation',reset:'high',trigger:'engfail',brief:'Both engines fail ten seconds after the reset. Collective down at once, 65-70 kt, NR in the green. Flare at 100 ft, level, cushion with the last of the rotor energy.'},
-  vrs:{name:'Vortex ring state',reset:'high',brief:'Slow to below 15 kt and let the sink pass 800 fpm with power on. When the VRS lamp comes on, recover: forward cyclic decisively with the collective up as power allows (the classical technique Airbus advises). With no room ahead, the Vuichard technique for a clockwise rotor: take-off power, left cyclic to a 15–20° bank, right pedal for the heading.'},
+  vrs:{name:'Vortex ring state',reset:'high',brief:'Slow to below 15 kt and let the sink pass 800 fpm with power on. When the VRS lamp comes on, recover: forward cyclic decisively with the collective up as power allows (the classical technique Airbus advises). With no room ahead, the Vuichard technique for this counterclockwise rotor: take-off power, right cyclic to a 15–20° bank, left pedal for the heading.'},
   approach:{name:'Approach with the phantom',reset:'approach',phantom:'approach',brief:'The phantom flies a 6° approach to the pad and terminates in a hover. Fly formation on it. It knows where the power comes in at translational lift.'},
   oei:{name:'Engine failure in the hover',reset:'hover',trigger:'oei',brief:'One engine quits five seconds after the reset. The remaining engine has a 30-second rating; FLI scale changes to OEI. Lower the nose, keep NR, land or fly away.'},
 };
@@ -35,17 +35,20 @@ const SETUP=[
     ['kbdCol','Collective keys W/S','select',['metered','rate']],['kbdPed','Pedal keys A/D','select',['heading','rate']],['pedRate','Yaw rate per pedal key','range',10,45,5,'°/s'],
     ['mouse','Mouse cyclic','check'],['mouseButtons','Mouse buttons = pedals','check'],['mouseTravel','Mouse travel (px for full stick)','range',300,2500,100,'px'],
   ]],
-  ['Keys',[['keys','Mouse: click into the view to capture it as the stick, Esc releases · mouse buttons = pedals · hold C or the middle button to look around · wheel or W S collective · A D pedals · arrows stick · T trim to the present attitude · Shift + arrows beep trim · Y back to the hover trim · H hover assist · V autopilot demo · K coach · L replay · X CSV · E engines · G engine failure · R reset · 1 2 3 views · F flight path marker · P pause · N B Q tutor · ? key list','note']]],
+  ['Keys',[['keys','Mouse: click into the view to capture it as the stick, Esc releases · mouse buttons = pedals · hold C or the middle button to look around · wheel or W S collective · A D pedals · arrows stick · T trim to the present attitude · Shift + arrows beep trim · Y back to the hover trim · H hover assist · V autopilot demo · U I O autopilot: ALT, HOV/IAS, HDG · hold M: click to fly · J autopilot menu · K coach · L replay · X CSV · E engines · G engine failure · R reset · 1 2 3 views · F flight path marker · P predicted path · Space pause · N B Q tutor · ? key list','note']]],
   ['Gamepad / joystick',[
     ['padMap','Preset','select',['gamepad','joystick','custom']],['padDead','Stick dead zone','range',0,0.2,0.01,''],['padPanel','','pad'],
   ]],
   ['View',[
-    ['view','Camera  1/2/3','select',['cockpit','chase','tower']],['cloud','Cloud cover','range',0,1,0.1,''],['hud','HUD','check'],['rotorDisc','Rotor-state map','check'],['fpm','Flight path marker  F','check'],['sound','Sound','check'],
+    ['view','Camera  1/2/3','select',['cockpit','chase','tower']],['gfx','Graphics (light for weak GPUs)','select',['auto','full','light']],['fov','Cockpit field of view (across)','range',50,90,2,'°'],['cloud','Cloud cover','range',0,1,0.1,''],['hud','HUD','check'],['rotorDisc','Rotor-state map','check'],['fpm','Flight path marker  F','check'],['predict','Predicted path  P','check'],['predictT','Prediction: seconds ahead (auto: 6 in the hover to 30 at speed)','select',['auto','4','8','15','30']],['sound','Sound','check'],
   ]],
 ];
+if(cfg.fov===undefined)cfg.fov=72;   // cockpit field of view across, degrees (the vertical angle is kept between 46 and 62, see cockpitFov)
+if(cfg.gfx===undefined){let g=null;try{g=localStorage.getItem('ec135fd.gfx');}catch(e){}cfg.gfx=['auto','full','light'].includes(g)?g:'auto';}   // graphics mode, see GFX in the renderer
 function cfgGet(k){if(k==='coach')return COACH.on;if(k==='coachVoice')return COACH.voice;if(k==='wdir')return WIND.dir;if(k==='wspd')return WIND.spd;if(k==='wturb')return WIND.turb;if(k==='wgust')return WIND.gust;if(k==='padMap')return DEV.padMap;if(k==='padDead')return cfg.padDead;return cfg[k];}
 function cfgSet(k,v){if(k==='coach'){coachSet(v?(COACH.voice?'voice':'cues'):'off');return;}if(k==='coachVoice'){coachSet(v?'voice':(COACH.on?'cues':'off'));return;}if(k==='wdir')WIND.dir=v;else if(k==='wspd')WIND.spd=v;else if(k==='wturb')WIND.turb=v;else if(k==='wgust')WIND.gust=v;else if(k==='padMap'){DEV.padMap=v;if(v!=='custom')padPreset(v);else padSave();}else if(k==='padDead'){cfg.padDead=v;padSave();}else cfg[k]=v;
   if(k==='view')setView(v);
+  if(k==='gfx')gfxSet(v);
 }
 function setView(v){cfg.view=v;R3.cam.chasePos=null;uiSync();}
 function buildSetup(){
@@ -82,11 +85,12 @@ function trimNow(sec){
   AP.on=false;AP.posN=AP.posE=null;trimHandover(o);DEV.kbd.col=o.col;DEV.kbd.psiRef=S.eul[2];DEV.kbd.ped=0;DEV.kbd.lon=DEV.kbd.lat=0;IN.trimLon=IN.trimLat=IN.trimPed=0;
   if(COACH.ap){COACH.trimTh=S.eul[1];COACH.trimPhi=S.eul[0];}S.log=[];S.t=0;S.logT=0;
 }
-function uiReset(kind){reset(kind);SAS.init=false;if(HUD.aoaMap)HUD.aoaMap.fill(NaN);SCORE.n=0;SCORE.sum=0;SCORE.max=0;SCORE.hsum=0;const sc=document.getElementById('score');if(sc)sc.textContent='';DEV.kbd.col=IN.col;DEV.kbd.psiRef=S.eul[2];DEV.kbd.lon=DEV.kbd.lat=DEV.kbd.ped=0;R3.cam.chasePos=null;HUD.incText='';for(const k in INC_LAST)delete INC_LAST[k];
+function uiReset(kind){afcsOff();AFCS_UI.note=null;AFCS_UI.trail=[];AFCS_UI.base=null;AP.on=false;AP.kci=undefined;PRED.res=null;PRED.past.length=0;PRED.Tauto=6;PRED.gen++;PRED.main=null;PRED.busy=false;reset(kind);SAS.init=false;if(typeof afcsButtons==='function')afcsButtons();if(HUD.aoaMap)HUD.aoaMap.fill(NaN);SCORE.n=0;SCORE.sum=0;SCORE.max=0;SCORE.hsum=0;const sc=document.getElementById('score');if(sc)sc.textContent='';DEV.kbd.col=IN.col;DEV.kbd.psiRef=S.eul[2];DEV.kbd.lon=DEV.kbd.lat=DEV.kbd.ped=0;R3.cam.chasePos=null;HUD.incText='';for(const k in INC_LAST)delete INC_LAST[k];
   if(kind!=='pad'&&kind!=='cold')trimNow(8);
   else{/* on the ground: find the hover trim for this mass, CG and wind in fast time at 3 m,
           then put the aircraft back on the pad. Lift-off then starts with the right stick. */
-    const keepC=IN.col;reset('hover');trimNow(6);reset(kind);SAS.init=false;SAS.mode='';IN.col=keepC;DEV.kbd.col=IN.col;DEV.kbd.psiRef=S.eul[2];S.log=[];}}
+    const keepC=IN.col;reset('hover');trimNow(6);reset(kind);SAS.init=false;SAS.mode='';IN.col=keepC;DEV.kbd.col=IN.col;DEV.kbd.psiRef=S.eul[2];S.log=[];}
+  Object.assign(IN.raw,{col:DEV.kbd.col,lon:0,lat:0,ped:0});}   // the controls as the next frame will read them (the predictor starts from them before that frame)
 function startExercise(key){
   const ex=EXERCISES[key];UI.ex=key;UI.exT=0;UI.trig=false;cfg.resetKind=ex.reset;if(TUTOR.on)tutorStop();uiReset(ex.reset);
   document.getElementById('brief').textContent=ex.brief;
@@ -116,19 +120,21 @@ function phantomStep(dt){
 /* V: the autopilot takes the aircraft and holds the hover (or the cruise
    above 40 kt); the student watches the controls move, then takes it back
    with V. A demonstration, not an aid: the SAS settings stay as they are. */
-function apDemoToggle(){UI.apDemo=!UI.apDemo;if(UI.apDemo){AP.on=true;AP.auto=false;AP.mode=S.ias>40*KT?'cruise':'hover';AP.ias=S.ias/KT;AP.posN=AP.mode==='hover'?S.pos[0]:null;AP.posE=AP.mode==='hover'?S.pos[1]:null;AP.alt=S.alt;AP.hdg=S.eul[2];apBumpless(AP);}
+function apDemoToggle(){if(!UI.apDemo)afcsOffAll();UI.apDemo=!UI.apDemo;if(UI.apDemo){AP.on=true;AP.auto=false;AP.mode=S.ias>40*KT?'cruise':'hover';AP.ias=S.ias/KT;AP.posN=AP.mode==='hover'?S.pos[0]:null;AP.posE=AP.mode==='hover'?S.pos[1]:null;AP.alt=S.alt;AP.hdg=S.eul[2];apBumpless(AP);}
   else{if(!TUTOR.on){AP.on=false;AP.posN=AP.posE=null;}trimHandover(AP.out);DEV.kbd.col=IN.col;DEV.kbd.psiRef=S.eul[2];}}
 function apDemoStep(dt){if(!UI.apDemo||TUTOR.on)return;const o=apStep(dt);IN.col=o.col;IN.lon=o.lon;IN.lat=o.lat;IN.ped=o.ped;}
 function engineFailure(kind){if(kind==='restore'){for(const en of S.eng.e){en.fail=false;en.on=true;}S.fen.failed=false;return;}
   if(kind==='tail'){S.fen.failed=true;return;}
   if(kind==='both'){for(const en of S.eng.e)en.fail=true;return;}
   const en=S.eng.e.find(e=>!e.fail);if(en)en.fail=true;}
-function downloadCSV(){const csv=exportCSV();if(!csv)return;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='ec135-flight-dynamics-log.csv';a.click();}
+/* CSV of the 20-s log: the browser saves it from a blob link, opened as a file or from a web server alike. */
+function downloadCSV(){const csv=exportCSV();if(!csv)return;const name='ec135-flight-dynamics-log.csv';
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=name;a.click();}
 function loop(now){
   requestAnimationFrame(loop);
   let dtF=Math.min(0.1,(now-UI.last)/1000||0);UI.last=now;
   if(!UI.paused&&!UI.freeze){   // UI.freeze: still frame without the pause text (screenshots)
-    inputStep(dtF);tutorStep(dtF);apDemoStep(dtF);coachStep(dtF);
+    inputStep(dtF);tutorStep(dtF);apDemoStep(dtF);afcsStep(dtF);coachStep(dtF);
     UI.acc+=dtF;let n=0;
     while(UI.acc>=DT&&n<60){step(DT);phantomStep(DT);UI.acc-=DT;n++;}
     UI.exT+=dtF;
@@ -136,6 +142,7 @@ function loop(now){
     if(ex&&ex.trigger==='engfail'&&UI.exT>10&&!UI.trig){UI.trig=true;engineFailure('both');}
     if(ex&&ex.trigger==='oei'&&UI.exT>5&&!UI.trig){UI.trig=true;engineFailure('one');}
   }
+  if(!UI.paused&&!UI.freeze)predStep();
   replayFrame(dtF);
   render(dtF);hudDraw(dtF);soundUpdate(dtF);
   sideUpdate(dtF);
@@ -201,20 +208,58 @@ function padPanelUpdate(){
     const t=el('padMap_'+f);if(t)t.textContent=m?`dev ${m.d} · axis ${m.a}${m.inv?(' · inverted'):''}${f==='col'?' · '+(m.mode==='position'?('position'):('rate'))+(PAD.map.trig?(' + triggers'):''):''}`:'–';
     const b=el('padLearn_'+f);if(b)b.textContent=PAD.learn&&PAD.learn.f===f?'…':('Learn');}
 }
+/* The autopilot menu: built in the page (html/template.html), filled here. Open or closed with J, the
+   Autopilot tab at the top left of the view, Menu in the side panel; Esc closes it. Flying goes on. */
+function apMenuShow(on){UI.apMenu=!!on;const m=document.getElementById('apMenu'),t=document.getElementById('apTab');if(m)m.classList.toggle('open',UI.apMenu);if(t)t.style.display=UI.apMenu?'none':'';if(UI.apMenu)apMenuSync();}
+function apMenuToggle(){apMenuShow(!UI.apMenu);}
+function apMenuSync(){
+  const el=id=>document.getElementById(id),m=el('apMenu');if(!m)return;
+  const t=el('apTab');if(t)t.classList.toggle('hold',afcsAny());
+  if(!UI.apMenu)return;
+  const f=S.ias>40*KT,bl=afcsBlocked();
+  for(const k of ['alt','vs','hdg','hov','ias']){const b=el('amM'+k);if(!b)continue;b.classList.toggle('on',!!AFCS[k]);
+    const avail=!bl&&!(AFCS[k]?false:afcsUnavailable(k));b.disabled=!avail&&!AFCS[k];const tx=el('amT'+k);if(tx)tx.textContent=AFCS[k]?afcsTargetText(k):'';}
+  const ch=el('amChdg');if(ch)ch.textContent=f?'bank + pedals':'pedals';
+  el('amMhov').style.display=f&&!AFCS.hov?'none':'';el('amMias').style.display=!f&&!AFCS.ias?'none':'';
+  const row=(id,on,val,hint)=>{const r=el('amR'+id);if(!r)return;r.classList.toggle('off',!on);r.querySelectorAll('button').forEach(b=>{b.disabled=!on;});const v=el('amV'+id);if(v)v.textContent=on?val:hint;};
+  row('alt',AFCS.alt&&!bl,afcsTargetText('alt'),'ALT off');row('vs',AFCS.vs&&!bl,afcsTargetText('vs'),'V/S off');
+  row('hdg',AFCS.hdg&&!bl,afcsTargetText('hdg'),'HDG off');row('ias',AFCS.ias&&!bl,afcsTargetText('ias'),f?'IAS off':'above 40 kt');
+  row('hov',AFCS.hov&&!bl,'','');
+  el('amRhov').style.display=f?'none':'';el('amRias').style.display=f?'':'none';
+  const w=el('amWhy');if(w)w.textContent=bl||AFCS_UI.msg||'';
+}
+function apMenuInit(){
+  const el=id=>document.getElementById(id),m=el('apMenu');if(!m)return;
+  const after=b=>{if(b&&b.blur)b.blur();apMenuSync();};
+  el('apTab').onclick=()=>apMenuShow(true);el('amClose').onclick=()=>apMenuShow(false);
+  const sm=el('asMenu');if(sm)sm.onclick=()=>{apMenuToggle();sm.blur();};
+  m.querySelectorAll('[data-mode]').forEach(b=>{b.onclick=()=>{afcsToggle(b.dataset.mode);after(b);};});
+  m.querySelectorAll('[data-adj]').forEach(b=>{b.onclick=()=>{const d=b.dataset.d;afcsAdjust(b.dataset.adj,b.dataset.adj==='hov'?d:parseFloat(d));after(b);};});
+  el('amOff').onclick=()=>{afcsOffAll();after(el('amOff'));};
+  apMenuSync();
+}
+function afcsButtons(){const f=S.ias>40*KT,b=id=>document.getElementById(id);
+  if(b('asAlt'))b('asAlt').classList.toggle('on',AFCS.alt||AFCS.vs);if(b('asHdg'))b('asHdg').classList.toggle('on',AFCS.hdg);
+  const sp=b('asSpd');if(sp){sp.textContent=f?'IAS':'HOV';sp.classList.toggle('on',f?AFCS.ias:AFCS.hov);}apMenuSync();}
 function coachButtons(){const m=!COACH.on?'coachOff':COACH.voice?'coachVoice':'coachCues';for(const id of ['coachOff','coachCues','coachVoice']){const b=document.getElementById(id);if(b)b.classList.toggle('on',id===m);}}
 function sideUpdate(dtF){
   debriefCheck(dtF||1/60);
   const el=id=>document.getElementById(id);const f0=v=>String(Math.round(v)||0);   // no "-0"
-  UI.sideT=(UI.sideT||0)+1;if(UI.sideT%6===0){chartDraw();scoreUpdate();}
+  UI.sideT=(UI.sideT||0)+1;if(UI.sideT%6===0){chartDraw();scoreUpdate();apMenuSync();}
   if(UI.sideT%3===0){const su=document.getElementById('setup');if(su&&su.classList.contains('open'))padPanelUpdate();}
-  el('bigIas').textContent=f0(S.ias/KT);el('bigAlt').textContent=f0(S.hAGL/FT);el('bigVs').textContent=f0(S.vs/FPM);
-  el('bigNr').textContent=S.NR.toFixed(1);el('bigFli').textContent=S.eng.fli.toFixed(1);
-  el('bigNr').style.color=(S.NR<H.nr.minPowerOn||S.NR>H.nr.maxPowerOn)&&S.eng.mode!=='off'?'var(--hot)':'var(--ink)';
-  el('bigFli').style.color=S.eng.fli>11?'var(--hot)':S.eng.fli>10?'var(--amber)':'var(--ink)';
-  if(UI.sideT%60===1&&R3.info){const g=el('gl');g.textContent=`GL ${R3.info.depthBits}-bit depth · ${R3.info.fragHighp?'highp':'mediump only'} · ${String(R3.info.renderer).slice(0,40)}`;g.title=R3.info.renderer;}
-  el('stat').textContent=`${S.eng.mode.toUpperCase().padEnd(5)}${f0(S.Pload/1e3).padStart(4)}kW N1 ${S.eng.e.map(e=>f0(e.N1).padStart(3)).join('/')} ${f0(S.m)}kg DA${f0(atmo(S.alt,cfg.dT).dalt/FT).padStart(6)}ft${f0(S.t).padStart(5)}s`;
+  /* the numbers at 15 Hz, and only what changed: every text change costs the page a style and layout
+     pass (2.2 rewrote all of them every frame) */
+  UI.sideAcc=(UI.sideAcc||0)+(dtF||1/60);if(UI.sideAcc<1/15)return;UI.sideAcc=0;
+  if(UI.sideT%15===0)afcsButtons();
+  const set=(id,v)=>{const e=el(id);if(e&&e.__t!==v){e.__t=v;e.textContent=v;}},col=(id,v)=>{const e=el(id);if(e&&e.__c!==v){e.__c=v;e.style.color=v;}};
+  set('bigIas',f0(S.ias/KT));set('bigAlt',f0(S.hAGL/FT));set('bigVs',f0(S.vs/FPM));
+  set('bigNr',S.NR.toFixed(1));set('bigFli',S.eng.fli.toFixed(1));
+  col('bigNr',(S.NR<H.nr.minPowerOn||S.NR>H.nr.maxPowerOn)&&S.eng.mode!=='off'?'var(--hot)':'var(--ink)');
+  col('bigFli',S.eng.fli>11?'var(--hot)':S.eng.fli>10?'var(--amber)':'var(--ink)');
+  if(R3.info&&R3.canvas){const g=el('gl');set('gl',(R3.soft?'SOFTWARE RENDERING (the browser is not using the GPU: switch on hardware acceleration) · ':'')+`GL ${R3.info.depthBits}-bit depth · ${R3.info.fragHighp?'highp':'mediump only'} · ${GFX.mode}${cfg.gfx==='auto'?' (auto)':''} · ${R3.canvas.width}×${R3.canvas.height} px · ${String(R3.info.renderer).slice(0,40)}`);const ti=R3.info.renderer+(GFX.why?' · '+GFX.why:'');if(g&&g.title!==ti)g.title=ti;col('gl',R3.soft?'var(--amber)':'');}
+  set('stat',`${S.eng.mode.toUpperCase().padEnd(5)}${f0((S.Peng||S.Pload)/1e3).padStart(4)}kW N1 ${S.eng.e.map(e=>f0(e.N1).padStart(3)).join('/')} ${f0(S.m)}kg DA${f0(atmo(S.alt,cfg.dT).dalt/FT).padStart(6)}ft${f0(S.t).padStart(5)}s`);
   if(S.incident){const inc=el('inc');if(inc.dataset.t!==String(S.incident.t)){inc.dataset.t=String(S.incident.t);inc.textContent=S.incident.text;inc.title=S.incident.text;}
-    if(UI.sideT%30===0)el('incAge').textContent=`${Math.max(0,S.t-S.incident.t).toFixed(0)} s ago`;}
+    set('incAge',`${Math.max(0,S.t-S.incident.t).toFixed(0)} s ago`);}
 }
 function boot(){
   const stage=document.getElementById('stage');
@@ -229,6 +274,7 @@ function boot(){
   document.getElementById('tutorStop').onclick=()=>tutorStop();
   for(const [id,m] of [['coachOff','off'],['coachCues','cues'],['coachVoice','voice']])document.getElementById(id).onclick=()=>{coachSet(m);document.getElementById(id).blur();};
   coachButtons();
+  for(const [id,k] of [['asAlt',()=>AFCS.vs?'vs':'alt'],['asHdg',()=>'hdg'],['asSpd',()=>S.ias>40*KT?'ias':'hov']])document.getElementById(id).onclick=()=>{afcsToggle(k());document.getElementById(id).blur();};afcsButtons();apMenuInit();
   ts.onchange=()=>{if(TUTOR.on)tutorStart(parseInt(ts.value));ts.blur();};
   document.querySelectorAll('#setupBody select').forEach(el=>el.addEventListener('change',()=>el.blur()));
   // welcome card: the first thing a new pilot sees

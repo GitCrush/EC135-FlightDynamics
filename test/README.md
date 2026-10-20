@@ -38,12 +38,17 @@ stubs) and drives it like a person: cyclic and pedal keys held and tapped,
 collective keys, a lift-off from the pad, the trim keys, every aid switched
 off and on in flight, the autopilot demonstration handed back, a tutor axis
 handed over while the mouse was moved, full stick held for 8 s, a gamepad
-pedal and cyclic, forward flight trimmed with T, keys on the ground.
+pedal and cyclic, forward flight trimmed with T, keys on the ground, the
+autopilot on single controls (U I O: what it holds, what stays the
+pilot's, bumpless hand-back) and its menu (presets, nudged targets,
+refused during a lesson).
 Exit 1 on any ERROR.
 
-`node test/scenarios.js A|B|C` is the scenario analysis: A yaw and pedal
+`node test/scenarios.js A|B|C|D|E` is the scenario analysis: A yaw and pedal
 physics, B cyclic and limit manoeuvres (blade stall, low g, Vne, quick
-stop, autorotation landings), C the control laws in those manoeuvres. It
+stop, autorotation landings), C the control laws in those manoeuvres, D
+main and tail rotor at the power limit, E hover and cruise modes and the
+vortex-ring recoveries. Winds are given at the aircraft's height. It
 prints OK/CHECK per row with the expectation beside the value.
 `test/tutor.js` now runs on the complete real code (`loadfull.js`), so
 the reset hand-over it uses is the browser's.
@@ -51,5 +56,40 @@ the reset hand-over it uses is the browser's.
 `python3 test/uishot.py [name …]` renders the README screenshots into
 `docs/screenshots/` (Playwright with Chromium; `pip install playwright` and
 `playwright install chromium`). Without arguments it renders all of them.
+
+`node test/qualities.js` (since 1.8) separates what the other suites mix:
+
+| Tag | Meaning |
+|---|---|
+| VAL | compared with a published figure the model was **not** tuned to |
+| CAL | a published figure a parameter was fitted to (agreement is by construction) |
+| PHY | a law of physics or an internal consistency (sign, symmetry, energy) |
+| REG | a golden value from `test/golden.json`, to catch unintended change |
+| KNOWN | an open deviation from a published figure, with the bound it must stay in |
+
+Sections: the rotor in isolation (thrust follows the tip-path plane, inflow
+gradients point to the lifting side, roll/pitch damping symmetric),
+linear modes in the hover and at 100 kt (quasi-static linearisation and
+eigenvalues, `test/lib/linear.js`), ADS-33 attitude bandwidth and phase
+delay at 75 kt by sine dwells against the published EC135 values, hover
+ceilings, climb and cruise against published figures, physical laws
+(mass exponent, autorotation energy balance), the findings of the 1.8
+flight test (Fenestron share of the anti-torque in balanced cruise, the
+autorotation pedal, rotor speed after a double engine failure at 40 kt,
+retreating-blade stall onset, vortex-ring roughness), the training aids'
+mixing against the physics, and the limits of the type certificate. `--fast`
+skips the frequency sweeps; `--update` rewrites the golden values.
+
+`node test/mutation.js` breaks the model on purpose (a sign, a missing
+term, a doubled inertia; 33 mutants) through the `EC135_PATCH` hook of the
+loaders (`test/lib/patch.js`) and runs `qualities --fast` and
+`consistency` against each. A mutant that no suite catches marks a blind
+spot. `--quick` runs qualities only, `--only=3,7` selected mutants.
+
+`node flighttest/pilot.js [ids]` flies the frozen cards of the simulated
+flight test (`flighttest/plan.json`, `flighttest/cards.json`) and writes the
+recordings to `flighttest/results/` (thrust and engine power as
+one-revolution averages, since 1.9); `node flighttest/report.js` rebuilds
+`flighttest/report.html` from them and the evaluator's `verdicts.json`.
 
 `test/dev/` holds the development scratch scripts (traces, not suites).

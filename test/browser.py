@@ -29,5 +29,58 @@ async def main():
         await pg.keyboard.press('Digit3');await pg.wait_for_timeout(800)
         await pg.screenshot(path=str(OUT/'ec135_tower.png'))
         print('\n'.join(errs[:20]) if errs else 'no console errors after flying')
+        # graphics: one multisampled context for all modes; auto scales the drawing resolution with the frame time
+        # (pixel-bound synthetic frames: their time follows the pixel count), full ignores it, nothing is remembered
+        g=await pg.evaluate('''()=>{const r={};const gl0=R3.gl;cfgSet('gfx','auto');drsReset();DRS.t=5;R3.soft=false;GFX.mode=gfxEffective();render(0.02);r.buf0=[R3.canvas.width,R3.canvas.height];
+          for(let i=0;i<45*12;i++)drsStep(0.05*DRS.s*DRS.s);render(0.02);r.sLow=DRS.s;r.bufLow=[R3.canvas.width,R3.canvas.height];r.why=GFX.why;
+          for(let i=0;i<45*30;i++)drsStep(0.010);render(0.02);r.sBack=DRS.s;
+          drsReset();DRS.t=5;for(let i=0;i<45*12;i++)drsStep(0.035);r.sCpu=DRS.s;   // frame time independent of the pixels: one step tried, then held
+          cfgSet('gfx','full');for(let i=0;i<45*6;i++)drsStep(0.05*DRS.s*DRS.s);render(0.02);r.bufFull=[R3.canvas.width,R3.canvas.height];r.full=GFX.mode;
+          r.sameCtx=R3.gl===gl0;r.aa=R3.gl.getContextAttributes().antialias;r.deriv=R3.info.deriv;r.tiles=R3.tilesDrawn;
+          cfgSet('gfx','light');render(0.02);r.light=GFX.mode;cfgSet('gfx','auto');render(0.02);
+          let st=null;try{st=localStorage.getItem('ec135fd.gfx')+'/'+localStorage.getItem('ec135fd.gfxAuto');}catch(e){}r.stored=st;return r;}''')
+        print('graphics',g)
+        bad=not(g['sLow']<=0.61 and g['bufLow'][0]<g['buf0'][0]*0.65 and g['sBack']>=0.99 and 0.89<=g['sCpu']<=1.0 and g['bufFull']==g['buf0'] and g['full']=='full' and g['light']=='light' and g['sameCtx'] and g['aa'] and g['stored']=='auto/null')
+        print('graphics resolution scaling FAILED' if bad else 'graphics resolution scaling ok')
+        await pg.wait_for_timeout(500)
+        print('\n'.join(errs[:20]) if errs else 'no console errors after mode switches')
+        # autopilot menu: J opens it, the ALT and HOV tiles engage those modes, + raises the height target, All off, J closes it; U toggles ALT from the keyboard
+        await pg.evaluate("()=>{const w=document.getElementById('welcome');if(w)w.style.display='none';uiReset('hover');}")
+        await pg.wait_for_timeout(500)
+        await pg.keyboard.press('Digit1');await pg.keyboard.press('KeyJ');await pg.wait_for_timeout(300)
+        op=await pg.evaluate("()=>document.getElementById('apMenu').classList.contains('open')")
+        await pg.click('#amMalt');await pg.click('#amMhov');await pg.wait_for_timeout(300)
+        a=await pg.evaluate("()=>({alt:AFCS.alt,hov:AFCS.hov,held:AFCS.held,tile:document.getElementById('amMalt').classList.contains('on'),t:AFCS.tAlt,side:document.getElementById('asAlt').classList.contains('on')})")
+        await pg.click('#amRalt button[data-d=\"1\"]');await pg.wait_for_timeout(300)
+        a2=await pg.evaluate("()=>({t:AFCS.tAlt,val:document.getElementById('amValt').textContent})")
+        await pg.click('#amOff');await pg.keyboard.press('KeyJ');await pg.wait_for_timeout(300)
+        cl=await pg.evaluate("()=>({open:document.getElementById('apMenu').classList.contains('open'),any:afcsAny()})")
+        await pg.keyboard.press('KeyU');await pg.wait_for_timeout(300)
+        u=await pg.evaluate("()=>({alt:AFCS.alt,pred:PRED.mode,n:PRED.res?PRED.res.n:0})")
+        await pg.keyboard.press('KeyU');await pg.wait_for_timeout(200)
+        print('autopilot menu',op,a,a2,cl,u)
+        bad=not op or not(a['alt'] and a['hov'] and a['tile'] and a['side']) or not(a2['t']>a['t']+0.5 and a2['val'].endswith('0 ft')) or cl['open'] or cl['any'] or not u['alt'] or u['n']<10
+        print('autopilot menu FAILED' if bad else 'autopilot menu ok')
+        print('\n'.join(errs[:20]) if errs else 'no console errors after the autopilot menu')
+        # predictor: 30 s ahead in cruise from the worker, drawn in the view (band, ghost) without a GL error
+        await pg.evaluate("()=>{uiReset('cruise');cfg.view='chase';R3.gl.getError();}");await pg.wait_for_timeout(1500)
+        pr=await pg.evaluate("()=>{render(1/60);const e=R3.gl.getError();return {mode:PRED.mode,T:PRED.T,end:+predEnd().toFixed(1),verts:PGL.n/7,ghost:!!predGhost(),glErr:e,ms:Math.round(PRED.ms)};}")
+        await pg.evaluate("()=>{uiReset('hover');}");await pg.wait_for_timeout(1200)
+        ph=await pg.evaluate("()=>({T:PRED.T,end:+predEnd().toFixed(1)})")
+        print('predictor',pr,ph)
+        bad=pr['mode']!='worker' or pr['T']!=30 or pr['end']<29 or pr['verts']<100 or pr['glErr']!=0 or ph['T']!=6 or ph['end']<5.5
+        print('predictor FAILED' if bad else 'predictor ok')
+        # click to fly: hold M, point at the ground ahead, click; the autopilot takes the spot
+        await pg.evaluate("()=>{uiReset('hover');cfg.view='cockpit';}");await pg.wait_for_timeout(800)
+        box=await pg.evaluate("()=>{const r=R3.canvas.getBoundingClientRect();return {x:r.left,y:r.top,w:r.width,h:r.height};}")
+        await pg.mouse.move(box['x']+box['w']*0.62,box['y']+box['h']*0.55);await pg.keyboard.down('KeyM');await pg.wait_for_timeout(200)
+        await pg.mouse.move(box['x']+box['w']*0.60,box['y']+box['h']*0.52);await pg.wait_for_timeout(200)
+        aim=await pg.evaluate("()=>({on:AIM.on,pick:aimPick(AIM.x,AIM.y)})")
+        await pg.mouse.down();await pg.mouse.up();await pg.keyboard.up('KeyM');await pg.wait_for_timeout(300)
+        go=await pg.evaluate("()=>({go:AFCS.go,hov:AFCS.hov,alt:AFCS.alt,hdg:AFCS.hdg,aim:AIM.on,d:AFCS.go?Math.hypot(AFCS.go.n-S.pos[0],AFCS.go.e-S.pos[1]):0,panel:HUD.panelA})")
+        print('click to fly',aim,go)
+        bad=not aim['on'] or not aim['pick'] or not go['go'] or not go['hov'] or go['aim'] or go['d']<3 or go['panel']<0.9
+        print('click to fly FAILED' if bad else 'click to fly ok')
+        print('\n'.join(errs[:20]) if errs else 'no console errors after click to fly')
         await b.close()
 asyncio.run(main())

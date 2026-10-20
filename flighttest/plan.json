@@ -1,0 +1,165 @@
+{
+ "title": "EC135 Flight Dynamics — simulated flight test, test plan",
+ "aircraft": "Airbus Helicopters EC135 P2+: 4-blade bearingless (hingeless-type) main rotor turning counterclockwise seen from above (corrected: the first version of this plan said clockwise, which is what the simulator then had; the card author found the error), R 5.1 m, 395 rpm (tip speed ~211 m/s); Fenestron ducted tail rotor (10 blades, 1.0 m); two turboshaft engines with FADEC; MTOW 2910 kg.",
+ "conventions": {
+  "axes": "Body axes: x forward, y right, z down. Roll + = right wing down; pitch + = nose up; yaw + = nose right. Rates p, q, r in deg/s.",
+  "controls": "lon + = forward stick (nose down command), lat + = right stick, ped + = right pedal, col + = collective up. Cyclic and pedal inputs are fractions of the travel from centre to stop (1.0 = stop); collective inputs are fractions of its full range. Inputs are given relative to the trimmed position.",
+  "rigging": "Lateral cyclic: 1.0 = 7.5 deg blade cyclic = 80 mm stick (ERF 1997). Longitudinal cyclic: range 21.8 deg total over 215 mm (ERF 1997); 0.1 = about 1.1 deg. Collective: full range about 14.5 deg of blade pitch at 0.75 R; 0.05 = about 0.7 deg. Pedal gearing is not published.",
+  "aids": "'bare' = no stability augmentation, no autopilot, controls exactly as scripted. 'pilot' = a scripted test pilot flies the named task closed-loop (described in words in each card).",
+  "standard": "Unless stated: 2500 kg, mid CG, 1000 ft (305 m) pressure altitude, ISA, calm air, out of ground effect, both engines at 100 % NR governed by the FADEC."
+ },
+ "cards": [
+  {
+   "id": "H1",
+   "title": "Hover trim out of ground effect",
+   "condition": "standard, hover",
+   "inputs": "none: the trimmed state is recorded for 5 s",
+   "record": "pitch and roll attitude, control positions (relative to centre), power required, rotor speed",
+   "purpose": "trim attitude, which skid is low, pedal and power in the hover"
+  },
+  {
+   "id": "H2",
+   "title": "Lateral cyclic pulse in the hover",
+   "condition": "standard, hover, bare",
+   "inputs": "lat +0.10 (right) for 1.0 s, then back to trim; all other controls fixed; record 6 s",
+   "record": "p, phi, q, theta, r, lateral ground speed",
+   "purpose": "roll response to stick, damping, cross-coupling into pitch"
+  },
+  {
+   "id": "H3",
+   "title": "Longitudinal cyclic pulse in the hover",
+   "condition": "standard, hover, bare",
+   "inputs": "lon +0.10 (forward) for 1.0 s, then back to trim; record 6 s",
+   "record": "q, theta, p, phi, forward ground speed",
+   "purpose": "pitch response to stick, cross-coupling into roll"
+  },
+  {
+   "id": "H4",
+   "title": "Pedal step in the hover",
+   "condition": "standard, hover, bare",
+   "inputs": "ped +0.10 (right) held for 4 s; record 6 s",
+   "record": "r, heading, phi, vertical speed, NR, Fenestron power",
+   "purpose": "yaw response: acceleration, rate after 1, 2, 4 s; couplings"
+  },
+  {
+   "id": "H5",
+   "title": "Collective step in the hover, pedals fixed",
+   "condition": "standard, hover, bare",
+   "inputs": "col +0.05 held; cyclic and pedals fixed; record 6 s",
+   "record": "vertical speed, vertical acceleration, r, NR, power",
+   "purpose": "heave response (time constant), yaw due to collective (direction and size), rotor speed droop"
+  },
+  {
+   "id": "H6",
+   "title": "Hover with the controls fixed after a small disturbance",
+   "condition": "standard, hover, bare",
+   "inputs": "controls fixed at trim; at t = 0 a nose-up pitch rate of 2 deg/s is imposed; record 25 s",
+   "record": "theta, phi, u, v, q, p",
+   "purpose": "hover stability: the character of the motion (oscillatory or not), period, time to double"
+  },
+  {
+   "id": "H7",
+   "title": "Total power loss in the hover",
+   "condition": "standard, hover, bare until 1.0 s",
+   "inputs": "both engines fail at t = 0; controls fixed for 1.0 s; then collective lowered to full down over 1.0 s; cyclic and pedals fixed; record 5 s",
+   "record": "r, heading, NR, vertical speed, vertical acceleration",
+   "purpose": "yaw at torque loss (direction, rate), rotor speed decay before and after the lever goes down"
+  },
+  {
+   "id": "H8a",
+   "title": "Vortex ring: vertical descent, recovery with collective only",
+   "condition": "standard; descent at zero ground speed",
+   "inputs": "pilot establishes a vertical descent of 1800 fpm at zero ground speed (heading and position held with cyclic and pedals), then at t = 0 raises the collective by 0.15 and holds it, still holding zero ground speed; record 20 s",
+   "record": "vertical speed, height lost, collective, power, NR, thrust fluctuation",
+   "purpose": "vortex-ring behaviour: does collective alone arrest the sink, how much height is lost"
+  },
+  {
+   "id": "H8b",
+   "title": "Vortex ring: same entry, classical recovery",
+   "condition": "as H8a",
+   "inputs": "same entry; at t = 0 the pilot pitches 10 deg nose down to gain forward speed and raises the collective by 0.15; record 20 s",
+   "record": "as H8a, plus airspeed",
+   "purpose": "comparison with H8a: height lost, time to recover"
+  },
+  {
+   "id": "T1",
+   "title": "Acceleration from the hover to 40 kt at constant height",
+   "condition": "standard; pilot",
+   "inputs": "pilot accelerates slowly (about 1 kt/s) from the hover to 40 kt holding height with the collective, heading with the pedals and wings level with the lateral cyclic; record until 40 kt",
+   "record": "power, collective, longitudinal and lateral cyclic, pedal, pitch and roll attitude against airspeed",
+   "purpose": "translational lift, flapback (forward stick needed), transverse-flow effect, pedal change"
+  },
+  {
+   "id": "F1",
+   "title": "Level flight power curve",
+   "condition": "standard, trimmed level flight at 0, 40, 60, 80, 100, 120, 135 kt",
+   "inputs": "none: trimmed state recorded at each speed",
+   "record": "power, pitch attitude, collective, pedal",
+   "purpose": "power required curve: minimum-power speed, power at high speed, attitudes"
+  },
+  {
+   "id": "F2",
+   "title": "Longitudinal doublet at 100 kt",
+   "condition": "standard, 100 kt level, bare",
+   "inputs": "lon +0.05 for 1.0 s, then -0.05 for 1.0 s, then back to trim; record 8 s",
+   "record": "q, theta, load factor, airspeed, p, phi",
+   "purpose": "short-term pitch response and damping; angle-of-attack stability"
+  },
+  {
+   "id": "F3",
+   "title": "Lateral pulse at 100 kt",
+   "condition": "standard, 100 kt level, bare",
+   "inputs": "lat +0.10 for 1.0 s, then back to trim; record 8 s",
+   "record": "p, phi, r, sideslip, q",
+   "purpose": "roll response in forward flight, adverse or proverse yaw"
+  },
+  {
+   "id": "F4",
+   "title": "Pedal doublet at 100 kt",
+   "condition": "standard, 100 kt level, bare",
+   "inputs": "ped +0.10 for 1.0 s, then -0.10 for 1.0 s, then back to trim; record 12 s",
+   "record": "r, sideslip, phi, p, heading",
+   "purpose": "directional stability and the Dutch roll: period, damping, roll due to sideslip"
+  },
+  {
+   "id": "F5",
+   "title": "Speed stability at 80 kt",
+   "condition": "standard, 80 kt level, bare",
+   "inputs": "controls fixed; at t = 0 the forward speed is increased by 5 m/s (an instantaneous disturbance); record 10 s",
+   "record": "theta, q, airspeed, vertical speed",
+   "purpose": "speed stability: which way the nose goes after a speed increase"
+  },
+  {
+   "id": "F6",
+   "title": "Total power loss at 100 kt and autorotation",
+   "condition": "standard, 100 kt level",
+   "inputs": "both engines fail at t = 0; controls fixed for 1.0 s; then collective full down over 1.0 s; from then the pilot holds 65 kt with the cyclic, wings level and the ball centred with the pedals; record 40 s",
+   "record": "r, NR, airspeed, vertical speed, pedal, collective",
+   "purpose": "yaw at failure, rotor speed decay and recovery, steady autorotation: sink rate and NR"
+  },
+  {
+   "id": "F7",
+   "title": "Retreating blade stall in a pull-up at 140 kt",
+   "condition": "2910 kg, 1000 ft ISA, 140 kt level, bare",
+   "inputs": "lon -0.25 (aft) held for 2.0 s, then back to trim; record 5 s",
+   "record": "load factor, q, theta, p, phi, stalled part of the disc",
+   "purpose": "what the aircraft does when the retreating blade stalls: direction of pitch and roll"
+  },
+  {
+   "id": "F8",
+   "title": "Low-g pushover and roll at low g",
+   "condition": "standard, 100 kt level, bare",
+   "inputs": "lon +0.15 (forward) for 1.0 s; at the lowest load factor lat +0.15 for 1.0 s; record 5 s",
+   "record": "load factor, p, phi, q",
+   "purpose": "roll control power at low g for a hingeless rotor"
+  },
+  {
+   "id": "F9",
+   "title": "Steady 30-degree banked turn at 100 kt",
+   "condition": "standard, 100 kt; pilot",
+   "inputs": "pilot rolls into a 30 deg right bank and holds bank, airspeed and height, ball centred; record 30 s",
+   "record": "turn rate, power, load factor, sideslip",
+   "purpose": "turn rate and power increase in a coordinated turn"
+  }
+ ]
+}

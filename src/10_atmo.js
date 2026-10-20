@@ -53,10 +53,12 @@ function forestD(n,e){const r=Math.hypot(n,e);return vnoise(n/260+9.2,e/260+4.4)
 const WIND={dir:270,spd:0,turb:0,gust:0,seed:7};
 const WST={f:[0,0,0],g:[0,0,0],gustT:0,gustA:0,rng:makeRng(7)};
 function windReset(seed){WST.rng=makeRng(seed||WIND.seed);WST.f=[0,0,0];WST.g=[0,0,0];WST.gustT=0;WST.gustA=0;}
+/* Boundary layer: WIND.spd is the wind at 10 m; 1/7 power law above 2 m
+   (up to 300 m, 1.63 times the 10 m value), cut in half at the ground. */
+function windProfile(hAGL){return Math.pow(clamp(hAGL,2,300)/10,1/7)*(0.5+0.5*sm(0,4,hAGL));}
 function windAt(dt,V,hAGL){
   const from=WIND.dir*DEG, w=WIND.spd*KT;
-  // boundary layer: 1/7 power law above 2 m, cut in half at the ground
-  const prof=Math.pow(clamp(hAGL,2,300)/10,1/7)*(0.5+0.5*sm(0,4,hAGL));
+  const prof=windProfile(hAGL);
   const base=[-Math.cos(from)*w*prof,-Math.sin(from)*w*prof,0];
   if(WIND.turb>0){
     // Dryden: L = 200 m (low altitude), sigma from the turbulence setting

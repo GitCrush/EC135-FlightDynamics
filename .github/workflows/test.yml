@@ -3,6 +3,9 @@ name: tests
 on:
   push:
   pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 1'     # weekly: the mutation run below
 
 jobs:
   build-check:
@@ -26,6 +29,28 @@ jobs:
         with:
           node-version: 20
       - run: node test/consistency.js
+
+  qualities:
+    name: handling qualities and validation (VAL/CAL/PHY/REG/KNOWN)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node test/qualities.js
+
+  mutation:
+    name: mutation test (can the suites see a wrong model?)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node test/mutation.js
 
   tutor:
     name: tutor steps passable

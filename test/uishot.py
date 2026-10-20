@@ -9,16 +9,31 @@ OUT=ROOT/'docs'/'screenshots';OUT.mkdir(parents=True,exist_ok=True)
 FAKEPAD='''(()=>{const pad={index:0,id:'GameSir G7 Pro (XInput STANDARD GAMEPAD)',mapping:'standard',connected:true,timestamp:0,
   axes:[0.12,-0.02,0.35,-0.18],buttons:Array.from({length:17},(_,i)=>({value:i===0?1:0,pressed:i===0}))};
   navigator.getGamepads=()=>[pad,null,null,null];})();'''
-COMMON='''()=>{const w=document.getElementById('welcome');if(w)w.style.display='none';if(REPLAY.on)replayStop();UI.paused=false;UI.debrief=null;cfg.mass=2500;cfg.view='cockpit';const inc=document.getElementById('inc');inc.textContent='';inc.dataset.t='';HUD.incText='';refreshTexts();cfg.sound=false;
-  coachSet('off');COACH.legendT=-1e9;UI.freeze=false;R3.cam.lockPsi=undefined;window.run=(sec,fn)=>{for(let i=0;i<sec/DT;i++){if(fn)fn(i*DT);inputStep(DT);tutorStep(DT);coachStep(DT);step(DT);}};}'''
+COMMON='''()=>{const w=document.getElementById('welcome');if(w)w.style.display='none';if(REPLAY.on)replayStop();UI.paused=false;UI.debrief=null;cfg.mass=2500;cfg.view='cockpit';cfg.hud=true;cfg.gfx='full';R3.soft=false;const inc=document.getElementById('inc');inc.textContent='';inc.dataset.t='';HUD.incText='';refreshTexts();cfg.sound=false;
+  coachSet('off');COACH.legendT=-1e9;UI.freeze=false;R3.cam.lockPsi=undefined;afcsOffAll();apMenuShow(false);SCOPE.fix=null;AIM.on=false;window.run=(sec,fn)=>{for(let i=0;i<sec/DT;i++){if(fn)fn(i*DT);inputStep(DT);tutorStep(DT);afcsStep(DT);coachStep(DT);step(DT);}};}'''
 SHOTS=[
  ('cockpit-hover','''()=>{startExercise('free');placeAt(0,0,3,205*DEG,0);trimNow(6);cfg.view='cockpit';S.vb[1]+=0.6;run(2);UI.freeze=true;}'''),
+ ('cockpit-panel','''()=>{startExercise('free');placeAt(120,80,2.0,30*DEG,0);trimNow(6);cfg.hud=false;cfg.view='cockpit';run(1);UI.freeze=true;}'''),
+ ('downwash-dust','''()=>{startExercise('free');placeAt(22,-157,2.0,30*DEG,0);trimNow(6);cfg.hud=false;cfg.view='orbit';R3.cam.orbit=[-8,-18,-5];R3.cam.orbitAt=[0,0,1.5];R3.cam.orbitFov=55;run(0.3);for(let i=0;i<30;i++)render(1/30);UI.freeze=true;}'''),
+ ('downwash-spray','''()=>{startExercise('free');placeAt(-450,520,3.0,30*DEG,0);trimNow(6);cfg.hud=false;cfg.view='orbit';R3.cam.orbit=[-8,-18,-5];R3.cam.orbitAt=[0,0,1.5];R3.cam.orbitFov=55;run(0.3);for(let i=0;i<30;i++)render(1/30);UI.freeze=true;}'''),
  ('chase-hover','''()=>{startExercise('free');cfg.view='chase';R3.cam.chasePos=null;R3.cam.lockPsi=S.eul[2]+0.75;R3.cam.chasePsi=R3.cam.lockPsi;run(1.5);UI.freeze=true;}'''),
  ('tutor-calm-hover','''()=>{tutorStart(3);tutorSetStep(1);cfg.view='cockpit';run(1);UI.freeze=true;}'''),
  ('coach-cue','''()=>{startExercise('free');cfg.view='cockpit';coachSet('cues');COACH.legendT=-1e9;run(2);S.vb[1]-=2.2;S.vb[0]+=0.6;run(1.4);UI.freeze=true;}'''),
  ('retreating-blade-stall','''()=>{cfg.mass=2910;uiReset('cruise');cfg.view='chase';R3.cam.chasePos=null;R3.cam.lockPsi=S.eul[2]-0.9;R3.cam.chasePsi=R3.cam.lockPsi;
     AP.on=true;AP.mode='cruise';AP.ias=140;AP.alt=S.alt;AP.hdg=S.eul[2];for(let i=0;i<30/DT;i++){const o=apStep(DT);IN.col=o.col;IN.lon=o.lon;IN.lat=o.lat;IN.ped=o.ped;step(DT);}
     AP.on=false;const b={...IN};for(let i=0;i<1.6/DT;i++){IN.lon=b.lon-0.3;IN.col=b.col;IN.lat=b.lat;IN.ped=b.ped;step(DT);}UI.freeze=true;window.__stall=S.rot.stall;}'''),
+ ('autopilot-menu','''()=>{startExercise('free');placeAt(0,0,3,205*DEG,0);trimNow(6);cfg.view='cockpit';afcsToggle('alt',true);afcsToggle('hov',true);apMenuShow(true);run(3);S.vb[1]+=1.4;S.vb[0]-=0.6;run(0.9);apMenuSync();predStep(true);UI.freeze=true;}'''),
+ ('autopilot-hover','''()=>{startExercise('free');placeAt(0,0,3,205*DEG,0);trimNow(6);cfg.view='cockpit';for(const m of ['alt','hdg','hov'])afcsToggle(m,true);run(3);S.vb[1]+=1.4;S.vb[0]-=0.6;S.om[2]+=0.08;run(0.9);predStep(true);UI.freeze=true;}'''),
+ ('autopilot-cruise','''()=>{startExercise('free');uiReset('cruise');cfg.view='cockpit';run(2);for(const m of ['alt','hdg','ias'])afcsToggle(m,true);run(2);afcsAdjust('ias',1);afcsAdjust('hdg',2);afcsAdjust('alt',1);run(2.5);predStep(true);UI.freeze=true;}'''),
+ ('predictor-hover','''()=>{startExercise('free');placeAt(0,0,3,205*DEG,0);trimNow(6);cfg.view='chase';R3.cam.chasePos=null;R3.cam.lockPsi=S.eul[2]-0.25;R3.cam.chasePsi=R3.cam.lockPsi;run(1);run(1.3,()=>{DEV.kbd.lon=0.05;DEV.kbd.lat=0.14;});predStep(true);UI.freeze=true;}'''),
+ ('predictor-turn','''()=>{uiReset('cruise');cfg.view='chase';R3.cam.chasePos=null;run(2);run(4,()=>{DEV.kbd.lat=0.22;});for(let i=0;i<60;i++)cameraUpdate(1/30);predStep(true);UI.freeze=true;}'''),
+ ('predictor-cockpit','''()=>{uiReset('cruise');cfg.view='cockpit';run(2);run(4,()=>{DEV.kbd.lat=0.22;DEV.kbd.lon=0.05;});predStep(true);UI.freeze=true;}'''),
+ ('predictor-scope','''()=>{startExercise('free');placeAt(0,0,3,205*DEG,0);trimNow(6);cfg.view='cockpit';run(1);run(1.3,()=>{DEV.kbd.lon=0.06;DEV.kbd.lat=0.14;});predStep(true);render(0.016);
+    const A=scopeSnap();run(0.8,()=>{DEV.kbd.lon=0;DEV.kbd.lat=-0.10;});predStep(true);render(0.016);scopeStep();SCOPE.prev=A;SCOPE.fix=0.42;UI.freeze=true;}'''),
+ ('click-to-fly-aim','''()=>{startExercise('free');placeAt(0,0,3,205*DEG,0);trimNow(6);cfg.view='cockpit';run(1);predStep(true);AIM.on=true;AIM.locked=true;AIM.x=R3.w*0.66;AIM.y=R3.h*0.50;UI.freeze=true;}'''),
+ ('click-to-fly','''()=>{startExercise('free');placeAt(0,0,3,205*DEG,0);trimNow(6);cfg.view='chase';R3.cam.chasePos=null;R3.cam.lockPsi=S.eul[2]-0.5;R3.cam.chasePsi=R3.cam.lockPsi;run(1);
+    const b=S.eul[2]+0.55;afcsFlyTo(S.pos[0]+90*Math.cos(b),S.pos[1]+90*Math.sin(b));run(4);for(let i=0;i<40;i++)cameraUpdate(1/30);predStep(true);UI.freeze=true;}'''),
+ ('predictor-landing','''()=>{startExercise('free');placeAt(0,0,3,205*DEG,0);trimNow(6);cfg.view='chase';R3.cam.chasePos=null;R3.cam.lockPsi=S.eul[2]+0.9;R3.cam.chasePsi=R3.cam.lockPsi;run(1);const c=IN.col-0.07;run(0.8,()=>{DEV.kbd.col=c;DEV.kbd.lat=0.05;});predStep(true);UI.freeze=true;}'''),
  ('replay','''()=>{startExercise('free');cfg.view='chase';R3.cam.chasePos=null;R3.cam.lockPsi=S.eul[2]+2.4;R3.cam.chasePsi=R3.cam.lockPsi;
     run(4,t=>{DEV.keys.ArrowRight=t>0.5&&t<1.6;});DEV.keys.ArrowRight=false;run(3,t=>{DEV.keys.KeyS=t<1.2;});DEV.keys.KeyS=false;run(4);
     S.incident={id:'hard',t:S.t-3.5,text:'Hard landing'};replayStart();REPLAY.i=Math.max(0,REPLAY.log.length-150);UI.freeze=true;}'''),
@@ -33,8 +48,9 @@ async def main():
     async with async_playwright() as p:
         b=await p.chromium.launch(args=['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'])
         ctx=await b.new_context(viewport={'width':1280,'height':800},locale='en-US')
-        pg=await ctx.new_page();errs=[];pg.on('pageerror',lambda e: errs.append(str(e)))
+        pg=await ctx.new_page();pg.set_default_timeout(120000);errs=[];pg.on('pageerror',lambda e: errs.append(str(e)))
         await pg.goto((ROOT/'index.html').as_uri());await pg.wait_for_timeout(2000)
+        await pg.evaluate("()=>{R3.soft=false;cfg.gfx='full';}");await pg.wait_for_timeout(1500)   # SwiftShader here: no software-rendering notice in the pictures
         if not sys.argv[1:] or 'welcome' in sys.argv[1:]:
             await pg.screenshot(path=str(OUT/'welcome.png'));print('welcome')
         await pg.mouse.move(1200,780)

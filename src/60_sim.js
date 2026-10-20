@@ -5,7 +5,7 @@ const cfg={
   sas:true, attHold:true, hdgHold:true, hoverAssist:false, assistK:1,   // stability augmentation (training aids); assistK blends hover assist with the raw stick
   kbdCol:'metered', kbdPed:'heading', pedRate:25,            // keyboard pilot models; yaw rate per pedal key, °/s
   mouse:true, mouseMode:'stick', mouseTravel:1600, mouseButtons:true, padDead:0.06,   // px of mouse movement for full stick (real stick: 80 mm lateral, 108 mm longitudinal per side)
-  view:'cockpit', hud:true, rotorDisc:true, fpm:true, sound:true, cloud:0.4,
+  view:'cockpit', hud:true, rotorDisc:true, fpm:true, predict:true,predictT:'auto', sound:true, cloud:0.4,
   engFail:'none',
 };
 const IN={col:0.45,lon:0,lat:0,ped:0,             // controls after the pilot models, [0..1] / [-1..1]
@@ -61,46 +61,68 @@ function step(dt){
   const vNED=mrot(R,S.vb);
   S.wind=windAt(dt,vlen(S.vb),S.hAGL+1.3);
   S.windB=mrotT(R,S.wind);
-  /* ---- Actuators: hydraulic servos, full travel in 0.45 s ---- */
-  const rate=dt/0.45;
-  S.ctl.col=approach(S.ctl.col,clamp(IN.col,0,1),rate);
-  S.ctl.lon=approach(S.ctl.lon,sat(IN.lon,1),2*rate);
-  S.ctl.lat=approach(S.ctl.lat,sat(IN.lat,1),2*rate);
-  S.ctl.ped=approach(S.ctl.ped,sat(IN.ped,1),2*rate);
+  /* ---- Actuators: hydraulic servos, full travel in 0.45 s, and a
+     first-order lag (time constant H.ctlTau) for the linkage and servo
+     valve at small amplitude ---- */
+  const rate=dt/0.45, kf=Math.min(1,dt/Math.max(H.ctlTau||0,dt));
+  const srv=(cur,cmd,r)=>approach(cur,cur+(cmd-cur)*kf,r);
+  S.ctl.col=srv(S.ctl.col,clamp(IN.col,0,1),rate);
+  S.ctl.lon=srv(S.ctl.lon,sat(IN.lon,1),2*rate);
+  S.ctl.lat=srv(S.ctl.lat,sat(IN.lat,1),2*rate);
+  S.ctl.ped=srv(S.ctl.ped,sat(IN.ped,1),2*rate);
   const th0=rt.col0+S.ctl.col*(rt.col1-rt.col0);
   /* ---- Main rotor ---- */
   const hubW=vadd(S.pos,mrot(R,rt.hub));
   const hubAGL=-(hubW[2]+terrainH(hubW[0],hubW[1]));
   const st=S.rot;
-  const Qdrive=S.eng.Qdrive;
+  const Qdrive=S.eng.Qmast;   // the airframe reacts the torque in the main-rotor mast only
   const thLon=rt.lonC+S.ctl.lon*rt.lonH;                               // linear gearing, range centred forward
   rotorStep(rt,st,dt,S.vb,S.om,S.omd,S.windB,S.rho,S.aS,hubAGL,th0,thLon,S.ctl.lat*rt.lat,Qdrive);
   /* ---- Fenestron ---- */
   const wakeT=1.2*st.lam0*st.Om*rt.R*sm(0.10,0.02,st.mu);          // rotor wake at the tail, hover to transition
-  const fe=fenStep(H.fen,S.fen,dt,S.vb,S.om,S.windB,S.rho,S.aS,st.Om,S.ctl.ped,wakeT);
+  const fe=fenStep(H.fen,S.fen,dt,S.vb,S.om,S.windB,S.rho,S.aS,st.Om,S.ctl.ped,wakeT,rt.s);
   /* ---- Engines and rotor speed ----
      I Om' = Q_drive - Q_rotor - Q_fen(referred) - Q_accessories */
   S.NR=st.Om/rt.Om0*100;
   const Pfen=Math.max(0,S.fen.P);
-  S.Pload=st.P+Pfen;
+  S.Pload=st.P+Pfen;                                                    // aerodynamic load: rotor and Fenestron
+  const Qaux=H.eng.acc/rt.Om0+H.eng.qFric*Math.min(1,st.Om/2);   // gearbox accessories (constant torque) and friction
+  S.Peng=(S.Pload+Qaux*st.Om)/(1-H.eng.mesh);   // what the engines must deliver: plus accessories, friction and the gear mesh losses
+  /* one-revolution averages of thrust and power (diagnostics: the 4/rev of a
+     four-bladed rotor at speed aliases when sampled at a few hertz) */
+  {const n=Math.round(2*Math.PI/(rt.Om0*dt)),b=S.revAvg||(S.revAvg={T:new Float64Array(n),P:new Float64Array(n),i:0,sT:0,sP:0,n:0});
+   const i=b.i%b.T.length;b.sT+=st.T-b.T[i];b.sP+=S.Peng-b.P[i];b.T[i]=st.T;b.P[i]=S.Peng;b.i=i+1;b.n=Math.min(b.n+1,b.T.length);
+   S.Tbar=b.sT/b.n;S.Pbar=b.sP/b.n;}
   /* Run-up only: below 60 % NR the torque the turbine can pass is limited.
      Above that there is no cap: a drooping rotor in an overpitch must
      still get full power, the FLI sits at the limit while NR bleeds. */
   const qCap=S.NR<60?H.eng.qMax+Math.pow(S.NR/60,3)*26000:1e9;
   const lapse=H.eng.thk*(at.p/101325)*Math.pow(at.T/288.15,-H.eng.thb);   // turbine power in the present air
-  const Ptot=engStep(H.eng,S.eng,dt,S.NR,S.Pload,0,(IN.col-S.ctl.col),qCap*Math.max(st.Om,1)+H.eng.idle*2,lapse);
+  const Ptot=engStep(H.eng,S.eng,dt,S.NR,S.Peng,0,(IN.col-S.ctl.col),qCap*Math.max(st.Om,1)+H.eng.idle*2,lapse);
   const Qeng=Math.min(Math.max(0,Ptot)/Math.max(st.Om,5),qCap);                  // freewheel
-  const Qload=st.Q+Pfen/Math.max(st.Om,5)+H.eng.acc/rt.Om0+H.eng.qFric*Math.min(1,st.Om/2);   // accessories as constant torque
+  const Qmesh=H.eng.mesh*Math.max(Qeng,Pfen/Math.max(st.Om,5)+H.eng.acc/rt.Om0);   // mesh losses on the torque the gearbox passes
+  const Qload=st.Q+Pfen/Math.max(st.Om,5)+Qaux+Qmesh;
   S.eng.Qdrive=Qeng;
-  st.Om=Math.max(0,st.Om+(Qeng-Qload)/rt.Ir*dt);
+  /* Torque in the mast = what the gearbox passes to the main rotor. The
+     tail drive, the accessories and the friction are internal to the
+     airframe; only the mast torque is reacted in yaw. (Until 1.7 the whole
+     engine torque was, which made the pedal margins pessimistic.) */
+  S.eng.Qmast=Qeng-Pfen/Math.max(st.Om,5)-Qaux-Qmesh;
+  /* The rotor turns relative to the airframe; its angular momentum is
+     absolute. A yaw acceleration in the rotor's sense takes relative rotor
+     speed away (the airframe turns under the rotor), the governor puts it
+     back, and its torque reaction resists the yaw: a governed rotor adds
+     its polar inertia to the yaw axis. Shaft axis in body: (-sin tilt, 0, cos tilt). */
+  const omdShaft=-Math.sin(rt.tilt)*S.omd[0]+Math.cos(rt.tilt)*S.omd[2];
+  st.Om=Math.max(0,st.Om+((Qeng-Qload)/rt.Ir-rt.s*omdShaft)*dt);
   // fuel: burned mass comes off the take-off mass
   S.fuelBurn+=Ptot/3.6e6*H.eng.sfc*dt;
   S.Pavail=S.eng.Pavail;
   /* ---- Fuselage, empennage, gear, gravity ---- */
   const va=vsub(S.vb,S.windB);
-  const fu=fuselage(H.fus,va,S.rho,st.T,S.om);
+  const fu=fuselage(H.fus,va,S.rho,st.T,S.om,st.chi);
   const sb=stabiliser(H.fus,S.vb,S.om,S.windB,S.rho,st.lam0,st.Om*rt.R,st.mu);
-  const fi=fin(H.fus,S.vb,S.om,S.windB,S.rho);
+  const fi=fin(H.fus,S.vb,S.om,S.windB,S.rho,rt.s);
   const ge=gearStep(H.gear,S,R);
   const gB=mrotT(R,[0,0,9.81*m]);
   /* Training tether: a stiff spring-damper on the CG to a point on the
@@ -118,6 +140,7 @@ function step(dt){
            st.M[2]+fe.M[2]+fu.M[2]+sb.M[2]+fi.M[2]+ge.M[2]];
   const Mc=vsub(M,vcross(cgOff,vsub(F,gB)));
   S.Fb=F;S.Mb=Mc;S.Mz={rot:st.M[2],fen:fe.M[2],fus:fu.M[2],stab:sb.M[2],fin:fi.M[2],gear:ge.M[2]};   // yaw moment budget (diagnostics)
+  S.Fy={rot:st.F[1],fen:fe.F[1],fus:fu.F[1],stab:sb.F[1],fin:fi.F[1],grav:gB[1]};S.Mx={rot:st.M[0],fen:fe.M[0],fus:fu.M[0],stab:sb.M[0],fin:fi.M[0]};   // side force and roll budget (diagnostics)
   /* ---- Rigid body: I w' + w x (I w + H_rotor) = M ---- */
   const I=inertia(), Iinv=inv3(I);
   /* Gyroscopic term of the rotating parts that are rigidly attached: hub
@@ -180,19 +203,25 @@ const INC_RULES=[
   {id:'tailfail',test:r=>S.fen.failed&&!S.onGround,
    text:r=>`Tail drive failure: no anti-torque. In the hover, lower the collective at once (less torque, less spin) and land. In cruise keep the airspeed, the fin holds the nose; plan a run-on landing and close the throttles at touchdown if the yaw cannot be held.`},
   {id:'vrs',test:r=>r.vrs>0.35&&r.vs<-500&&r.ias<30,
-   text:r=>`Vortex ring state: sinking ${(-r.vs).toFixed(0)} fpm at ${r.ias.toFixed(0)} kt, the rotor is recirculating its own wake. More collective alone does not stop it. Recover as Airbus advises: forward cyclic decisively to gain airspeed, collective up as power allows. With no room ahead (Vuichard, clockwise rotor): take-off power, left cyclic to a 15–20° bank, right pedal to hold the heading.`},
+   text:r=>`Vortex ring state: sinking ${(-r.vs).toFixed(0)} fpm at ${r.ias.toFixed(0)} kt, the rotor is recirculating its own wake. More collective alone does not stop it. Recover as Airbus advises: forward cyclic decisively to gain airspeed, collective up as power allows. With no room ahead (Vuichard): take-off power, lateral cyclic to a 15–20° bank toward the side the Fenestron pushes (${H.rotor.s<0?'right with this counterclockwise rotor':'left with a clockwise rotor'}), ${H.rotor.s<0?'left':'right'} pedal to hold the heading.`},
   {id:'lownr',test:r=>r.nr<H.nr.minPowerOn-2.5&&r.fli>9.5&&S.eng.mode!=='start',
    text:r=>`Rotor speed ${r.nr.toFixed(1)} %: the collective demands more power than ${S.eng.mode==='oei'?'one engine':'the engines'} can deliver (FLI ${r.fli.toFixed(1)}). Lower the collective to recover NR, then trade airspeed for height.`},
   {id:'lownrauto',test:r=>r.nr<H.nr.minAuto&&r.fli<3&&S.eng.mode!=='off'&&S.eng.mode!=='start'&&!S.onGround,
    text:r=>`Rotor speed ${r.nr.toFixed(1)} % in autorotation: the disc is not driven enough. Lower the collective, aft cyclic to load the rotor.`},
-  {id:'overspeed',test:r=>r.nr>H.nr.maxAuto,
-   text:r=>`Rotor overspeed ${r.nr.toFixed(1)} %: raise the collective to load the disc.`},
+  {id:'overspeed',test:r=>r.nr>H.nr.maxAuto||(r.nr>H.nr.maxPowerOn+0.5&&r.fli>1.5),
+   text:r=>`Rotor overspeed ${r.nr.toFixed(1)} % (limits ${r.fli>1.5?H.nr.maxPowerOn+' % power on':H.nr.maxAuto+' % power off'}): raise the collective to load the disc.`},
+  {id:'toptime',test:r=>S.eng.mode==='twin'&&S.eng.tAbove>H.eng.tTop,
+   text:r=>`Take-off power for more than ${H.eng.tTop/60} minutes: time limit exceeded. Reduce to maximum continuous power (FLI 10).`},
+  {id:'oei30',test:r=>S.eng.mode==='oei'&&S.eng.tAbove30>H.eng.tOei30,
+   text:r=>`OEI 30-second rating exceeded: more than 30 s above the 2-minute rating (FLI 11). Reduce power now; within the remaining 2 minutes fly away or land.`},
+  {id:'oei2',test:r=>S.eng.mode==='oei'&&S.eng.tAbove>H.eng.tOei2,
+   text:r=>`OEI 2-minute rating exceeded: above OEI maximum continuous power (FLI 10) for more than 2.5 minutes in all. The remaining engine is beyond its time limit; land as soon as possible.`},
   {id:'rbs',test:r=>r.stall>0.28&&r.ias>90,
    text:r=>`Retreating blade stall at ${r.ias.toFixed(0)} kt: the retreating side of the disc is beyond its stall angle, the nose pitches up and the aircraft rolls toward the retreating side. Reduce collective and airspeed, ease the g.`},
   {id:'fen',test:r=>r.fen>0.6&&Math.abs(r.ped)>0.9,
    text:r=>`Fenestron at its limit: pedal ${(r.ped*100).toFixed(0)} %, blades stalled. Yaw authority is gone until power comes off or airspeed comes on. Reduce collective, get the nose into wind.`},
-  {id:'overtorque',test:r=>r.fli>11.5,
-   text:r=>`Above take-off power (FLI ${r.fli.toFixed(1)}): overtorque. Lower the collective.`},
+  {id:'overtorque',test:r=>r.fli>(S.eng.mode==='oei'?12.4:11.5),
+   text:r=>`Above the ${S.eng.mode==='oei'?'OEI 30-second':'take-off'} limit (FLI ${r.fli.toFixed(1)}): overtorque. Lower the collective.`},
   {id:'rollover',test:r=>S.onGround&&S.gear.contact<4&&S.gear.contact>0&&Math.abs(r.phi)>7&&Math.sign(r.p)===Math.sign(r.phi)&&Math.abs(r.p)>4,
    text:r=>`Dynamic rollover: pivoting on one skid at ${Math.abs(r.phi).toFixed(0)}° with the rotor pulling sideways. Lower the collective smoothly. Cyclic alone cannot stop it once the critical angle is passed.`},
   {id:'hard',test:r=>S.touch&&S.touch.t&&S.t-S.touch.t<0.5&&S.touch.vs>H.gear.hardVs&&!S.touch.air,

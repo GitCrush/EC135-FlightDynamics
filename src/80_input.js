@@ -68,10 +68,11 @@ function mouseDisarm(){DEV.mouse.armed=false;DEV.mouse.l=DEV.mouse.r=false;if(DE
 function inputInit(stage){
   if(typeof window==='undefined')return;
   DEV.look.stage=stage;
-  window.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;if(e.code==='KeyC'&&!e.repeat)lookStart();DEV.keys[e.code]=true;if(!e.repeat)keyAction(e.code);if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','F1','Slash'].includes(e.code))e.preventDefault();});
-  window.addEventListener('keyup',e=>{DEV.keys[e.code]=false;if(e.code==='KeyC')lookStop();});
+  window.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;if(e.code==='KeyC'&&!e.repeat)lookStart();if(e.code==='KeyM'&&!e.repeat)aimStart();DEV.keys[e.code]=true;if(!e.repeat)keyAction(e.code);if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','F1','Slash'].includes(e.code))e.preventDefault();});
+  window.addEventListener('keyup',e=>{DEV.keys[e.code]=false;if(e.code==='KeyC')lookStop();if(e.code==='KeyM')aimStop();});
   stage.addEventListener('mousemove',e=>{
     const dx=e.movementX||0,dy=e.movementY||0;
+    if(AIM.on){const r=(R3.canvas||stage).getBoundingClientRect();aimMove(dx,dy,e.clientX-r.left,e.clientY-r.top);return;}   // click to fly: the cursor moves, the stick stays
     if(DEV.look.on){DEV.look.yawT=sat(DEV.look.yawT+dx*0.0022,2.6);DEV.look.pitchT=clamp(DEV.look.pitchT-dy*0.0022,-1.0,1.2);return;}   // stick frozen while looking; the camera follows smoothly
     if(DEV.mouse.armed){const t=Math.max(200,cfg.mouseTravel);DEV.mouse.vx=sat(DEV.mouse.vx+dx/t,1);DEV.mouse.vy=sat(DEV.mouse.vy+dy/t,1);}   // virtual stick, ±1 = full deflection
     const r=stage.getBoundingClientRect();DEV.mouse.x=(e.clientX-r.left)/r.width*2-1;DEV.mouse.y=(e.clientY-r.top)/r.height*2-1;});
@@ -83,26 +84,28 @@ function inputInit(stage){
   stage.addEventListener('contextmenu',e=>e.preventDefault());
   stage.addEventListener('mousedown',e=>{
     if(!(e.target===stage||e.target.id==='ovl'||e.target.id==='world'))return;   // clicks on the welcome card or the setup panel are not the hand
+    if(AIM.on){if(e.button===0)aimClick();e.preventDefault();return;}   // click to fly: the click picks the spot (not a pedal, not a capture)
     if(e.button===0&&!DEV.mouse.armed&&!DEV.look.on&&cfg.mouse){mouseArm(stage);return;}   // capture the pointer; the stick starts neutral
     if(!DEV.mouse.armed)return;
     if(e.button===0)DEV.mouse.l=true;if(e.button===2)DEV.mouse.r=true;if(e.button===1){e.preventDefault();lookStart();}});
   window.addEventListener('mouseup',e=>{if(e.button===0)DEV.mouse.l=false;if(e.button===2)DEV.mouse.r=false;if(e.button===1)lookStop();});
   stage.addEventListener('mousedown',e=>{DEV.mouse.down=true;soundStart&&soundStart();});
   window.addEventListener('mouseup',()=>{DEV.mouse.down=false;});
-  stage.addEventListener('wheel',e=>{DEV.kbd.col=clamp(DEV.kbd.col-e.deltaY*0.0004,0,1);e.preventDefault();},{passive:false});
+  stage.addEventListener('wheel',e=>{if(e.target&&e.target.closest&&e.target.closest('#apMenu,#setup'))return;   // a panel scrolls, the lever stays
+    DEV.kbd.col=clamp(DEV.kbd.col-e.deltaY*0.0004,0,1);DEV.wheel=true;e.preventDefault();},{passive:false});
   window.addEventListener('gamepadconnected',e=>{DEV.pad=e.gamepad.index;PAD.connectedT=performance.now();});
   padLoad();
 }
 function keyAction(code){
   if(replayKey(code))return;
-  const map={KeyL:()=>replayStart(),KeyV:()=>apDemoToggle(),KeyK:()=>coachCycle(),Slash:()=>{UI.showKeys=!UI.showKeys;},F1:()=>{UI.showKeys=!UI.showKeys;},KeyR:()=>uiReset(cfg.resetKind||'pad'),Digit1:()=>setView('cockpit'),Digit2:()=>setView('chase'),Digit3:()=>setView('tower'),
+  const map={KeyL:()=>replayStart(),KeyV:()=>apDemoToggle(),KeyU:()=>afcsToggle('alt'),KeyI:()=>afcsToggle(S.ias>40*KT?'ias':'hov'),KeyO:()=>afcsToggle('hdg'),KeyJ:()=>apMenuToggle(),Escape:()=>apMenuShow(false),KeyK:()=>coachCycle(),Slash:()=>{UI.showKeys=!UI.showKeys;},F1:()=>{UI.showKeys=!UI.showKeys;},KeyR:()=>uiReset(cfg.resetKind||'pad'),Digit1:()=>setView('cockpit'),Digit2:()=>setView('chase'),Digit3:()=>setView('tower'),
     KeyT:()=>trimSet(),
     KeyY:()=>trimClear(),
     KeyH:()=>{cfg.hoverAssist=!cfg.hoverAssist;uiSync();},
     KeyG:()=>{engineFailure('one');},
     KeyE:()=>{if(S.eng.mode==='off')engStart(S.eng);else engStop(S.eng);},
     KeyX:()=>{downloadCSV();},
-    KeyP:()=>{UI.paused=!UI.paused;},
+    KeyP:()=>{cfg.predict=!cfg.predict;uiSync();},
     Space:()=>{UI.paused=!UI.paused;},
     KeyF:()=>{cfg.fpm=!cfg.fpm;uiSync();},
     KeyN:()=>tutorNext(),Enter:()=>tutorNext(),KeyB:()=>tutorBack(),KeyQ:()=>tutorStop()};
@@ -125,6 +128,17 @@ function inputStep(dt){
     padActive=Math.abs(gLon)+Math.abs(gLat)+Math.abs(gPed)+Math.abs(gColRate)>0.02||gColPos!==null;
     if(padActive)DEV.lastPad=S.t;
   }
+  /* The pilot takes a control the autopilot's modes drive (70_pilot.js AFCS): a key, the wheel, the
+     gamepad, or the mouse stick moved (more than ~25 px within a moment) releases the modes on it,
+     bumplessly, before the stability augmentation reads the devices below. */
+  if(afcsAny()&&!UI.apDemo&&!TUTOR.on){const H_=AFCS.held,ov=AFCS_UI.ovAcc;
+    ov.lon=Math.max(0,ov.lon-dt*0.08)+(H_.lon?Math.abs(DEV.mouse.vy):0);ov.lat=Math.max(0,ov.lat-dt*0.08)+(H_.lat?Math.abs(DEV.mouse.vx):0);
+    if(H_.col&&((k.KeyW||k.KeyS)||DEV.wheel||Math.abs(gColRate)>0.15||(gColPos!==null&&padActive)))afcsPilotTakes('col');
+    if(H_.ped&&((k.KeyA||k.KeyD)||(cfg.mouseButtons&&DEV.mouse.armed&&(DEV.mouse.l||DEV.mouse.r))||Math.abs(gPed)>0.15))afcsPilotTakes('ped');
+    const mth=AFCS.go?0.08:0.016;   // on a click-to-fly trip the mouse must be moved on purpose (~130 px) to take the stick back
+    if(H_.lon&&(k.ArrowUp||k.ArrowDown||Math.abs(gLon)>0.15||ov.lon>mth))afcsPilotTakes('lon');
+    if(H_.lat&&(k.ArrowLeft||k.ArrowRight||Math.abs(gLat)>0.15||ov.lat>mth))afcsPilotTakes('lat');}
+  DEV.wheel=false;
   // ---- collective
   let colKey=(k.KeyW?1:0)-(k.KeyS?1:0);
   if(Math.abs(gColRate)>0)colKey=gColRate;
@@ -139,8 +153,8 @@ function inputStep(dt){
          slows down near the limit and stops when the rotor droops; lowering
          is never metered (that is the escape from every rotor emergency). */
       if(colKey>0){
-        const fli=S.eng.fli, lim=S.eng.mode==='oei'?10:11;
-        rate*=clamp((lim+0.3-fli)/1.5,0,1);
+        const fli=Math.max(S.eng.fli,S.eng.fliDem||0), lim=S.eng.mode==='oei'?12:11;   // the demand leads the gauge: metering on the gauge alone overshot into the limit and drooped NR to 96 %   // the top of the scale: take-off, or the OEI 30-s rating
+        rate*=clamp((lim-0.15-fli)/1.5,0,1);   // stops just short of the limit: the governor needs some margin to hold NR
         if(S.NR<H.nr.minPowerOn+0.5&&S.eng.mode!=='off')rate=0;
       }
     }
@@ -154,9 +168,9 @@ function inputStep(dt){
   else if(cfg.kbdPed==='heading'){raw.ped=0;raw.yawCmd=sat(pedKey,1)*(cfg.pedRate||25)*DEG;}   // key = yaw-rate demand; the SAS closes the loop
   else{if(pedKey!==0)DEV.kbd.ped=sat(DEV.kbd.ped+pedKey*1.2*dt,1);else DEV.kbd.ped=approach(DEV.kbd.ped,0,0.8*dt);raw.ped=DEV.kbd.ped;}
   // ---- cyclic: mouse (virtual stick), gamepad, or arrow keys (stick moves while pressed, centres when released)
-  /* An axis the tutor or the autopilot demonstration holds is not in the
+  /* An axis the tutor, the autopilot demonstration or an autopilot mode drives is not in the
      student's hand: its stick stays centred, so handing it over is bumpless. */
-  const held=UI.apDemo||false, lkLon=held||(TUTOR.on&&TUTOR.lockLon), lkLat=held||(TUTOR.on&&TUTOR.lockLat);
+  const held=UI.apDemo||false, lkLon=held||(TUTOR.on?TUTOR.lockLon:AFCS.held.lon), lkLat=held||(TUTOR.on?TUTOR.lockLat:AFCS.held.lat);
   if(lkLon){DEV.mouse.vy=0;DEV.kbd.lon=0;} if(lkLat){DEV.mouse.vx=0;DEV.kbd.lat=0;}
   const kx=(k.ArrowRight?1:0)-(k.ArrowLeft?1:0), ky=(k.ArrowUp?1:0)-(k.ArrowDown?1:0);
   let lon=0,lat=0,src='none';

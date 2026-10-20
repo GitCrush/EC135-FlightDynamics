@@ -8,6 +8,14 @@ src=sorted(f for f in os.listdir(os.path.join(root,'src')) if re.match(r'^\d\d_.
 js='\n'.join(open(os.path.join(root,'src',f),encoding='utf8').read() for f in src)
 tpl=open(os.path.join(root,'html','template.html'),encoding='utf8').read()
 assert '<!--ENGINE-->' in tpl
-out=tpl.replace('<!--ENGINE-->',js)
+phys='\n'.join(open(os.path.join(root,'src',f),encoding='utf8').read() for f in src if int(f[:2])<=70)   # for the motion predictor's worker
+assert '</script' not in phys
+out=tpl.replace('<!--ENGINE-->',js).replace('<!--PHYSICS-->',phys)
+# a syntax error in any module would stop the whole page: check the script with node when it is there
+import shutil,subprocess,tempfile
+if shutil.which('node'):
+    with tempfile.NamedTemporaryFile('w',suffix='.js',delete=False,encoding='utf8') as tf:tf.write(js);tmp=tf.name
+    r=subprocess.run(['node','--check',tmp],capture_output=True,text=True);os.unlink(tmp)
+    if r.returncode:sys.exit('syntax error, index.html not written:\n'+r.stderr)
 open(os.path.join(root,'index.html'),'w',encoding='utf8').write(out)
 print(f'index.html: {len(out)//1024} kB from {len(src)} modules')

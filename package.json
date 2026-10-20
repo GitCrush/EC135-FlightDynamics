@@ -1,13 +1,16 @@
 {
   "name": "ec135-flight-dynamics",
-  "version": "0.1.0",
+  "version": "2.6.1",
   "description": "EC135 flight dynamics trainer in a single HTML file",
   "license": "Apache-2.0",
   "scripts": {
     "build": "python3 build.py",
-    "test": "node test/consistency.js && node test/tutor.js && node test/handling.js",
+    "test": "node test/consistency.js && node test/qualities.js --fast && node test/tutor.js && node test/handling.js",
+    "qualities": "node test/qualities.js",
+    "mutation": "node test/mutation.js",
     "browser": "python3 test/browser.py",
     "controls": "node test/controls.js",
-    "scenarios": "node test/scenarios.js A && node test/scenarios.js B && node test/scenarios.js C && node test/scenarios.js D && node test/scenarios.js E"
+    "scenarios": "node test/scenarios.js A && node test/scenarios.js B && node test/scenarios.js C && node test/scenarios.js D && node test/scenarios.js E",
+    "flighttest": "node flighttest/pilot.js && node flighttest/report.js"
   }
 }

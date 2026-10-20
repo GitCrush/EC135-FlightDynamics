@@ -1,0 +1,691 @@
+{
+ "method": "Each expectation was judged against the recorded 20 Hz series using scripts in /tmp/ft-eval19/scripts (lib.py, fits.py): values at given times, extrema and zero crossings, first-order fits (delay and time constant), envelope growth rates, detrended thrust fluctuation and yaw-damping ratios (dr/dt / r). The result metrics were used only where their definition matches the card; otherwise the quantity was recomputed (e.g. the H6 'time_to_double' metric, Dutch-roll period and damping, the H7 NR timeline). Rule applied: the card's low/high quantity governs. Secondary clauses that miss only by a small timing margin (about 0.25 s or less, and 20 % or less) are noted without a downgrade; larger misses give NEAR. A wrong sign or shape, or a number beyond the NEAR margin (a quarter of the band width or 25 %, whichever is larger; for offset quantities such as NR %, the band width only), gives FAIL. Red flags were checked one by one against the series. Flown deviations are stated in the affected expectations: H8a/H8b entry at -1,522 fpm instead of 1,800; F6 entry at 4,000 ft with collective used to govern NR; F1 pedal strategy; T1 zero sideways speed instead of wings level; F8 load factor recovering during the roll input.",
+ "summary": "The model behaves like a counterclockwise-rotor EC135 throughout. Every [ROT] sign matches the real aircraft: left skid low (-3.4 deg), left pedal in the hover, the Fenestron unloading with right pedal, nose-right yaw with collective, nose-left yaw at power loss, left cyclic and right pedal through translational lift, and the retreating-side stall on the left. Most of the dynamics land inside the author's bands. Hover trim and power are right (436 kW, 1 % under the band). The hover roll response starts exactly as published (0.06 s delay, 0.20 s time constant, about 10 deg/s per 0.75 deg). Hover pitch, heave and the coupled hover phugoid are realistic (13 s period, doubling in about 5 s), as is the transition to 40 kt. The power bucket has its minimum at 60 kt (0.59 of hover). The 100 kt pitch doublet, speed stability and low-g roll control all match. The vortex-ring cards match: collective alone loses 876 ft, the classical recovery 97 ft. The forward-flight autorotation (2,211 fpm at 65 kt, NR minimum 84 %) and the turn kinematics are right. What does not look realistic: (1) after power loss in the hover with the lever fully down, the rotor keeps slowing to 74 % into a 2,000-3,400 fpm descent before it starts to windmill, which is a red flag; (2) the retreating-blade-stall roll-off is about three times too large, taking the aircraft past 90 deg of bank; (3) ball-centred flight at 100 kt carries about 6 deg of sideslip; (4) hover yaw damping is weak and fades as the yaw rate grows, so the yaw rate lingers after pedal release, a 7.8 deg/s yaw appears from lateral drift alone, and the power-loss spin reaches 152 deg/s; (5) the Dutch roll at 100 kt is too fast (2.05 s period); (6) power and collective at 135 kt are somewhat high relative to hover. Not scored but worth a look: the F5 speed disturbance also rolls the aircraft 14 deg left within 6 s, and the 140 kt trim at 2,910 kg needs 654 kW, above the 616 kW AEO take-off power of the 1997 EC135. Totals: 69 PASS, 13 NEAR, 5 FAIL, 0 N/A over 87 expectations. Cards: 14 PASS, 4 MIXED, 1 FAIL.",
+ "top_findings": [
+  "H7 (red flag, card FAIL): after a double engine failure in the hover, NR keeps falling with the lever at the stop (from 2.05 s) through a 2,000-3,430 fpm descent. It reaches a minimum of 74.1 % at 4.15 s and is only 75.5 % at 5 s, against an expected minimum of 72-90 % at 1.3-2.5 s and 85-105 % (rising) at 5 s. The main rotor absorbs power until 3.7 s while the model's vortex-ring channel reads 0.6-0.87.",
+  "F7: the retreating-blade-stall roll-off is about three times too large: bank change -96 deg at 2.5 s and -112 deg at 3 s (roll rate -75 deg/s, up to 61 % of the disc stalled), against -5 to -35 deg. The direction (left) and the pitch-up are correct, but the aircraft rolls past knife-edge into a 5,100 fpm dive.",
+  "Ball-centred flight at 100 kt carries a large sideslip: +5.6 deg in straight trim (F3/F4) and +5.9 deg in the 30 deg turn with ay = 0 (F9.4), against |beta| <= 3 deg.",
+  "Hover yaw damping is weak and fades with yaw rate (H4). Yaw acceleration stays at about 6 deg/s^2 from 1.5 to 4 s while r doubles, and after release r decays only from 33.8 to 22.5 deg/s in 2 s (time constant about 4.9 s, local Nr about -0.09 1/s) against 1.4-3 s. The same weakness shows as a 7.8 deg/s yaw from lateral drift alone in H2 (bound 5 deg/s) and a -152 deg/s spin (1.5 turns in 5 s) after power loss in H7.",
+  "The Dutch roll at 100 kt is too fast (F4): period 2.05 s (about 3.1 rad/s) against 2.5-4.5 s, with a damping ratio of 0.23 that is in band. F3's sideslip ripple has the same period of about 2.0 s, and the first yaw-rate peak for 10 % pedal is only 2.8 deg/s against 4-15 deg/s.",
+  "High-speed power is somewhat high relative to hover (F1): P(135 kt)/P(hover) = 1.31 against 0.8-1.2 (570 kW at 2,500 kg, about the AEO MCP the real aircraft uses for ~137 kt at a higher weight), and the 135 kt collective is 3.8 deg above hover against at most +2.5 deg. Hover power is 436 kW, 1 % below 440-570 kW.",
+  "The hover roll pulse (H2) starts exactly as published (0.06 s delay, 0.20 s time constant, peak 8.3 deg/s) but peaks early at 0.45 s instead of 0.7-1.15 s. The bank is not held: dihedral from the lateral drift reverses p to -2.5 deg/s within 0.5 s of stick release, and the bank is back through trim at about 3.6 s."
+ ],
+ "cards": [
+  {
+   "id": "H1",
+   "verdict": "PASS",
+   "headline": "The hover trim looks like a real EC135: left skid low by 3.4 deg, nose 3.1 deg up, left pedal, NR 100 %. Total power is 1 % below the expected band.",
+   "expectations": [
+    {
+     "id": "H1.1",
+     "observed": "phi = -3.44 deg (left skid low), steady over the 5 s record.",
+     "verdict": "PASS",
+     "comment": "Inside -4.5..-1.0 deg; the sign fits the counterclockwise rotor."
+    },
+    {
+     "id": "H1.2",
+     "observed": "theta = +3.12 deg.",
+     "verdict": "PASS",
+     "comment": "Inside +1..+6 deg."
+    },
+    {
+     "id": "H1.3",
+     "observed": "Total 436.1 kW: main rotor 385.0 kW, Fenestron 37.2 kW, and about 14 kW of losses.",
+     "verdict": "NEAR",
+     "comment": "Total is 3.9 kW (0.9 %) below the 440 kW lower bound. The main rotor alone is inside its 380-470 kW band; the Fenestron is slightly below its 40-70 kW band."
+    },
+    {
+     "id": "H1.4",
+     "observed": "ped = -0.384 (left of centre). Every forward-flight trim pedal is to the right of it (F1: -0.163 to +0.057; T1 at 40 kt: -0.203).",
+     "verdict": "PASS",
+     "comment": "Inside -0.7..+0.05, and the firm relative clause holds."
+    },
+    {
+     "id": "H1.5",
+     "observed": "NR = 100.0 %.",
+     "verdict": "PASS",
+     "comment": "Governed."
+    },
+    {
+     "id": "H1.6",
+     "observed": "col = 0.552 of range.",
+     "verdict": "PASS",
+     "comment": "Inside 0.5-0.8."
+    }
+   ],
+   "red_flags_seen": []
+  },
+  {
+   "id": "H2",
+   "verdict": "MIXED",
+   "headline": "Right stick gives a right roll of the right size with the published 0.2 s lag. The bank then leaks away early through the dihedral effect, and an unexpected yaw of up to 7.8 deg/s builds up.",
+   "expectations": [
+    {
+     "id": "H2.1",
+     "observed": "Right roll. p = 0.5 deg/s at 0.05 s and peaks at +8.32 deg/s at 0.45 s. It then droops to 6.58 deg/s at 1.0 s while the stick is still held. A first-order fit over 0-0.45 s gives a delay of 0.06 s, a time constant of 0.20 s and a steady value of 10.0 deg/s.",
+     "verdict": "NEAR",
+     "comment": "The peak size and the initial dynamics match the published values (80 ms, 0.2 s, about 9 deg/s). The peak comes at 0.45 s instead of 0.7-1.15 s (36 % early): the lateral velocity (0.5 m/s at 1 s) already rolls the aircraft back through the dihedral effect while the stick is held."
+    },
+    {
+     "id": "H2.2",
+     "observed": "phi peaks at +7.22 deg relative to trim at 1.25 s. After stick return, p crosses zero within 0.26 s and reverses to -2.5 deg/s at 1.5 s, then stays at -2 to -4.5 deg/s. The bank change falls to +5.0 deg at 2.25 s and +2.6 deg at 3.0 s, and passes back through trim at about 3.6 s.",
+     "verdict": "NEAR",
+     "comment": "Peak size and time are inside 6-12 deg and 1.2-2 s. The bank is not held: the roll-back (p/v about -1.8 deg/s per m/s, consistent with Lv about -0.15 to -0.2) starts at once instead of after about 2 s. This is not the 'springs back within ~1 s' red flag, since 70 % of the peak remains 1 s after it."
+    },
+    {
+     "id": "H2.3",
+     "observed": "Lateral speed peaks at 2.34 m/s (body v; ground vE 2.25 m/s) at about 3.5 s. phi passes back through trim at about 3.6 s and is -7.39 deg relative to trim at 6 s, 14.6 deg below the peak.",
+     "verdict": "PASS",
+     "comment": "Peak speed and timing are inside, and the bank reverses before 6 s as predicted. The swing to the other side already exceeds the first peak, so the lateral oscillation grows fast (see H6)."
+    },
+    {
+     "id": "H2.4",
+     "observed": "|q| max 1.56 deg/s at 0.75 s (19 % of p peak); |delta theta| max 2.31 deg (nose up) within 0-3 s.",
+     "verdict": "PASS",
+     "comment": "Inside both bounds."
+    },
+    {
+     "id": "H2.5",
+     "observed": "r builds from about 1 deg/s during the pulse to 4.0 deg/s at 3 s and 7.76 deg/s at 5.55 s (heading +24 deg by 6 s), driven by the rightward drift.",
+     "verdict": "FAIL",
+     "comment": "55 % above the 5 deg/s bound, beyond the NEAR margin. Low-confidence item. The sign (nose turning into the drift) is physical, but the size points to weak hover yaw damping (see H4)."
+    }
+   ],
+   "red_flags_seen": []
+  },
+  {
+   "id": "H3",
+   "verdict": "PASS",
+   "headline": "Forward stick pitches the nose down at the expected rate, and the aircraft then shows the expected speed stability, with only a small right-roll coupling.",
+   "expectations": [
+    {
+     "id": "H3.1",
+     "observed": "q reaches -9.94 deg/s at 1.0 s (end of pulse) and is essentially level by then (-9.80 at 0.9 s). A first-order fit over 0-1 s gives a delay of 0.08 s, a time constant of 0.415 s and a steady value of -11.5 deg/s.",
+     "verdict": "PASS",
+     "comment": "Nose-down direction, size and timing are inside. The 0.42 s time constant is just under the 0.45-0.85 s band (8 %), i.e. pitch damping slightly higher than estimated (Mq about -2.4 1/s)."
+    },
+    {
+     "id": "H3.2",
+     "observed": "theta minimum -9.61 deg relative to trim at 1.7 s. q stays negative for 0.68 s after release (half-decay in 0.35 s).",
+     "verdict": "PASS",
+     "comment": "Inside -15..-5 deg at 1.5-2.6 s; pitch keeps moving 0.5-1 s after release."
+    },
+    {
+     "id": "H3.3",
+     "observed": "Forward speed peaks at 3.74 m/s (u; ground speed 3.95 m/s) at 4.0-4.15 s. The nose returns through trim at 4.05 s and is +11.8 deg relative to trim at 6 s, still rising at q = +5 deg/s.",
+     "verdict": "PASS",
+     "comment": "Speed stability is clearly present. The nose-up overswing already exceeds the initial nose-down excursion within half a cycle, consistent with the fast-growing hover phugoid in H6."
+    },
+    {
+     "id": "H3.4",
+     "observed": "|p| max 2.85 deg/s (right roll, 29 % of |q|) at 0.6 s; |delta phi| max 2.66 deg within 0-3 s.",
+     "verdict": "PASS",
+     "comment": "Inside both bounds."
+    }
+   ],
+   "red_flags_seen": []
+  },
+  {
+   "id": "H4",
+   "verdict": "MIXED",
+   "headline": "Right pedal yaws the nose right by the right amount and unloads the Fenestron, as on the real aircraft. After the pedal is released, the yaw rate dies away far too slowly.",
+   "expectations": [
+    {
+     "id": "H4.1",
+     "observed": "Nose right: r(1 s) = 14.2, r(2 s) = 21.5, r(4 s) = 33.8 deg/s, still rising at about 6 deg/s^2 at 4 s. Initial yaw acceleration 19 deg/s^2 (0.33 rad/s^2).",
+     "verdict": "PASS",
+     "comment": "All three values are inside their bands, and the initial control power is inside 0.2-0.45 rad/s^2."
+    },
+    {
+     "id": "H4.2",
+     "observed": "Heading change at 6 s = +134 deg. After release r falls smoothly with no oscillation: 33.8 (4 s), 28.2 (4.5 s), 25.0 (5 s), 22.5 deg/s (6 s). The implied time constant from 4 s grows from 2.7 s (at 4.5 s) to 4.9 s (at 6 s); local dr/dt / r is about -0.09 1/s over 5.5-6 s. During the step, dr/dt stays at about 6 deg/s^2 from 1.5 to 4 s while r grows from 18 to 34 deg/s.",
+     "verdict": "FAIL",
+     "comment": "Heading change is inside 40-250 deg and the decay is smooth, but it is far too slow. A 1.4-3 s time constant would leave 4.5-8 deg/s at 6 s; the record shows 22.5 deg/s, 67 % of the value at release. Yaw damping fades as the rate grows; the effective hover Nr is about -0.1 against the identified -0.5. Low-confidence item."
+    },
+    {
+     "id": "H4.3",
+     "observed": "Fenestron power drops from 37.2 kW to 27.0-27.6 kW during the step (-26.8 %); total power drops from 436 to 420 kW (-3.7 %).",
+     "verdict": "PASS",
+     "comment": "The sign confirms the counterclockwise rotor; both magnitudes are inside their bands."
+    },
+    {
+     "id": "H4.4",
+     "observed": "phi change between -0.81 and +1.20 deg; vertical speed down to -145 fpm at 6 s; NR 99.5-100.5 %. Ground drift ends at 2.0 m/s to the left of the initial heading.",
+     "verdict": "PASS",
+     "comment": "All inside. The roll goes slightly right first (+1.2 deg at 4 s), not left as the soft 'most likely' wording guessed; the drift is to the left as guessed."
+    }
+   ],
+   "red_flags_seen": []
+  },
+  {
+   "id": "H5",
+   "verdict": "PASS",
+   "headline": "Raising the collective gives a well-damped climb of about 440 fpm after 6 s, a 10 % power rise, nose-right yaw as on the real aircraft, and almost no rotor-speed droop.",
+   "expectations": [
+    {
+     "id": "H5.1",
+     "observed": "Upward acceleration peaks at 1.19 m/s^2 at 0.1 s, then decays: 0.64 m/s^2 at 1 s, 0.32 at 3 s, 0.08 at 6 s (decay time constant about 2.2-2.5 s). Vz = +263 fpm at 2 s and +437.5 fpm at 6 s.",
+     "verdict": "PASS",
+     "comment": "Climb rate at 6 s and initial acceleration are inside their bands. The heave time constant sits at the low edge of 2.5-5 s (Zw about -0.4 to -0.45 1/s)."
+    },
+    {
+     "id": "H5.2",
+     "observed": "Nose right: r = 14.0 deg/s at 2 s and 25.4 deg/s at 6 s, still increasing at about 2.7 deg/s per s.",
+     "verdict": "PASS",
+     "comment": "The sign confirms the counterclockwise rotor; the size is inside 8-50 deg/s."
+    },
+    {
+     "id": "H5.3",
+     "observed": "Power +10.4 % at 0.25 s, +10.1 % at 1 s, +8.8 % at 5 s, +8.5 % at 6 s.",
+     "verdict": "PASS",
+     "comment": "Inside 8-22 %."
+    },
+    {
+     "id": "H5.4",
+     "observed": "NR minimum 99.73 % at 0.45 s (0.27 % droop), back to 100 % by about 1.2 s, with a small overshoot to 100.23 % at 2 s.",
+     "verdict": "NEAR",
+     "comment": "Droop is marginally below the 0.3 % lower bound, and recovery is faster than 2-5 s: tight FADEC governing. Low-confidence item."
+    }
+   ],
+   "red_flags_seen": []
+  },
+  {
+   "id": "H6",
+   "verdict": "PASS",
+   "headline": "Left alone in the hover, the aircraft develops the expected slow, growing pitch-roll oscillation (period about 13 s, amplitude doubling in about 5 s).",
+   "expectations": [
+    {
+     "id": "H6.1",
+     "observed": "Oscillatory and divergent. theta extrema relative to trim: +0.78 (1.0 s), -1.40 (7.55 s), +3.45 (14.15 s), -8.97 deg (20.55 s).",
+     "verdict": "PASS",
+     "comment": "Unstable oscillatory hover mode, as expected."
+    },
+    {
+     "id": "H6.2",
+     "observed": "Zero crossings at 3.76, 10.21, 16.96 and 22.92 s; peak spacing 6.4-6.6 s; period about 13 s.",
+     "verdict": "PASS",
+     "comment": "Inside 7-16 s and inside the central 9-13 s estimate."
+    },
+    {
+     "id": "H6.3",
+     "observed": "An envelope fit to pitch extrema 2-4 gives a growth rate of 0.143 1/s, i.e. the amplitude doubles in 4.8 s (roll extrema: 4.2 s); amplitude grows about 2.5x per half cycle. The metric 'time_to_double_theta_amplitude_s' = 14.15 s is a different quantity (the time of the first extremum larger than twice the first peak).",
+     "verdict": "PASS",
+     "comment": "Inside 3-30 s, at the fast end of the central 5-12 s estimate."
+    },
+    {
+     "id": "H6.4",
+     "observed": "theta first peaks at +0.78 deg at 1.0 s as q decays from 2 deg/s to zero. u goes negative from 0.3 s (-0.31 m/s at 4 s). The nose passes down through trim at 3.76 s, and later swings are larger.",
+     "verdict": "NEAR",
+     "comment": "The sequence is exactly as expected, but the first peak is 0.02 deg under the 0.8 deg lower bound and the trim crossing comes 0.24 s before the ~4-8 s window. This implies a hover Mq of about -2.5 1/s, consistent with H3."
+    },
+    {
+     "id": "H6.5",
+     "observed": "Roll joins the motion and grows: phi extrema relative to trim -0.51 (5.05 s), +1.58 (10.8 s), -4.55 (17.5 s), +10.46 deg (23.05 s). |v| reaches 4.5 m/s, and yaw is also excited (r up to 8.6 deg/s).",
+     "verdict": "PASS",
+     "comment": "|phi| exceeds 1 deg within 25 s by a wide margin."
+    }
+   ],
+   "red_flags_seen": []
+  },
+  {
+   "id": "H7",
+   "verdict": "FAIL",
+   "headline": "After a double engine failure in the hover, the nose swings left and the rotor slows as expected. With the lever fully down, though, rotor speed keeps falling for two more seconds into a fast descent and has barely begun to recover at 5 s.",
+   "expectations": [
+    {
+     "id": "H7.1",
+     "observed": "Nose left: r = -70.9 deg/s at 1.0 s, -108.8 at 2 s, -151.9 deg/s at 5 s. Heading change -545 deg by 5 s.",
+     "verdict": "PASS",
+     "comment": "The sign (counterclockwise rotor) and r(1 s) are inside; the heading change goes far beyond 120 deg, which the card allows. The yaw rate is still building at 5 s (1.5 turns), consistent with the weak hover yaw damping seen in H4."
+    },
+    {
+     "id": "H7.2",
+     "observed": "NR decays at 15.9 %/s at first (15.3 %/s averaged over 0-0.5 s); NR(1.0 s) = 85.8 %.",
+     "verdict": "PASS",
+     "comment": "Inside 10-22 %/s and 78-90 %."
+    },
+    {
+     "id": "H7.3",
+     "observed": "The decay rate falls from 12 %/s at 1.0 s to 3.2 %/s at 2.0 s (lever at the stop at 2.05 s), but then stays at -2.2 to -2.7 %/s. NR is 78.7 % at 2.05 s, 76.2 % at 3 s, reaches a minimum of 74.15 % at 4.15 s, and is 75.5 % at 5 s (rising at about 2 %/s). The main rotor keeps absorbing power until 3.7 s, and the vortex-ring channel reads 0.6-0.87 from 1.5 to 5 s.",
+     "verdict": "FAIL",
+     "comment": "The minimum is inside 72-90 % but arrives 1.65 s after the 1.3-2.5 s window. NR at 5 s is 9.5 points below the 85-105 % band. The rotor only starts to windmill once the descent exceeds about 3,400 fpm. Medium-confidence item; it also triggers a red flag."
+    },
+    {
+     "id": "H7.4",
+     "observed": "Downward acceleration 0.20 g at 1.0 s, peaking at 0.63 g at 1.65 s, then falling (0.19 g at 5 s). Descent 3,873 fpm at 5 s.",
+     "verdict": "PASS",
+     "comment": "All three parts are inside."
+    }
+   ],
+   "red_flags_seen": [
+    "NR still falling after the lever is fully down and a descent above ~2,000 fpm is established: the lever reaches the stop at 2.05 s, the descent passes 2,000 fpm at 2.75 s (NR 76.8 %), and NR keeps falling to 74.15 % at 4.15 s (descent 3,430 fpm)."
+   ]
+  },
+  {
+   "id": "H8a",
+   "verdict": "PASS",
+   "headline": "In a vortex ring, raising the collective alone does not stop the sink: the descent grows to about 2,800-3,200 fpm and 876 ft are lost in 20 s, with realistic thrust fluctuations.",
+   "expectations": [
+    {
+     "id": "H8a.1",
+     "observed": "Flown deviation: the entry reached -1,522 fpm (0.68 vh, ring depth 0.93) rather than the planned 1,800 fpm. That is still inside the vortex-ring band, so the expectations apply. Descent rates: 1,522 fpm at the raise, 1,684 at 1 s, 2,405 fpm at 5 s, worst 3,175 fpm at about 9 s, 2,813 fpm at 20 s; there is no temporary reduction.",
+     "verdict": "PASS",
+     "comment": "At 5 s the sink is far above 1,000 fpm and it stays within ~1,200-4,000 fpm, increasing as the card allows."
+    },
+    {
+     "id": "H8a.2",
+     "observed": "Height lost in 20 s: 876 ft.",
+     "verdict": "PASS",
+     "comment": "Inside 300-1,500 ft."
+    },
+    {
+     "id": "H8a.3",
+     "observed": "Revolution-averaged thrust varies between 20.4 and 27.3 kN about a 23.6 kN mean (29 % peak-to-peak); nz 0.84-1.13 g. Detrended zero crossings at 3.4, 6.15, 9.0, 11.4, 14.5 and 16.45 s, i.e. an irregular period of about 4.5-6 s. Attitude wander is small with the pilot holding position: theta +/-0.25 deg, phi -2.6 to -4.7 deg, r -2.5 to +4.4 deg/s.",
+     "verdict": "PASS",
+     "comment": "Size and period are inside. The attitude wandering is modest because the autopilot suppresses it."
+    },
+    {
+     "id": "H8a.4",
+     "observed": "Power rises from 334 kW at the raise to 497-510 kW (hover 436 kW); NR 98.0-100.7 %, no engine saturation.",
+     "verdict": "PASS",
+     "comment": "Above hover power; no droop is needed without saturation."
+    }
+   ],
+   "red_flags_seen": []
+  },
+  {
+   "id": "H8b",
+   "verdict": "PASS",
+   "headline": "Lowering the nose to gain speed gets out of the vortex ring in about 4-5 s with under 100 ft lost, nine times less than with collective alone, as the textbooks say.",
+   "expectations": [
+    {
+     "id": "H8b.1",
+     "observed": "Same -1,522 fpm entry as H8a. Pitch goes from +3.0 deg to about -9 to -10 deg within 1 s (a change of about 13 deg). Horizontal airspeed reaches 15 kt at 3.4 s and 22 kt at about 4.8 s; ring depth is 0 by 4.5 s.",
+     "verdict": "PASS",
+     "comment": "15-22 kt is reached within 3-6 s."
+    },
+    {
+     "id": "H8b.2",
+     "observed": "Descent is below 500 fpm at 4.35 s; a climb (Vz > 0) starts at 6.05 s and peaks at +465 fpm at 10-12 s.",
+     "verdict": "PASS",
+     "comment": "Inside 4-10 s and before about 12 s."
+    },
+    {
+     "id": "H8b.3",
+     "observed": "Maximum height lost 97 ft (net loss at 20 s: 29 ft).",
+     "verdict": "PASS",
+     "comment": "Inside 80-400 ft."
+    },
+    {
+     "id": "H8b.4",
+     "observed": "97 ft lost in H8b against 876 ft in H8a (a factor of 9). H8b climbs from 6.05 s; H8a never does.",
+     "verdict": "PASS",
+     "comment": "High-confidence ordering confirmed."
+    }
+   ],
+   "red_flags_seen": []
+  },
+  {
+   "id": "T1",
+   "verdict": "PASS",
+   "headline": "Accelerating to 40 kt shows every classic transition effect in the right direction and size: falling power, forward stick, left cyclic, right pedal and lower collective.",
+   "expectations": [
+    {
+     "id": "T1.1",
+     "observed": "Power while accelerating: 436 (0 kt), 435 (5), 425 (10), 407 (15), 385 (20), 362 (25), 341 (30), 323 (35), 312 kW (40 kt). The steepest fall is at 15-30 kt (about 22 kW per 5 kt). P(40)/P(hover) = 0.72.",
+     "verdict": "PASS",
+     "comment": "Consistent with the F1 level-flight 40 kt power (285 kW) plus about 27 kW of acceleration power."
+    },
+    {
+     "id": "T1.2",
+     "observed": "lon goes from -0.370 to -0.137 at 40 kt (+0.233 forward), monotonically.",
+     "verdict": "PASS",
+     "comment": "Inside +0.05..+0.30."
+    },
+    {
+     "id": "T1.3",
+     "observed": "theta is 3.12 deg in the hover and -0.0 to -0.5 deg during the acceleration: 3.1-3.6 deg more nose-down.",
+     "verdict": "PASS",
+     "comment": "Inside -6..-2 deg."
+    },
+    {
+     "id": "T1.4",
+     "observed": "lat goes from +0.006 to -0.10 at 20-24 kt, -0.135 near 25 kt, -0.11 at 30-40 kt (-0.098 at steady 40 kt): to the left.",
+     "verdict": "PASS",
+     "comment": "Direction (transverse flow, counterclockwise rotor) and size are inside. The left cyclic develops over 5-25 kt as expected but mostly persists to 40 kt instead of washing out. The pilot held zero sideways speed rather than exactly level wings (phi -3.4 to -1.1 deg), a small effect."
+    },
+    {
+     "id": "T1.5",
+     "observed": "ped: -0.384 (hover), -0.371 (10 kt), -0.317 (20), -0.247 (30), -0.203 (40 kt). That is +0.181 to the right, or +0.216 at steady 40 kt.",
+     "verdict": "PASS",
+     "comment": "Right pedal with speed, mostly above 10 kt; inside 0.05-0.5."
+    },
+    {
+     "id": "T1.6",
+     "observed": "col goes from 0.552 to 0.441 at 40 kt (-0.111 while accelerating; -0.152 at steady 40 kt), monotonically.",
+     "verdict": "PASS",
+     "comment": "Inside -0.28..-0.10."
+    }
+   ],
+   "red_flags_seen": []
+  },
+  {
+   "id": "F1",
+   "verdict": "PASS",
+   "headline": "The level-flight power curve has the expected bucket (minimum about 255 kW at 60 kt, 59 % of hover power). Power and collective at 135 kt are somewhat higher than expected.",
+   "expectations": [
+    {
+     "id": "F1.1",
+     "observed": "P: 436 (0 kt), 285 (40), 255 (60), 286 (80), 338 (100), 447 (120), 570 kW (135). Minimum at 60 kt; Pmin/Phover = 0.585. Power rises 109 kW from 100 to 120 kt and 124 kW from 120 to 135 kt. Only the hover point is in the series; the others come from the 4 s trim averages in the metrics.",
+     "verdict": "PASS",
+     "comment": "Clear bucket; minimum-power speed and depth are inside."
+    },
+    {
+     "id": "F1.2",
+     "observed": "0 kt 436 (band 440-570), 40 kt 285 (270-380), 60 kt 255 (225-320), 80 kt 286 (225-330), 100 kt 338 (265-380), 120 kt 447 (330-480), 135 kt 570 kW (420-600).",
+     "verdict": "NEAR",
+     "comment": "The 100 kt headline value and five other speeds are inside. Hover is 4 kW below its band (as in H1.3); 120 and 135 kt sit in the upper part of their bands."
+    },
+    {
+     "id": "F1.3",
+     "observed": "570.4 / 436.1 = 1.31.",
+     "verdict": "NEAR",
+     "comment": "0.11 above the 1.2 upper bound, within the NEAR margin. It comes from hover power at the bottom of its band and 135 kt power near the top of its band. 570 kW at 2,500 kg is about the 1997 AEO MCP (566 kW), which the real aircraft needs for about 137 kt at a higher weight, so high-speed power looks somewhat high."
+    },
+    {
+     "id": "F1.4",
+     "observed": "theta: 3.12, 2.50, 0.84, -0.52, -2.04, -3.50, -4.46 deg. Relative to hover: -2.28 (60 kt), -5.16 (100 kt), -7.59 deg (135 kt). Monotonic.",
+     "verdict": "PASS",
+     "comment": "All three bands are met."
+    },
+    {
+     "id": "F1.5",
+     "observed": "col: 0.552, 0.412, 0.391, 0.431, 0.523, 0.668, 0.811. Minimum at 60 kt, 0.161 (about 2.3 deg) below hover; at 135 kt +0.259 (about +3.8 deg) above hover.",
+     "verdict": "NEAR",
+     "comment": "Bucket shape and minimum are inside. The 135 kt value is 1.3 deg above the +2.5 deg limit, just over a quarter of the band width. The author's own BO-105 basis (14.3 deg in the hover, about 17.7 deg at 135 kt) implies about +3.4 deg, so the band was tight. This is consistent with the high 135 kt power."
+    },
+    {
+     "id": "F1.6",
+     "observed": "ped: -0.384 (hover), -0.163 (40), -0.047 (60), -0.152 (80), +0.045 (100), +0.057 (120), -0.009 (135). Every forward speed is 0.22-0.44 right of hover; the pedal is furthest right at 100-120 kt. The spread over 60-135 kt is 0.21, against a 0.34 change from 0 to 60 kt.",
+     "verdict": "PASS",
+     "comment": "All three parts hold. The dip at 80 kt comes from the pilot switching there from nose-on-path pedal to ball-centred pedal (flown deviation)."
+    }
+   ],
+   "red_flags_seen": []
+  },
+  {
+   "id": "F2",
+   "verdict": "PASS",
+   "headline": "A small fore-aft stick doublet at 100 kt gives a crisp, well-damped pitch response, with load factor and pitch rate in the expected range.",
+   "expectations": [
+    {
+     "id": "F2.1",
+     "observed": "q is -3.19 deg/s at 0.6 s, then +4.66 deg/s at 1.6 s.",
+     "verdict": "PASS",
+     "comment": "Both peaks are inside."
+    },
+    {
+     "id": "F2.2",
+     "observed": "theta minimum -2.56 deg relative to trim at 1.2 s; +1.0 deg at 2.5 s and +0.49 deg at 3 s; within 0.2-1.0 deg after 2.5 s; +0.22 deg at 8 s. No divergence.",
+     "verdict": "PASS",
+     "comment": "Minimum, return and residual drift are all inside."
+    },
+    {
+     "id": "F2.3",
+     "observed": "nz minimum 0.839 g at 0.95 s; maximum 1.145 g at 2.0 s.",
+     "verdict": "PASS",
+     "comment": "Inside 0.75-0.92 and 1.03-1.2."
+    },
+    {
+     "id": "F2.4",
+     "observed": "Airspeed changes by 0.67 kt at most; |p| peak 2.23 deg/s against |q| peak 4.66 deg/s.",
+     "verdict": "PASS",
+     "comment": "Inside both bounds."
+    }
+   ],
+   "red_flags_seen": []
+  },
+  {
+   "id": "F3",
+   "verdict": "PASS",
+   "headline": "Right stick at 100 kt rolls the aircraft right at the expected rate, the bank holds, and a gentle turn develops. Details of the yaw and sideslip are slightly off.",
+   "expectations": [
+    {
+     "id": "F3.1",
+     "observed": "Right roll; p peaks at +10.47 deg/s at 0.65 s, on a plateau of 10.2-10.5 deg/s from 0.5 to 1.0 s.",
+     "verdict": "PASS",
+     "comment": "Inside 6-13 deg/s; on the plateau the 0.05 s timing difference is insignificant."
+    },
+    {
+     "id": "F3.2",
+     "observed": "phi change: +10.1 deg at 1.4 s, +8.6 at 3 s, +8.3 at 4 s, +6.7 deg at 8 s.",
+     "verdict": "PASS",
+     "comment": "The bank largely persists. Its slow decay (time constant about 15 s) means a weakly stable spiral instead of the identified weakly unstable one, which the card's wording allows."
+    },
+    {
+     "id": "F3.3",
+     "observed": "r is +0.76 deg/s at 0.35 s and -0.37 deg/s at 1.2 s, then +3.3 deg/s at 2.1 s; r = 1.78, 1.42 and 1.17 deg/s at 4, 6 and 8 s. The coordinated rate for the ~8 deg bank is about 1.6 deg/s.",
+     "verdict": "NEAR",
+     "comment": "The 4-8 s yaw rate is inside 1-5 deg/s. The initial yaw is negligible and starts proverse (nose right) before a 0.37 deg/s adverse dip, instead of the predicted small adverse yaw during the roll-in."
+    },
+    {
+     "id": "F3.4",
+     "observed": "Sideslip change peaks at +1.04 deg at 1.65 s (trim beta is 5.62 deg), followed by a ripple with extrema at 2.75, 3.75, 4.7 and 5.85 s (period about 2.0-2.1 s).",
+     "verdict": "NEAR",
+     "comment": "The sign is right and the peak is just inside 1-7 deg. The Dutch-roll ripple period of about 2.0 s is below the 2.5-4.5 s band (see F4). The ball-centred trim itself carries 5.6 deg of sideslip (see F9.4)."
+    },
+    {
+     "id": "F3.5",
+     "observed": "|q| peak 1.74 deg/s (17 % of p).",
+     "verdict": "PASS",
+     "comment": "Inside."
+    }
+   ],
+   "red_flags_seen": []
+  },
+  {
+   "id": "F4",
+   "verdict": "PASS",
+   "headline": "Pedal kicks at 100 kt excite a well-damped Dutch roll in the right directions, but it oscillates faster (2 s period) than the 2.5-4.5 s expected.",
+   "expectations": [
+    {
+     "id": "F4.1",
+     "observed": "r is +2.76 deg/s at 0.4 s and falls back to about 0 by 0.95 s with the pedal still held; then -6.14 deg/s at 1.35 s.",
+     "verdict": "NEAR",
+     "comment": "Nose right first, and the negative peak is inside -4..-18. The first peak is 1.2 deg/s below the 4 deg/s lower bound (within the NEAR margin): strong weathercock stiffness checks the yaw quickly. Low confidence (pedal gearing unknown)."
+    },
+    {
+     "id": "F4.2",
+     "observed": "beta change -1.69 deg at 0.95 s, then +2.14 deg at 1.95 s.",
+     "verdict": "PASS",
+     "comment": "Negative first, inside -7..-1.5, then reverses."
+    },
+    {
+     "id": "F4.3",
+     "observed": "r extrema after release: 5.16 (2.4 s), -2.55 (3.4), 1.21 (4.45), -0.56 (5.5), 0.29 (6.5), -0.11 (7.45 s). Period 2.05 s; half-cycle ratio about 0.47; damping ratio about 0.23; roughly 3 cycles visible.",
+     "verdict": "NEAR",
+     "comment": "Damping ratio and number of cycles are inside. The period is 0.45 s below the 2.5 s lower bound (omega about 3.1 rad/s against the identified ~1.8 rad/s at 60 kt), at the edge of the NEAR margin. Medium confidence."
+    },
+    {
+     "id": "F4.4",
+     "observed": "p is positive while beta is negative (p peaks lag the -beta peaks by 0.2-0.35 s). phi swings +1.34 (1.65 s), -0.27 (2.8 s), +0.56 deg (3.85 s). |p|/|r| per half-cycle is 0.31-0.47.",
+     "verdict": "NEAR",
+     "comment": "The dihedral sign is right (roll rate in phase with -beta) and |p|/|r| is inside 0.3-2. But phi lags -beta by about 0.7-0.9 s (about 130-150 deg) instead of being in phase; that lag is the kinematically expected result for a rate-damped roll. The phi oscillation amplitude (about 0.8 deg about its mean, 1.34 deg peak) is at or just under the 1 deg lower bound."
+    },
+    {
+     "id": "F4.5",
+     "observed": "Heading change at 12 s = +0.21 deg.",
+     "verdict": "PASS",
+     "comment": "Inside 8 deg."
+    }
+   ],
+   "red_flags_seen": []
+  },
+  {
+   "id": "F5",
+   "verdict": "PASS",
+   "headline": "A sudden speed increase at 80 kt raises the nose and trades the extra speed for climb: the aircraft is speed-stable, as expected.",
+   "expectations": [
+    {
+     "id": "F5.1",
+     "observed": "q is positive from the first sample (0.23 deg/s at 0.05 s); theta is +2.41 deg at 2 s.",
+     "verdict": "PASS",
+     "comment": "Positive speed stability (high confidence). Not scored: the same disturbance also yaws the nose left (r -3.6 deg/s at 0.5 s) and rolls the aircraft left to -13.8 deg of bank by 6 s with controls fixed."
+    },
+    {
+     "id": "F5.2",
+     "observed": "q peaks at +2.20 deg/s at 0.5 s; theta maximum +3.07 deg at 4.45 s.",
+     "verdict": "PASS",
+     "comment": "Inside both bands. The peak is 0.1 s before the 0.6 s window start, which is insignificant."
+    },
+    {
+     "id": "F5.3",
+     "observed": "Vz peaks at +579 fpm at 5.5 s.",
+     "verdict": "PASS",
+     "comment": "Inside 300-2,000 fpm."
+    },
+    {
+     "id": "F5.4",
+     "observed": "IAS is 89.5 kt after the disturbance and 77.4 kt at 10 s.",
+     "verdict": "PASS",
+     "comment": "Inside 70-84 kt and below 80 kt."
+    }
+   ],
+   "red_flags_seen": []
+  },
+  {
+   "id": "F6",
+   "verdict": "PASS",
+   "headline": "After a double engine failure at 100 kt the nose yaws left and rotor speed dips to 84 % and recovers. The aircraft then settles into a realistic 2,200 fpm autorotation at 65 kt.",
+   "expectations": [
+    {
+     "id": "F6.1",
+     "observed": "Nose left: r -19.2 deg/s at 0.5 s. Sideslip rises from 5.7 to 18.0 deg at 1.1 s (+12.3 deg).",
+     "verdict": "PASS",
+     "comment": "Sign (counterclockwise rotor), size and timing are inside."
+    },
+    {
+     "id": "F6.2",
+     "observed": "Flown deviation: entry at 4,000 ft, and the pilot used the collective to hold NR near 100 % (0.04-0.07 when steady, up to 0.30 in the flare). NR decays at 11 %/s over 0-0.5 s; 90.9 % at 1.0 s; minimum 84.1 % at 2.75 s; overshoot to 105.8 % at 6 s in the flare; steady 99.7 % from 30 to 40 s with the collective 0.045 above the bottom stop.",
+     "verdict": "PASS",
+     "comment": "Decay rate, NR(1 s) and minimum are inside; the minimum comes 0.25 s after the window, which is insignificant. Because the pilot governed NR with the lever slightly above the stop, the full-down NR was not measured directly; it would be somewhat above 99.7 %, plausibly inside 95-112 %."
+    },
+    {
+     "id": "F6.3",
+     "observed": "Steady over 30-40 s: 2,211 fpm at 65.0 kt IAS, at 2,800-3,170 ft. Corrected to 1,000 ft this is about 2,150 fpm.",
+     "verdict": "PASS",
+     "comment": "Inside 1,400-2,300 fpm, in the upper part."
+    },
+    {
+     "id": "F6.4",
+     "observed": "ped +0.896 in steady autorotation against +0.012 at the powered 100 kt trim: 0.88 of travel to the right, near the right stop. ay -0.08 m/s^2, beta -1.3 deg.",
+     "verdict": "PASS",
+     "comment": "Direction and size are as expected. Only about 0.1 of right-pedal travel remains."
+    },
+    {
+     "id": "F6.5",
+     "observed": "Vz stays within 10 % of the steady value from 16.25 s (about 14 s after the lever reached the stop); NR is steady from about 16-18 s.",
+     "verdict": "PASS",
+     "comment": "Inside 10-20 s."
+    }
+   ],
+   "red_flags_seen": []
+  },
+  {
+   "id": "F7",
+   "verdict": "MIXED",
+   "headline": "Pulling hard at 140 kt stalls the retreating (left) side of the rotor and pitches the nose up, as expected. The resulting left roll is far too violent and takes the aircraft past 90 deg of bank.",
+   "expectations": [
+    {
+     "id": "F7.1",
+     "observed": "nz peaks at 2.20 g at 1.5 s. Stall starts at 0.35 s at 1.38 g. nz then varies between 1.5 and 2.2 g (a jagged trace, probably aliased per-revolution vibration) instead of rising further.",
+     "verdict": "PASS",
+     "comment": "Peak and timing are inside, and the rise flattens. Stall starts at 1.38 g, a little below the 1.6-1.9 g expected."
+    },
+    {
+     "id": "F7.2",
+     "observed": "q peaks at +23.8 deg/s at 1.1 s; theta peaks at +24.8 deg relative to trim at 1.7 s. q stays positive until about 4.2 s, i.e. about 2 s after the stick returns.",
+     "verdict": "PASS",
+     "comment": "Inside 12-35 deg/s and 12-40 deg, and recovery is not immediate. The Euler pitch has fallen to +8.7 deg by 2.5 s only because the aircraft is near -96 deg of bank; the body pitch rate is still positive."
+    },
+    {
+     "id": "F7.3",
+     "observed": "p is negative from the start (-5 deg/s at 0.1 s, -9 at stall onset), then reaches -75 deg/s at 1.8 s. phi change: -96 deg at 2.5 s, -112 deg at 3 s, -109 at 4 s, -91 deg at 5 s.",
+     "verdict": "FAIL",
+     "comment": "The direction is right (left, toward the retreating side), but the roll-off is about three times the -5..-35 deg band. The aircraft rolls past knife-edge into a steep dive (Vz -5,100 fpm at 5 s). Even read as an order of magnitude, as the card allows, this is an upset rather than a roll-off. Sign: medium confidence; magnitude: low."
+    },
+    {
+     "id": "F7.4",
+     "observed": "Stalled fraction up to 0.61 at 1.15 s, centred at azimuth 296 deg from the tail in the rotation direction (retreating, left side). Zero in trim; grows from 0.16 at 1.38 g to about 0.41 at about 1.7 g.",
+     "verdict": "PASS",
+     "comment": "Location and growth are as expected. Radial extent is not recorded, so the 40-100 % radius clause cannot be checked. Up to 61 % of the disc stalled is a large extent."
+    }
+   ],
+   "red_flags_seen": []
+  },
+  {
+   "id": "F8",
+   "verdict": "PASS",
+   "headline": "In a pushover to about 0.55 g the rotor keeps full roll control, as a bearingless rotor should.",
+   "expectations": [
+    {
+     "id": "F8.1",
+     "observed": "nz minimum 0.542 g at 1.0 s.",
+     "verdict": "PASS",
+     "comment": "Inside 0.3-0.75 g at 1.0-2.0 s."
+    },
+    {
+     "id": "F8.2",
+     "observed": "Flown: the lateral input started at 1.0055 s at the lowest nz (0.542), but the forward stick was released at the same instant, so nz recovered to 0.61-0.98 g during the roll input. p peaks at +16.0 deg/s at 1.55 s (nz 0.61-0.76 g during the rise). p was already +6.1 deg/s before the input (pushover coupling), so the increment is at least 10 deg/s, while the nose-up pitch rebound (q from -6.4 to +6.8 deg/s) works against it.",
+     "verdict": "PASS",
+     "comment": "Inside 8-17 deg/s and about 1.0x the 1 g value scaled from F3 (1.5 x 10.5 = 15.7 deg/s)."
+    },
+    {
+     "id": "F8.3",
+     "observed": "The roll follows the right input, with no reversal. Before the input, the pushover produced an uncommanded right roll of +4.85 deg (p up to 6.1 deg/s).",
+     "verdict": "PASS",
+     "comment": "Roll control is kept at low g. The 4.9 deg roll before the input is below the 10 deg red-flag threshold (high-confidence item)."
+    },
+    {
+     "id": "F8.4",
+     "observed": "q minimum -9.38 deg/s at 0.6 s; theta minimum -7.67 deg relative to trim at 1.25 s.",
+     "verdict": "PASS",
+     "comment": "Inside both bands."
+    }
+   ],
+   "red_flags_seen": []
+  },
+  {
+   "id": "F9",
+   "verdict": "MIXED",
+   "headline": "The 30 deg banked turn has the correct turn rate, load factor and power increase, but with the ball centred the aircraft flies about 6 deg sideways.",
+   "expectations": [
+    {
+     "id": "F9.1",
+     "observed": "Turn rate 6.26 deg/s (heading, 15-45 s) at 30.0 deg bank and 101.5 kt TAS; g tan(phi)/V = 6.22 deg/s.",
+     "verdict": "PASS",
+     "comment": "Inside 6.1-6.5 deg/s."
+    },
+    {
+     "id": "F9.2",
+     "observed": "nz 1.156 g (1/cos 30 deg = 1.155).",
+     "verdict": "PASS",
+     "comment": "Inside 1.14-1.17 g."
+    },
+    {
+     "id": "F9.3",
+     "observed": "Power 365.4 kW against 335.5 kW in level flight (+8.9 %; +8.1 % against F1's 338 kW).",
+     "verdict": "PASS",
+     "comment": "Inside +6..+18 %."
+    },
+    {
+     "id": "F9.4",
+     "observed": "beta +5.91 deg (range 5.85-5.95) with ay = +0.003 m/s^2 (ball centred). The straight, ball-centred 100 kt trim also has +5.62 deg.",
+     "verdict": "FAIL",
+     "comment": "Nearly twice the 3 deg limit and beyond the NEAR margin (4.5 deg). For wings-level, ball-centred flight the fuselage must yaw about 6 deg nose-left of the flight path to balance the Fenestron/fin side force, so the model's side force from sideslip looks small relative to its tail side force. Medium confidence."
+    }
+   ],
+   "red_flags_seen": []
+  }
+ ]
+}

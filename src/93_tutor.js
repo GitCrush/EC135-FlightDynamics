@@ -32,7 +32,7 @@ const LESSONS=[
  {title:'The pedals',reset:'hover',lock:{col:true,cyc:true,ped:false},aids:{sas:true,attHold:true,hdgHold:true,hoverAssist:false},
   steps:[
    {text:'You hover at 3 m; the autopilot holds height and position. D is right pedal: the nose yaws right. Turn to heading 090 (east). The key commands a yaw rate; releasing it holds the heading.',hl:['hdg','ped'],check:(dt)=>tHold(tHdg(90,6),2,dt)},
-   {text:'Watch the FLI: on this aircraft right pedal costs power, because the Fenestron pushes against the rotor torque. Turn left to 270.',hl:['hdg','fli'],check:(dt)=>tHold(tHdg(270,6),2,dt)},
+   {text:'Watch the FLI: on this aircraft left pedal costs power, because the Fenestron pushes against the rotor torque (the rotor turns counterclockwise, its torque yaws the nose right). Turn left to 270.',hl:['hdg','fli'],check:(dt)=>tHold(tHdg(270,6),2,dt)},
    {text:'Back to north (360) and hold for 5 seconds. Stop pressing before the target heading: the turn keeps going.',hl:['hdg'],check:(dt)=>tHold(tHdg(0,5),5,dt)},
   ]},
  {title:'Calm hover',reset:'hover',lock:{col:true,cyc:false,ped:true},aids:{sas:true,attHold:true,hdgHold:true,hoverAssist:false},
@@ -46,7 +46,7 @@ const LESSONS=[
   steps:[
    {text:'The stick does not control position. It tilts the rotor disc, the tilt rotates the fuselage, the attitude accelerates the aircraft, acceleration builds velocity, velocity moves the position. Each stage takes time: stick to attitude about half a second, attitude to a noticeable velocity two seconds. Whoever watches the position reacts four seconds late and starts to oscillate. N continues.',hl:['horizon','drift'],manual:true},
    {text:'Hence the rule: fly the attitude, read the drift, position takes care of itself. The drift arrow shows velocity, the fastest feedback you have. The recipe for every correction: small impulse, stick back to centre, wait a second, then the counter-impulse before the movement stops. N continues.',hl:['drift','stick'],manual:true},
-   {text:'Watch the autopilot. It hovers for 15 seconds and you see in the controls box how small its stick movements are: mostly under five percent, and never long in one direction. The blue cross is the trim: that is where the stick sits in a calm hover, a little right and a touch aft.',hl:['stick'],demo:true,showTrim:true,check:(dt)=>TUTOR.t>15},
+   {text:'Watch the autopilot. It hovers for 15 seconds and you see in the controls box how small its stick movements are: mostly under five percent, and never long in one direction. The blue cross is the trim: that is where the stick sits in a calm hover, a touch aft and close to the centre sideways.',hl:['stick'],demo:true,showTrim:true,check:(dt)=>TUTOR.t>15},
    {text:'Now you, on the pole. The aircraft is tethered and cannot drift, only tilt. Click into the view to capture the mouse. It commands an attitude: mouse forward = nose down. Put the nose 5° down (pitch ladder) and hold it for 3 seconds.',hl:['horizon'],tether:true,lock:{col:true,lon:false,lat:true,ped:true},check:(dt)=>tHold(Math.abs(S.eul[1]*RAD+5)<1.5,3,dt)},
    {text:'Nose 5° up, 3 seconds. Note how little mouse travel that is. This is the whole range in which a hover happens.',hl:['horizon'],tether:true,lock:{col:true,lon:false,lat:true,ped:true},check:(dt)=>tHold(Math.abs(S.eul[1]*RAD-5)<1.5,3,dt)},
    {text:'Back to the hover attitude: nose slightly up, about 3°, where the mark on the pitch ladder is. Hold it calmly for 5 seconds.',hl:['horizon'],tether:true,lock:{col:true,lon:false,lat:true,ped:true},check:(dt)=>tHold(Math.abs(S.eul[1]*RAD-3)<1.5,5,dt)},
@@ -59,7 +59,7 @@ const LESSONS=[
   ]},
  {title:'One axis: sideways',reset:'hover',lock:{col:true,lon:true,lat:false,ped:true},aids:{sas:true,attHold:true,hdgHold:true,hoverAssist:false},mouseMode:'attitude',
   steps:[
-   {text:'Now the autopilot holds the longitudinal axis, you only have sideways. Mouse right = right skid low = movement to the right. On this aircraft the calm hover hangs about 4° to the right: that is the trim attitude, not level. Hold the pad for 20 seconds.',hl:['drift','horizon'],target:[0,0],showTrim:true,check:(dt)=>tHold(tDist(0,0)<5,20,dt)},
+   {text:'Now the autopilot holds the longitudinal axis, you only have sideways. Mouse right = right skid low = movement to the right. On this aircraft the calm hover hangs about 3.5° to the left, left skid low: that is the trim attitude, not level. Hold the pad for 20 seconds.',hl:['drift','horizon'],target:[0,0],showTrim:true,check:(dt)=>tHold(tDist(0,0)<5,20,dt)},
    {text:'20 m to the right to the column and stop, then back. The nose stays on north.',hl:['drift'],target:[0,20],showTrim:true,check:(dt)=>{if(tDist(0,20)<4&&tSpeed()<0.8)TUTOR.flag=true;return TUTOR.flag&&tHold(tDist(0,0)<4&&tSpeed()<0.8,3,dt);}},
   ]},
  {title:'Both axes as attitude',reset:'hover',lock:{col:true,cyc:false,ped:true},aids:{sas:true,attHold:true,hdgHold:true,hoverAssist:false},mouseMode:'attitude',
@@ -101,7 +101,7 @@ const LESSONS=[
    {text:'Land as you learned: drift zero, then sink, collective fully down once the skids sit. After that you are ready for the exercises in the menu.',hl:['drift','ra'],target:[0,0],check:(dt)=>S.onGround&&tDist(0,0)<8&&S.ctl.col<0.2},
   ]},
 ];
-function tutorStart(li){
+function tutorStart(li){afcsOffAll();
   TUTOR.on=true;TUTOR.li=clamp(li,0,LESSONS.length-1);TUTOR.lessonDone=false;
   const L=LESSONS[TUTOR.li];
   cfg.resetKind=L.reset;uiReset(L.reset);UI.phantom=null;

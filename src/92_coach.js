@@ -38,12 +38,13 @@ function coachStep(dt){
     else if(turning||Math.abs(S.om[2])<6*DEG)COACH.hdgRef=S.eul[2];
     COACH.yawFree=turning||(cfg.hdgHold&&!SAS.hold);A.hdg=COACH.hdgRef;
     if(Math.abs(S.vs)<0.8)COACH.altRef=S.alt;A.alt=onGround?null:COACH.altRef;A.vs=0;}
-  else{A.mode='cruise';if(Math.abs(S.nz-1)<0.15)A.ias=S.ias/KT;A.alt=null;if(Math.abs(S.vs)<1.0)A.vs=0;else A.vs=A.vs||0;}
+  else{A.mode='cruise';A.hdg=S.eul[2];if(Math.abs(S.nz-1)<0.15)A.ias=S.ias/KT;A.alt=null;if(Math.abs(S.vs)<1.0)A.vs=0;else A.vs=A.vs||0;}
   A.mode==='cruise'&&(A.hdg=S.eul[2]);
   /* Trim attitude: the coach compares against the attitude the aircraft
      settles at, not against level. Learned as a slow average, seeded with
-     the hover trim of this type (nose 3.5° up, right skid 4° low). */
-  if(COACH.trimTh===undefined){COACH.trimTh=3.5*DEG;COACH.trimPhi=4*DEG;}
+     the hover trim of this type (nose 3° up, left skid 3.5° low: the
+     Fenestron pushes right against the counterclockwise rotor's torque). */
+  if(COACH.trimTh===undefined){COACH.trimTh=3*DEG;COACH.trimPhi=H.rotor.s*3.5*DEG;}
   const quiet=Math.hypot(S.om[0],S.om[1])<8*DEG;
   if(quiet){COACH.trimTh+=(S.eul[1]-COACH.trimTh)*Math.min(1,dt/6);COACH.trimPhi+=(S.eul[0]-COACH.trimPhi)*Math.min(1,dt/6);}
   A.thTrim=COACH.trimTh;A.phTrim=COACH.trimPhi;
@@ -51,7 +52,7 @@ function coachStep(dt){
      add now (attitude error, rate, velocity error), not a full stick
      position, so it does not need the trim and cannot wind up. */
   A.pOnly=true;const o=apStep(dt,A);
-  const lk=TUTOR.on?{lon:TUTOR.lockLon,lat:TUTOR.lockLat,ped:TUTOR.lockPed,col:TUTOR.lockCol}:{};
+  const lk={lon:axisHeld('lon'),lat:axisHeld('lat'),ped:axisHeld('ped'),col:axisHeld('col')};
   const c=COACH.cue;
   const raw={lon:sat(o.lon,1),lat:sat(o.lat,1),ped:COACH.yawFree?0:sat(o.ped,1),col:sat(o.col-0.50,0.5)};
   for(const k in raw){const v=lk[k]?0:raw[k];c[k]+=(v-c[k])*Math.min(1,dt*6);}   // smoothed: an instructor does not twitch
@@ -63,7 +64,8 @@ function coachStep(dt){
   const dir=(k,v)=>{const m={lon:v>0?'Stick forward':'Stick back',lat:v>0?'Stick right':'Stick left',ped:v>0?'Right pedal':'Left pedal'}[k];return m;};
   if(power&&S.NR<H.nr.minPowerOn-1.5){hint='NR dropping';long='Rotor speed is dropping. Lower the collective, now.';lvl=2;}
   else if(!power&&S.NR<H.nr.minAuto+3){hint='NR low';long='Rotor speed too low in autorotation. Collective down, aft stick.';lvl=2;}
-  else if(S.eng.fli>11.2){hint='Overtorque';long='Above take-off power. Ease the collective.';lvl=2;}
+  else if(S.eng.fli>(S.eng.mode==='oei'?12.2:11.2)){hint='Overtorque';long='Above the power limit. Ease the collective.';lvl=2;}
+  else if(S.eng.mode==='oei'&&S.eng.tAbove30>20&&S.eng.limit==='OEI 30s'){hint='OEI 30 s';long='The 30-second rating is running out. Reduce power below FLI 11.';lvl=2;}
   else if(S.rot.vrs>0.35){hint='Vortex ring';long='Vortex ring state. Stick forward firmly to fly out of your own downwash; collective up as power allows.';lvl=2;}
   else if(hover&&!onGround&&S.vs<-2.5&&S.hAGL<40){hint='Sink rate';long='You are sinking fast near the ground. Collective in.';lvl=2;}
   else if(S.fen.stall>0.6){hint='Fenestron limit';long='Fenestron saturated. Take power off, nose into wind.';lvl=2;}
@@ -91,7 +93,7 @@ function coachDraw(x,W,Hh){
   const c=COACH.cue;
   const cx0=W/2,cy0=Hh/2-40;const sx=cx0+(DEV.mouse.armed?DEV.mouse.vx*110:0),sy=cy0+(DEV.mouse.armed?DEV.mouse.vy*110:0);
   const mag=Math.hypot(c.lon,c.lat);
-  if(mag>0.06&&!(TUTOR.on&&TUTOR.lockLon&&TUTOR.lockLat)){const L=Math.min(130,mag*300);const ex=sx+c.lat/mag*L,ey=sy-c.lon/mag*L;const a=Math.atan2(ey-sy,ex-sx);
+  if(mag>0.06&&!(axisHeld('lon')&&axisHeld('lat'))){const L=Math.min(130,mag*300);const ex=sx+c.lat/mag*L,ey=sy-c.lon/mag*L;const a=Math.atan2(ey-sy,ex-sx);
     const pulse=0.75+0.25*Math.abs(Math.sin(S.t*5));
     for(const [col,w] of [['rgba(13,12,10,0.8)',mag>0.2?8:6],[COACH_GREEN,mag>0.2?5:3]]){x.strokeStyle=col;x.lineWidth=w;x.globalAlpha=col===COACH_GREEN?pulse:1;x.beginPath();x.moveTo(sx,sy);x.lineTo(ex,ey);x.stroke();}
     x.fillStyle=COACH_GREEN;x.beginPath();x.moveTo(ex+10*Math.cos(a),ey+10*Math.sin(a));x.lineTo(ex-14*Math.cos(a-0.5),ey-14*Math.sin(a-0.5));x.lineTo(ex-14*Math.cos(a+0.5),ey-14*Math.sin(a+0.5));x.closePath();x.fill();x.globalAlpha=1;
@@ -99,11 +101,12 @@ function coachDraw(x,W,Hh){
     const lab=Math.abs(c.lon)>Math.abs(c.lat)?(c.lon>0?('forward'):('back')):(c.lat>0?('right'):('left'));
     x.font='bold 14px "Arial Narrow",sans-serif';x.textAlign='center';x.fillStyle='#0d0c0a';x.fillText(lab,ex+1,ey-19);x.fillStyle=COACH_GREEN;x.fillText(lab,ex,ey-20);}
   // collective and pedal arrows beside the controls box, with words
-  const bx=W/2-70,by=Hh-60;x.font='bold 12px "Arial Narrow",sans-serif';x.textAlign='center';
-  if(Math.abs(c.col)>0.06&&!(TUTOR.on&&TUTOR.lockCol)){const up=c.col>0,ax=bx+45,ay=up?by-44:by+40;x.fillStyle=COACH_GREEN;x.beginPath();x.moveTo(ax,ay+(up?-12:12));x.lineTo(ax-8,ay);x.lineTo(ax+8,ay);x.closePath();x.fill();x.fillText(up?('collective in'):('collective out'),ax,up?ay-18:ay+26);}
-  if(Math.abs(c.ped)>0.1&&!(TUTOR.on&&TUTOR.lockPed)){const d=c.ped>0?1:-1,ax=bx+100+d*56,ay=by+26;x.fillStyle=COACH_GREEN;x.beginPath();x.moveTo(ax+d*14,ay);x.lineTo(ax,ay-8);x.lineTo(ax,ay+8);x.closePath();x.fill();x.fillText(d>0?('right pedal'):('left pedal'),bx+100+d*60,ay+24);}
+  const CF=hudCtlFrame(W,Hh),bx=CF.cx,by=CF.cy;x.save();x.scale(CF.s,CF.s);x.font='bold 12px "Arial Narrow",sans-serif';x.textAlign='center';   // on the control indicator: in the cockpit inside the panel's scale
+  if(Math.abs(c.col)>0.06&&!axisHeld('col')){const up=c.col>0,ax=bx+45,ay=up?by-44:by+40;x.fillStyle=COACH_GREEN;x.beginPath();x.moveTo(ax,ay+(up?-12:12));x.lineTo(ax-8,ay);x.lineTo(ax+8,ay);x.closePath();x.fill();x.fillText(up?('collective in'):('collective out'),ax,up?ay-18:ay+26);}
+  if(Math.abs(c.ped)>0.1&&!axisHeld('ped')){const d=c.ped>0?1:-1,ax=bx+100+d*56,ay=by+26;x.fillStyle=COACH_GREEN;x.beginPath();x.moveTo(ax+d*14,ay);x.lineTo(ax,ay-8);x.lineTo(ax,ay+8);x.closePath();x.fill();x.fillText(d>0?('right pedal'):('left pedal'),bx+100+d*60,ay+24);}
   // ghost stick in the controls box: green ring where the stick belongs
-  if(!(TUTOR.on&&TUTOR.lockLon&&TUTOR.lockLat)){const gx=bx+(S.ctl.lat+c.lat)*28,gy=by-(S.ctl.lon+c.lon)*28;x.strokeStyle=COACH_GREEN;x.lineWidth=2;x.beginPath();x.arc(gx,gy,5,0,7);x.stroke();}
+  if(!(axisHeld('lon')&&axisHeld('lat'))){const gx=bx+(S.ctl.lat+c.lat)*28,gy=by-(S.ctl.lon+c.lon)*28;x.strokeStyle=COACH_GREEN;x.lineWidth=2;x.beginPath();x.arc(gx,gy,5,0,7);x.stroke();}
+  x.restore();
   // the word and the sentence
   if(COACH.hint){const lvl=COACH.hintLevel,flash=S.t-(COACH.flash||0)<0.4;x.textAlign='center';
     x.font='bold 20px "Arial Narrow",sans-serif';const tw=Math.max(x.measureText(COACH.hint).width,0)+40;x.font='13px "Arial Narrow",sans-serif';const lw=x.measureText(COACH.long).width+40;

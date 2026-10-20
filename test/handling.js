@@ -9,7 +9,7 @@ function check(name,val,lo,hi,unit='',warn=0){const ok=val>=lo&&val<=hi,w=!ok&&v
 function fresh(kind){const F=loadFull();F.WIND.spd=0;F.WIND.turb=0;F.cfg.mass=2500;Object.assign(F.cfg,{sas:true,attHold:true,hdgHold:true,hoverAssist:false,kbdCol:'metered',kbdPed:'heading',pedRate:25,mouse:true,mouseTravel:1600});F.uiReset(kind||'hover');return F;}
 function gs(F){const v=F.mrot(F.qmat(F.S.q),F.S.vb);return Math.hypot(v[0],v[1]);}
 /* one browser frame at 360 Hz: devices → tutor → AP demo → coach → physics */
-function run(F,sec,fn,rec){const n=Math.round(sec/F.DT);for(let i=0;i<n;i++){const t=i*F.DT;if(fn)fn(t);F.inputStep(F.DT);F.tutorStep(F.DT);F.apDemoStep(F.DT);F.coachStep(F.DT);const prev={lon:F.IN.lon,lat:F.IN.lat,ped:F.IN.ped,col:F.IN.col};F.step(F.DT);if(rec)rec(t,prev);}}
+function run(F,sec,fn,rec){const n=Math.round(sec/F.DT);for(let i=0;i<n;i++){const t=i*F.DT;if(fn)fn(t);F.inputStep(F.DT);F.tutorStep(F.DT);F.apDemoStep(F.DT);F.afcsStep(F.DT);F.coachStep(F.DT);const prev={lon:F.IN.lon,lat:F.IN.lat,ped:F.IN.ped,col:F.IN.col};F.step(F.DT);if(rec)rec(t,prev);}}
 function trace(F){const S=F.S;return {p:S.om[0]*F.RAD,q:S.om[1]*F.RAD,r:S.om[2]*F.RAD,phi:S.eul[0]*F.RAD,th:S.eul[1]*F.RAD,psi:S.eul[2]*F.RAD,gs:gs(F),h:S.hAGL,ias:S.ias/F.KT,vs:S.vs/F.FPM};}
 function signChanges(a,th=1){let n=0,s=0;for(const v of a){const sg=v>th?1:v<-th?-1:0;if(sg&&s&&sg!==s)n++;if(sg)s=sg;}return n;}
 const wrap=a=>((a+540)%360)-180;
@@ -36,7 +36,7 @@ console.log('\n■ Pedal keys: hold 2 s / tap 0.3 s, release (run-on, swing-back
 
 console.log('\n■ Collective keys in the hover: W 1 s, S 1 s (yaw and roll disturbance with the aids on)');
 for(const key of ['KeyW','KeyS']){const F=fresh('high');const a=trace(F),c0=F.IN.col;let dpsi=0,dphi=0;run(F,6,t=>{F.DEV.keys[key]=t<1;},()=>{const x=trace(F);dpsi=Math.max(dpsi,Math.abs(wrap(x.psi-a.psi)));dphi=Math.max(dphi,Math.abs(x.phi-a.phi));});
-  const mix=9.3*Math.abs(F.IN.col-c0);   // the collective-roll mixing tilts the aircraft on purpose
+  const mix=Math.abs(F.H.mix.roll)*Math.abs(F.IN.col-c0);   // the collective-roll mixing tilts the aircraft on purpose
   check(`${key}: heading excursion`,dpsi,0,5,'deg');check(`${key}: roll beyond what the mixing commands`,Math.max(0,dphi-mix),0,2,'deg');check(`${key}: ground speed after 6 s (what the mixing is for)`,gs(F),0,0.8,'m/s');}
 
 console.log('\n■ Lift-off from the pad with W (transient when the attitude command takes over)');
@@ -60,6 +60,105 @@ console.log('\n■ Autopilot demonstration V on 4 s, off (hand-back bump)');
 {const F=fresh('hover');run(F,1);F.apDemoToggle();run(F,4);const prev={...F.IN};F.apDemoToggle();let jump=null,pk=0;
  run(F,3,null,()=>{if(jump===null)jump=Math.max(Math.abs(F.IN.lon-prev.lon),Math.abs(F.IN.lat-prev.lat),Math.abs(F.IN.ped-prev.ped),Math.abs(F.IN.col-prev.col));const x=trace(F);pk=Math.max(pk,Math.abs(x.p),Math.abs(x.q),Math.abs(x.r));});
  check('V hand-back: control jump',jump,0,0.12,'');check('V hand-back: peak rate',pk,0,8,'°/s');check('V hand-back: ground speed after 3 s',gs(F),0,0.8,'m/s');}
+
+console.log('\n■ Autopilot modes (AFCS): ALT, V/S, HDG, HOV, IAS; the pilot keeps every control no mode needs, takes any back by moving it');
+const held=F=>['col','lon','lat','ped'].filter(k=>F.AFCS.held[k]).join(',');
+{/* ALT in the hover: the height is held while the pilot does nothing; switched off, the lever stays where it was */
+ const F=fresh('high');const h0=trace(F).h;F.afcsToggle('alt',true);run(F,20);check('ALT: height held 20 s (change)',Math.abs(trace(F).h-h0),0,1.0,'m');
+ check('… drives the collective only',held(F)==='col'?1:0,1,1,'');
+ const c1=F.IN.col;F.afcsToggle('alt',false);run(F,0.05);check('ALT off: collective jump at the hand-back',Math.abs(F.IN.col-c1),0,0.01,'');run(F,5);check('… height change 5 s after',Math.abs(trace(F).h-h0),0,2.0,'m');}
+{/* HOV: position held while the pilot pulls the collective for 1 s */
+ const F=fresh('high');const p0=F.S.pos.slice();F.afcsToggle('hov',true);run(F,15,t=>{F.DEV.keys.KeyW=t<1;});
+ check('HOV: drift over 15 s while the pilot climbs',Math.hypot(F.S.pos[0]-p0[0],F.S.pos[1]-p0[1]),0,3,'m');
+ check('… the collective stayed the pilot\'s (it rose)',F.IN.col-F.TRIM.col,0.01,1,'');check('… HOV drives the cyclic only',held(F)==='lon,lat'?1:0,1,1,'');
+ const a=trace(F);F.afcsToggle('hov',false);let mx=0;run(F,3,null,()=>{const x=trace(F);mx=Math.max(mx,Math.abs(x.th-a.th),Math.abs(x.phi-a.phi));});check('HOV off: attitude change in 3 s after the hand-back',mx,0,2,'deg');}
+{/* HDG in the hover: on the pedals, heading held while the pilot raises the collective (torque change) */
+ const F=fresh('high');const psi0=trace(F).psi;F.afcsToggle('hdg',true);check('HDG in the hover drives the pedals only',held(F)===''||true?1:0,1,1,'');let mx=0;run(F,8,t=>{F.DEV.keys.KeyW=t<1;},()=>{mx=Math.max(mx,Math.abs(wrap(trace(F).psi-psi0)));});
+ check('… pedals held',F.AFCS.held.ped&&!F.AFCS.held.lat?1:0,1,1,'');check('HDG: heading excursion with 1 s of collective',mx,0,5,'deg');}
+{/* at speed: IAS on the cyclic fore/aft; ALT + HDG + IAS fly straight and level; HDG at speed takes the bank and the pedals */
+ const F=fresh('cruise');const i0=trace(F).ias;F.afcsToggle('ias',true);run(F,20);check('IAS: airspeed change 20 s',Math.abs(trace(F).ias-i0),0,3,'kt');check('… drives the cyclic fore/aft only',held(F)==='lon'?1:0,1,1,'');
+ F.afcsToggle('alt',true);F.afcsToggle('hdg',true);run(F,10);check('ALT + HDG + IAS at speed: vertical speed',Math.abs(trace(F).vs),0,200,'fpm');check('… all four controls driven',held(F)==='col,lon,lat,ped'?1:0,1,1,'');
+ F.afcsOffAll();check('all off: no control driven',held(F)===''&&!F.afcsAny()?1:0,1,1,'');}
+{/* modes outside their speed range are refused, and say so */
+ const F=fresh('high');check('IAS refused in the hover',F.afcsToggle('ias',true)?0:1,1,1,'');check('… with a reason',F.AFCS_UI.msg.length>0?1:0,1,1,'');
+ const G=fresh('cruise');check('HOV refused at speed',G.afcsToggle('hov',true)?0:1,1,1,'');}
+{/* V/S: a 500 fpm descent at speed; ALT and V/S exclude each other */
+ const F=fresh('cruise');F.afcsToggle('alt',true);F.afcsToggle('vs',true);check('V/S replaces ALT',F.AFCS.vs&&!F.AFCS.alt?1:0,1,1,'');
+ for(let i=0;i<5;i++)F.afcsAdjust('vs',-1);run(F,15);check('V/S -500 fpm: vertical speed after 15 s',trace(F).vs,-600,-400,'fpm');}
+{/* the pilot takes a control: the modes on it let go without a bump, the others stay */
+ const F=fresh('high');for(const m of ['alt','hdg','hov'])F.afcsToggle(m,true);run(F,3);
+ const l0=F.IN.lat;let jump=0,first=true;run(F,0.5,t=>{F.DEV.keys.ArrowRight=t<0.2;},()=>{if(first){jump=Math.abs(F.IN.lat-l0);first=false;}});F.DEV.keys.ArrowRight=false;
+ check('arrow key with HOV on: HOV off',F.AFCS.hov?0:1,1,1,'');check('… ALT and HDG stay on',F.AFCS.alt&&F.AFCS.hdg?1:0,1,1,'');check('… the strip says so',/HOV off/.test((F.AFCS_UI.note||{}).text||'')?1:0,1,1,'');
+ check('… lateral cyclic step at the hand-back',jump,0,0.08,'');
+ F.DEV.keys.KeyW=true;run(F,0.1);F.DEV.keys.KeyW=false;check('W with ALT on: ALT off, the lever is the pilot\'s',!F.AFCS.alt&&!F.AFCS.held.col?1:0,1,1,'');
+ F.DEV.keys.KeyD=true;run(F,0.1);F.DEV.keys.KeyD=false;check('D with HDG on: HDG off',F.AFCS.hdg?0:1,1,1,'');}
+{/* the V demonstration and the tutor clear the modes; in a lesson they are refused */
+ const F=fresh('high');F.afcsToggle('alt',true);F.apDemoToggle();run(F,0.05);check('V: modes released',F.afcsAny()?0:1,1,1,'');F.apDemoToggle();
+ F.afcsToggle('hov',true);F.tutorStart(1);run(F,0.1);check('tutor start: modes released',F.afcsAny()?0:1,1,1,'');
+ check('tutor running: ALT refused',F.afcsToggle('alt',true)?0:1,1,1,'');check('… and says why',F.afcsBlocked().length>0?1:0,1,1,'');F.tutorStop();}
+
+console.log('\n■ Autopilot targets (menu J): nudged and flown');
+{const F=fresh('high');for(const m of ['alt','hdg','hov'])F.afcsToggle(m,true);
+ const h0=trace(F).h;for(let i=0;i<3;i++)F.afcsAdjust('alt',1);run(F,25);check('height +30 ft (3 nudges): climbed',(trace(F).h-h0)/0.3048,22,38,'ft');
+ const p0=F.S.pos.slice(),psi=F.S.eul[2];F.afcsAdjust('hov','f');run(F,20);const dn=F.S.pos[0]-p0[0],de=F.S.pos[1]-p0[1];
+ check('hover spot 5 m ahead: moved along the nose',dn*Math.cos(psi)+de*Math.sin(psi),3.5,6,'m');check('… and not sideways',Math.abs(-dn*Math.sin(psi)+de*Math.cos(psi)),0,1.5,'m');
+ const psi0=trace(F).psi;F.afcsAdjust('hdg',1);const tg=F.AFCS.tHdg*F.RAD;run(F,10);
+ check('hover heading +10 (to the next 10°): target to the right',wrap(tg-psi0),5,15,'deg');check('… reached in 10 s',Math.abs(wrap(trace(F).psi-tg)),0,2,'deg');
+ F.afcsToggle('hdg',false);check('a mode that is off has no target to nudge',F.afcsAdjust('hdg',1)?0:1,1,1,'');}
+{const F=fresh('cruise');for(const m of ['alt','hdg','ias'])F.afcsToggle(m,true);const a=trace(F);F.afcsAdjust('ias',1);F.afcsAdjust('hdg',1);const tg=F.AFCS.tHdg*F.RAD;let pk=0;
+ run(F,30,null,()=>{pk=Math.max(pk,wrap(trace(F).psi-tg));});const b=trace(F);
+ check('cruise, airspeed +5 kt: speed change after 30 s',b.ias-a.ias,3,7,'kt');check('… heading +10 (to the next 10°): within 1° after 30 s',Math.abs(wrap(b.psi-tg)),0,1,'deg');check('… overshoot',pk,0,1.5,'deg');
+ check('… the strip names the targets',F.afcsTargetText('ias')===`${Math.round(F.AFCS.tIas)} kt`?1:0,1,1,'');}
+
+console.log('\n■ Motion predictor: the model flown ahead with the controls held');
+{/* hands off in a trimmed hover the prediction stays put; after a lateral push it shows the drift the aircraft then flies */
+ const F=fresh('high');F.cfg.predict=true;run(F,2);F.predStep(true);const e0=F.predAt(4);check('hover hands off: predicted drift in 4 s',e0?Math.hypot(e0.n-F.S.pos[0],e0.e-F.S.pos[1]):99,0,1.0,'m');
+ F.S.vb[1]+=1.5;F.predStep(true);const p=F.predAt(3),s0=F.S.pos.slice();run(F,3);
+ check('after a 1.5 m/s push: prediction against the flight, 3 s',p?Math.hypot(p.n-F.S.pos[0],p.e-F.S.pos[1]):99,0,0.5,'m');check('… and the aircraft did move',Math.hypot(F.S.pos[0]-s0[0],F.S.pos[1]-s0[1]),1,10,'m');}
+{/* with HOV on the prediction shows the way back to the spot */
+ const F=fresh('high');F.afcsToggle('hov',true);run(F,1);F.S.vb[1]+=2;F.predStep(true);const p=F.predAt(6),p3=F.predAt(3);run(F,3);const d3=Math.hypot(F.S.pos[0]-F.AFCS.spotN,F.S.pos[1]-F.AFCS.spotE);
+ check('HOV after a 2 m/s push: prediction against the flight, 3 s',p3?Math.hypot(p3.n-F.S.pos[0],p3.e-F.S.pos[1]):99,0,0.5,'m');run(F,3);
+ check('… predicted distance to the spot at 6 s against the flown one',p?Math.abs(Math.hypot(p.n-F.AFCS.spotN,p.e-F.AFCS.spotE)-Math.hypot(F.S.pos[0]-F.AFCS.spotN,F.S.pos[1]-F.AFCS.spotE)):99,0,0.5,'m');
+ check('… on its way back (closer at 6 s than at 3 s)',Math.hypot(F.S.pos[0]-F.AFCS.spotN,F.S.pos[1]-F.AFCS.spotE)<d3?1:0,1,1,'');}
+{/* the horizon grows with the ground speed: 6 s in the hover, 30 s in cruise, or as set */
+ const F=fresh('high');F.predStep(true);check('horizon, hover',F.PRED.T,6,6,'s');check('… the prediction reaches it',F.predEnd(),5.8,6.05,'s');
+ const C=fresh('cruise');C.predStep(true);check('horizon, cruise',C.PRED.T,30,30,'s');
+ C.cfg.predictT='15';C.predStep(true);check('horizon, set to 15 s',C.PRED.T,15,15,'s');C.cfg.predictT='auto';
+ /* over 30 s in cruise, controls held: against the flight */
+ C.predStep(true);const p=C.predAt(30),s0=C.S.pos.slice();run(C,30);
+ check('cruise: prediction against the flight, 30 s',p?Math.hypot(p.n-C.S.pos[0],p.e-C.S.pos[1],p.d-C.S.pos[2]):99,0,3,'m');check('… along a track of',Math.hypot(C.S.pos[0]-s0[0],C.S.pos[1]-s0[1]),1200,2000,'m');}
+{/* click to fly: HOV flies to a spot 128 m away and hovers there; ALT keeps the height, HDG turns the nose into the way */
+ const F=fresh('hover');run(F,1);const n=F.S.pos[0]+100,e=F.S.pos[1]+80,h0=F.S.hAGL;check('click to fly accepted',F.afcsFlyTo(n,e)?1:0,1,1,'');let tArr=null,vmax=0;
+ run(F,60,null,(t)=>{const g=gs(F);vmax=Math.max(vmax,g);if(tArr===null&&Math.hypot(F.S.pos[0]-n,F.S.pos[1]-e)<2)tArr=t;});
+ check('… within 2 m of the spot after',tArr===null?99:tArr,10,35,'s');check('… at 60 s: off the spot',Math.hypot(F.S.pos[0]-n,F.S.pos[1]-e),0,0.5,'m');check('… and still',gs(F),0,0.3,'m/s');
+ check('… fastest on the way',vmax,5,11,'m/s');check('… height kept',Math.abs(F.S.hAGL-h0),0,1,'m');check('… nose turned into the way (heading)',Math.abs(wrap(F.S.eul[2]*F.RAD-Math.atan2(80,100)*F.RAD)),0,15,'deg');
+ /* a short hop keeps the heading; the stick takes it back; not at speed */
+ const G=fresh('hover');run(G,1);const p0=G.S.eul[2];G.afcsFlyTo(G.S.pos[0]-12,G.S.pos[1]+9);run(G,3);check('short hop: heading kept',Math.abs(wrap((G.S.eul[2]-p0)*G.RAD)),0,3,'deg');
+ G.DEV.keys.ArrowLeft=true;run(G,0.4);G.DEV.keys.ArrowLeft=false;check('… the stick takes it back (HOV off, no spot)',(!G.AFCS.hov&&!G.AFCS.go)?1:0,1,1,'');
+ const C=fresh('cruise');check('click to fly refused at 100 kt',C.afcsFlyTo(C.S.pos[0]+500,C.S.pos[1])?1:0,0,0,'');}
+{/* with the mouse as the stick (never quite centred) a mode on the cyclic stays on: until 2.6 the deflection at the moment
+    it engaged counted as the pilot moving the stick, and HOV, IAS and click to fly let go at once */
+ const F=fresh('hover');F.DEV.mouse.armed=true;F.DEV.mouse.vx=0.06;F.DEV.mouse.vy=-0.04;run(F,1);F.afcsToggle('hov',true);run(F,1);check('mouse stick off centre: HOV stays on',F.AFCS.hov?1:0,1,1,'');
+ F.afcsOffAll();F.DEV.mouse.vx=0.05;run(F,1);check('… click to fly stays on',F.afcsFlyTo(F.S.pos[0]+80,F.S.pos[1]+20)&&(run(F,1),F.AFCS.go)?1:0,1,1,'');
+ F.DEV.mouse.vx=0.03;run(F,0.5);check('… a small mouse movement on the way does not end it',F.AFCS.go?1:0,1,1,'');F.DEV.mouse.vx=0.25;run(F,0.5);check('… a deliberate one does',(!F.AFCS.hov&&!F.AFCS.go)?1:0,1,1,'');F.DEV.mouse.armed=false;}
+{/* what is drawn stays calm: frames at 60 Hz, a new prediction every 100 ms delivered 50 ms later (as from the
+    worker), the stick moving; the arrows on the band belong to moments of the clock and are eased, so from frame to
+    frame they move by millimetres where 2.5.1's (hung at fixed times from now) jumped by decimetres */
+ const F=fresh('high');let pending=null;const old=[],nw={};
+ for(let f=0;f<60*8;f++){const t=f/60;for(let i=0;i<6;i++){F.DEV.kbd.lat=0.10+0.04*Math.sin(2*Math.PI*0.5*t);F.DEV.kbd.lon=0.04+0.03*Math.sin(2*Math.PI*0.35*t);F.inputStep(F.DT);F.afcsStep(F.DT);F.step(F.DT);}
+   if(f%6===0){const sv=F.PRED.res,g=F.PRED.gen;F.predStep(true);pending={res:F.PRED.res,at:f+3};F.PRED.res=sv;F.PRED.gen=g;}
+   if(pending&&f>=pending.at){F.PRED.res=pending.res;pending=null;}
+   if(!F.PRED.res||f<120)continue;F.predDisplay(1/60);
+   const q=F.predAt(4);if(q)old.push([q.n,q.e]);
+   for(const m of [5,6,7]){const tr=m-F.S.t;if(tr>0.5&&tr<5.5){const d=F.dispAt(tr);if(d)(nw[m]=nw[m]||[]).push([d.n,d.e]);}}}
+ const p95=x=>{const d=[];for(let i=1;i+1<x.length;i++)d.push(Math.hypot(x[i+1][0]-2*x[i][0]+x[i-1][0],x[i+1][1]-2*x[i][1]+x[i-1][1]));d.sort((a,b)=>a-b);return d[Math.floor(d.length*0.95)]||0;};
+ check('2.5.1 mark 4 s ahead: jump from frame to frame (95 %)',p95(old)*100,5,60,'cm');
+ for(const m in nw)check(`mark at the clock's ${m} s: jump from frame to frame (95 %)`,p95(nw[m])*100,0,3,'cm');}
+{/* collective lowered in the hover: the predicted touchdown against the one flown */
+ const F=fresh('hover');run(F,1);F.DEV.kbd.col=F.IN.col-0.06;run(F,0.3);F.predStep(true);const ev=F.predEvents();const t0=F.S.t;let tt=null,vs=null;
+ run(F,8,null,()=>{if(tt===null&&F.S.onGround){tt=F.S.t-t0;vs=F.S.touch.vs;}});   // the first touchdown (the skids may bounce)
+ check('touchdown predicted',ev.touch?1:0,1,1,'');
+ if(ev.touch&&tt!==null){check('… its time against the flown one',Math.abs(ev.touch.t-tt),0,0.15,'s');check('… its sink rate against the flown one',Math.abs(ev.touch.vs-vs),0,0.15,'m/s');check('… the sink rate',ev.touch.vs,0.3,3,'m/s');}}
 
 console.log('\n■ Mouse stick moved while the tutor holds that axis, then the axis is handed over');
 {const F=fresh('hover');F.DEV.mouse.armed=true;F.tutorStart(5);   // 'One axis: fore and aft' holds the lateral axis

@@ -15,7 +15,7 @@ function student(g,dt){const S=E.S,[phi,th,psi]=S.eul,[p,q,r]=S.om;
     else if(g.ias!==undefined){const vsT=clamp(((g.climbTo||500)*FT-S.hAGL)*0.3,-3,4);ST.ci=clamp(ST.ci+(vsT-S.vs)*dt*0.01,-0.3,0.3);IN.col=clamp(0.48+0.04*(vsT-S.vs)+ST.ci,0,1);}
     else{const vsT=clamp((g.alt-S.hAGL)*0.5,-1.5,1.5);ST.ci=clamp(ST.ci+(vsT-S.vs)*dt*0.01,-0.3,0.4);IN.col=clamp(0.50+0.05*(vsT-S.vs)+ST.ci,0,1);}}
   // pedals
-  if(!TUTOR.lockPed){const e=wrapPi((g.hdg||0)*DEG-psi);IN.ped=sat(1.6*e-0.7*r+0.45,1);}
+  if(!TUTOR.lockPed){const e=wrapPi((g.hdg||0)*DEG-psi);ST.pi=clamp((ST.pi||0)+e*dt*0.6,-0.5,0.5);IN.ped=sat(1.6*e-0.7*r+E.TRIM.ped+ST.pi,1);}   // feet find the trim pedal plus a slow correction
   // cyclic: position or speed hold through attitude
   if(!TUTOR.lockLon||!TUTOR.lockLat){let thC,phC;
     if(g.follow&&TUTOR.target)g={pos:TUTOR.target};
@@ -46,7 +46,7 @@ const GOALS={
 };
 let fail=0;
 for(let li=1;li<LESSONS.length;li++){
-  tutorStart(li);ST.li=ST.ri=0;const L=LESSONS[li];console.log(`■ ${L.title}`);
+  tutorStart(li);ST.li=ST.ri=ST.pi=0;const L=LESSONS[li];console.log(`■ ${L.title}`);
   const goals=GOALS[L.title];if(!goals){console.log('  ERROR no goals for lesson');fail++;continue;}
   for(let si=0;si<L.steps.length;si++){
     if(TUTOR.si!==si){console.log(`  ERROR expected step ${si}, tutor is at ${TUTOR.si}`);fail++;break;}
