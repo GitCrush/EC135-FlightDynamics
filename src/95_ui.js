@@ -40,7 +40,7 @@ const SETUP=[
     ['padMap','Preset','select',['gamepad','joystick','custom']],['padDead','Stick dead zone','range',0,0.2,0.01,''],['padPanel','','pad'],
   ]],
   ['View',[
-    ['view','Camera  1/2/3','select',['cockpit','chase','tower']],['gfx','Graphics (light for weak GPUs)','select',['auto','full','light']],['fov','Cockpit field of view (across)','range',50,90,2,'°'],['cloud','Cloud cover','range',0,1,0.1,''],['hud','HUD','check'],['rotorDisc','Rotor-state map','check'],['fpm','Flight path marker  F','check'],['predict','Predicted path  P','check'],['predictT','Prediction: seconds ahead (auto: 6 in the hover to 30 at speed)','select',['auto','4','8','15','30']],['sound','Sound','check'],
+    ['view','Camera  1/2/3','select',['cockpit','chase','tower']],['gfx','Graphics (light for weak GPUs)','select',['auto','full','light']],['fov','Cockpit field of view (across)','range',50,90,2,'°'],['cloud','Cloud cover','range',0,1,0.1,''],['hud','HUD','check'],['rotorDisc','Rotor-state map','check'],['fpm','Flight path marker  F','check'],['predict','Predicted path  P','check'],['predictT','Prediction: seconds ahead (auto: 6 in the hover to 30 at speed)','select',['auto','4','8','15','30']],['sound','Sound','check'],['volume','Volume','range',0,100,5,'%'],
   ]],
 ];
 if(cfg.fov===undefined)cfg.fov=72;   // cockpit field of view across, degrees (the vertical angle is kept between 46 and 62, see cockpitFov)
@@ -85,7 +85,7 @@ function trimNow(sec){
   AP.on=false;AP.posN=AP.posE=null;trimHandover(o);DEV.kbd.col=o.col;DEV.kbd.psiRef=S.eul[2];DEV.kbd.ped=0;DEV.kbd.lon=DEV.kbd.lat=0;IN.trimLon=IN.trimLat=IN.trimPed=0;
   if(COACH.ap){COACH.trimTh=S.eul[1];COACH.trimPhi=S.eul[0];}S.log=[];S.t=0;S.logT=0;
 }
-function uiReset(kind){afcsOff();AFCS_UI.note=null;AFCS_UI.trail=[];AFCS_UI.base=null;AP.on=false;AP.kci=undefined;PRED.res=null;PRED.past.length=0;PRED.Tauto=6;PRED.gen++;PRED.main=null;PRED.busy=false;reset(kind);SAS.init=false;if(typeof afcsButtons==='function')afcsButtons();if(HUD.aoaMap)HUD.aoaMap.fill(NaN);SCORE.n=0;SCORE.sum=0;SCORE.max=0;SCORE.hsum=0;const sc=document.getElementById('score');if(sc)sc.textContent='';DEV.kbd.col=IN.col;DEV.kbd.psiRef=S.eul[2];DEV.kbd.lon=DEV.kbd.lat=DEV.kbd.ped=0;R3.cam.chasePos=null;HUD.incText='';for(const k in INC_LAST)delete INC_LAST[k];
+function uiReset(kind){afcsOff();guideReset();AFCS_UI.note=null;AFCS_UI.trail=[];AFCS_UI.base=null;AP.on=false;AP.kci=undefined;PRED.res=null;PRED.past.length=0;PRED.Tauto=6;PRED.gen++;PRED.main=null;PRED.busy=false;reset(kind);SAS.init=false;if(typeof afcsButtons==='function')afcsButtons();if(HUD.aoaMap)HUD.aoaMap.fill(NaN);SCORE.n=0;SCORE.sum=0;SCORE.max=0;SCORE.hsum=0;const sc=document.getElementById('score');if(sc)sc.textContent='';DEV.kbd.col=IN.col;DEV.kbd.psiRef=S.eul[2];DEV.kbd.lon=DEV.kbd.lat=DEV.kbd.ped=0;R3.cam.chasePos=null;HUD.incText='';for(const k in INC_LAST)delete INC_LAST[k];
   if(kind!=='pad'&&kind!=='cold')trimNow(8);
   else{/* on the ground: find the hover trim for this mass, CG and wind in fast time at 3 m,
           then put the aircraft back on the pad. Lift-off then starts with the right stick. */

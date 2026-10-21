@@ -631,33 +631,153 @@ runs on the main thread, in slices of 20 physics steps per frame, over at
 most four seconds. `P` (or the setup) switches it off; pause is on the
 space bar only.
 
-## Click to fly (2.6)
+## Click to fly (2.7: the coach leads the way; 2.6: the autopilot flew)
 
 Hold `M`: a cursor appears. With the mouse captured as the stick, the
 mouse moves the cursor and the stick stays where it is; otherwise the
 cursor is the mouse pointer. Under it the spot: in the plan view (through
 the scope's own scale and the aircraft's heading), elsewhere where the
 line of sight from the camera meets the ground (marched out to 3 km in
-steps of 3 %, then bisected; buildings' roofs count as ground), shown as a
-ring on the ground with the distance. A click (not a pedal, not a capture)
-sends the autopilot (`afcsFlyTo`, 91_assist.js): HOV is engaged with the
-spot as its target and `AFCS.go` set; ALT, unless ALT or V/S is on, holds
-the height above the ground at the spot as it is here now (at least 2 m;
-an ALT already on is only raised to clear 2 m there); HDG is engaged and
-turns the nose into the way while the spot is more than 25 m off
-(`afcsGoStep`, 70_pilot.js). On the way HOV commands a ground velocity
-towards the spot instead of its position loop: 4 m/s plus 1 m/s per 40 m,
-at most 10 m/s, limited so that it stops at 0.6 m/s² and to 0.4 m/s per
-metre near the spot; within 3 m the ordinary HOV hold takes the spot.
-Refused above 40 kt, on the ground, during a tutor lesson and beyond 2 km.
-The predictor runs the same layer, so the band shows the way. Moving a
-control takes it back like any mode (`AFCS.go` goes with HOV).
+steps of 3 %, then bisected; buildings' roofs count as ground), shown with
+its distance and the tutor's column standing there faintly. The wheel
+steps the target's height above the ground there through 10 (the ground:
+a hover at 3 m, the height of the tutor's targets), 25, 50, 100, 150, 200,
+300, 500, 750, 1000, 1500 and 2000 ft; it starts on the ground each time
+`M` is pressed. A click (not a pedal, not a capture) sets the target
+(`guideSet`, 92_coach.js); a right click clears it, as do a reset and a
+tutor lesson. An engaged autopilot lets go of every control without a
+bump: the pilot flies.
 
-Measured (`test/handling.js`, from a 3 m hover): a spot 128 m away is
-reached within 2 m after 22 s, 0.15 m off and still at 60 s, 7.4 m/s at
-most on the way, the height kept within 0.1 m, the nose within 10° of the
-way; a 15 m hop keeps the heading. From 1000 ft a spot 361 m away: 47 s,
-0.16 m, height kept.
+The target is the goal of the coach's shadow autopilot (`guideGoals`), which
+otherwise holds "stand still". Its proportional corrections are the arrows,
+as for the hover coach, in gold (`GUIDE_COL`, the column's colour); they
+show with the coach switched off too. The goals:
+
+- **Along the way** the ground speed toward the target is 4 m/s plus 1 m/s
+  per 30 m, at most 41 m/s (80 kt), limited so that it stops at
+  0.6 m/s² (√(1.2·(d − 1.5))) and to 0.4 m/s per metre near the target.
+  Below 30 kt IAS (the coach's hover regime) it is a velocity over the
+  ground in the hover law, so the wind does not matter, each step asked
+  for at most 2 m/s from the present velocity (about 7° of attitude);
+  with the target more than 25 m off the nose is turned into the way,
+  and while it is more than 45° off the speed is held at 4 m/s. Above
+  30 kt the coach's cruise law: an airspeed that makes good that ground
+  speed (the present IAS plus the ground-speed error, at most ±3 m/s) and
+  a heading that keeps the track on the bearing (the bearing plus the
+  present drift angle, at most ±29°), which the cruise law turns into
+  bank. Within 3 m the tutor's position hold takes over.
+- **Up and down**: the straight line from here to the target, lifted
+  over a hill on it: sixteen points along the line, from 10 m out to 20 m
+  short of the target, must clear the ground by the height there would
+  be over flat ground (the present and the target height above the
+  ground, interpolated, 3 to 15 m). The vertical speed asked for is the
+  ground speed along the way times the slope of that line, within 15 m
+  of the target 0.3 /s of the height still to go; descents at most
+  2.5 m/s (500 fpm) at low speed against vortex ring, 5 m/s from 40 kt,
+  climbs 2.5 and 4 m/s. Where the line is steeper than that allows, the
+  speed along is held back so that the height can follow (at least
+  3 m/s).
+- **Reached**: within 3 m, 1.5 m of the height, slower than 0.8 m/s and
+  0.5 m/s vertically for 2 s, or landed within 6 m of a ground target
+  with the collective down. The target is then cleared, the column fades
+  over 2.5 s, and the coach is the green "stand still" again.
+- **On the ground** the only arrow is the collective's: lift off.
+- The coach learns the trim attitude only while the speed is steady
+  (less than 0.3 m/s² of acceleration, smoothed over 0.5 s) on the way:
+  a flare held for half a minute would otherwise be learned as the trim
+  and ask for ever more nose-up.
+
+Shown: the tutor's column at the target (`guideGL` in the 3D pass; for a
+point in the air from the ground to 6 m above it, with a ring of 4.5 m at
+the height), fading for 2.5 s when reached or cleared; a gold diamond with
+the distance where the target is when the column is too far to see (more
+than 40 m off, or 15 m above or below); a gold bug on the heading tape at
+the target's bearing (a pointer at the tape's end beyond ±57°) and left
+of the tape the distance, the height to go and the time at the present
+speed; the target in the plan view, with a pointer at the edge beyond its
+scale, which takes the target into its range up to 1.7 km.
+
+Measured (`test/handling.js`, a pilot who only follows the arrows: the
+mouse stick moved at 3 /s of the stick arrow, the collective at twice the
+arrow plus its integral, a pedal key while the pedal arrow is out): a
+ground target 150 m away from a 3 m hover is reached after 32 s, 0.4 m
+off and 0.2 m off the height, 8 m/s at most; a point 300 m ahead at
+100 ft after 46 s, 0.4 m off the height; from cruise (100 kt, about
+1500 ft) a ground target 2 km off 60° to the right after 127 s, 28° of
+bank and 6.3 m/s of sink at most (1000 fpm asked); straight down from the
+high hover after 126 s with 2.9 m/s of sink at most (500 fpm asked). The
+first arrows point the right way: stick forward for a target ahead,
+pedal for one behind, collective in for one above, bank right in cruise
+for one to the right, collective in on the pad.
+
+## Sound (2.8, 2.8.1)
+
+Web Audio (`src/97_sound.js`), started on the first click; every source is
+synthesised from the model's state and updated every frame
+(`setTargetAtTime`, 50 ms).
+
+- **Main rotor**: an oscillator at the rotor speed (6.6 Hz at 100 % NR)
+  with a custom waveform: a negative pressure pulse per blade passage
+  (thickness noise), so the energy lies at the harmonics of the blade
+  passage (26.3 Hz), with a little once-per-rev between them (blades
+  never quite alike) that makes the beat uneven. The thump's harmonics
+  follow n^1.5·e^(−n/2) (n the harmonic of the blade passage: the most at
+  the 2nd and 3rd, 53 and 79 Hz; 2.8.1: n^1.5·e^(−n/1.7)); the slap's
+  n·e^(−n/9) (out to 1 kHz), crossfaded by a slap factor: descending
+  200 to 700 fpm at μ 0.04 to 0.22 (30 to 90 kt, blade-vortex
+  interaction), vortex ring, μ above 0.30 (the advancing tip). Level
+  ∝ (Ω/Ω₀)²·(0.3 + 0.7·T/W). Under it band-passed noise at 480 Hz
+  pulsing with each blade passage (the swish), and since 2.8.1 the
+  body: noise at 180 Hz pulsing with it, a soft whoosh.
+- **Fenestron**: mostly noise in two narrow bands (Q 6) at the blade
+  passage (587 Hz at 100 % NR) and its double, as the blades' turbulent
+  wakes smear the tones; under it, quieter, an oscillator at its rotor
+  speed (8.91 × Ω, 58.7 Hz) whose waveform is the pulse train of ten
+  blades at uneven angles (2πj/10 + 0.15·sin(2πj/10)): the 10th harmonic
+  gives way to the 9th to 12th, as the published reason for the uneven
+  spacing says, low-passed at 0.7 to 2 kHz. Louder and brighter with its
+  thrust; the duct's broadband rush at 1.8 kHz.
+- **Turbines**: per engine four partials (1, 0.25, 0.07, 0.02) of 920 Hz × N1 (570 Hz at
+  idle, the start sweeping up from nothing), a narrow hiss an octave up;
+  engine 2 runs 0.16 % faster, a beat of about 1 Hz; the exhaust roar
+  (noise below 240 Hz) on power.
+- **Main gearbox**: narrow bands of noise (Q 25) at 705, 1062 and
+  1868 Hz × NR (typical of the class; the type's own numbers are not
+  published), louder with FLI, quiet, in the cabin only.
+- **Nothing steady**: three slow random wanderings (τ 0.4 s) move the
+  rotor's level (±12 %), the Fenestron's level (±20 %) and its pitch
+  (±0.3 %).
+- **Air**: noise low-passed at 400 Hz + 12 Hz per m/s, ∝ V²; a canopy
+  hiss in the cockpit. **Ground**: skids sliding (noise at 1.1 kHz with
+  the ground speed), a touchdown (a falling 70 → 38 Hz thump and a burst
+  of noise, scaled by the sink rate above 0.25 m/s), the crash. The
+  low-NR horn as before.
+- **Where you listen**: the cockpit mixes for a headset (low-pass at
+  3.4 kHz; rotor and gearbox full, Fenestron 0.32, engines 0.45), the
+  outside views the other way (Fenestron and rotor full, gearbox 0.1); the
+  tower adds the distance (1/r beyond 25 m, air absorbing the highs:
+  16 kHz/(1 + r/150 m)) and the Doppler factor 343/(343 + ṙ). Then a
+  soft limiter and the volume (setup, 70 %).
+
+2.8 rang like metal: its Fenestron and gearbox were pure tones, steady to
+the hertz, the gearbox's rung by the blade passage, and the whole mix
+6 to 12 dB(A) louder than 2.7 at the same setting. 2.8.1 makes them
+narrow bands of noise and lets everything wander a little; measured on
+the rendered sound, the spectral flatness between 250 Hz and 4 kHz
+(0 dB noise, very negative pure tones) is −11 to −13 dB in flight
+(2.7: −12 to −14, 2.8: −16 to −20) at the loudness of 2.7 (−40 dB(A)
+in the cockpit hover; 2.8: −33).
+
+`test/soundshot.py` renders the graph offline (an OfflineAudioContext,
+the model stepped in fast time, the parameters updated every 23 ms) for
+hover in the cockpit and outside, cruise, a descent with slap, a flyby
+of the tower, an engine start and a landing; it writes WAV files and
+spectrograms and checks the level (−40 to −6 dBFS RMS, no clipping, no
+NaN), the headset (6 dB less above 4 kHz in the cockpit than outside),
+the touchdown and the Doppler shift (a flyby at 51 m/s, 62 m from the
+tower: the pitch going away 0.767 × the pitch coming, 0.77 expected).
+`--before OTHER.html` renders another build alongside for listening,
+`--solo rot|fen|eng|gbx|air|gnd` one source alone.
 
 ## Flying it
 
@@ -762,6 +882,8 @@ test/lib/patch.js               EC135_PATCH hook used by the mutation test
 test/golden.json                golden values for the REG checks
 test/loadfull.js                loads every module (browser code included) with DOM stubs
 test/browser.py                 headless Chromium smoke test (playwright)
+test/uishot.py                  the README screenshots
+test/soundshot.py               the sound rendered offline: WAV files, spectrograms, checks
 ```
 
 `python3 build.py` after every change to `src/`. The harness reads the

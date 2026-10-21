@@ -84,7 +84,7 @@ function inputInit(stage){
   stage.addEventListener('contextmenu',e=>e.preventDefault());
   stage.addEventListener('mousedown',e=>{
     if(!(e.target===stage||e.target.id==='ovl'||e.target.id==='world'))return;   // clicks on the welcome card or the setup panel are not the hand
-    if(AIM.on){if(e.button===0)aimClick();e.preventDefault();return;}   // click to fly: the click picks the spot (not a pedal, not a capture)
+    if(AIM.on){aimClick(e.button);e.preventDefault();return;}   // click to fly: left sets the target, right clears it (not a pedal, not a capture)
     if(e.button===0&&!DEV.mouse.armed&&!DEV.look.on&&cfg.mouse){mouseArm(stage);return;}   // capture the pointer; the stick starts neutral
     if(!DEV.mouse.armed)return;
     if(e.button===0)DEV.mouse.l=true;if(e.button===2)DEV.mouse.r=true;if(e.button===1){e.preventDefault();lookStart();}});
@@ -92,6 +92,7 @@ function inputInit(stage){
   stage.addEventListener('mousedown',e=>{DEV.mouse.down=true;soundStart&&soundStart();});
   window.addEventListener('mouseup',()=>{DEV.mouse.down=false;});
   stage.addEventListener('wheel',e=>{if(e.target&&e.target.closest&&e.target.closest('#apMenu,#setup'))return;   // a panel scrolls, the lever stays
+    if(AIM.on){aimWheel(e.deltaY*(e.deltaMode===1?33:e.deltaMode===2?400:1));e.preventDefault();return;}   // click to fly: the wheel sets the target's height
     DEV.kbd.col=clamp(DEV.kbd.col-e.deltaY*0.0004,0,1);DEV.wheel=true;e.preventDefault();},{passive:false});
   window.addEventListener('gamepadconnected',e=>{DEV.pad=e.gamepad.index;PAD.connectedT=performance.now();});
   padLoad();
@@ -135,9 +136,8 @@ function inputStep(dt){
     ov.lon=Math.max(0,ov.lon-dt*0.08)+(H_.lon?Math.abs(DEV.mouse.vy):0);ov.lat=Math.max(0,ov.lat-dt*0.08)+(H_.lat?Math.abs(DEV.mouse.vx):0);
     if(H_.col&&((k.KeyW||k.KeyS)||DEV.wheel||Math.abs(gColRate)>0.15||(gColPos!==null&&padActive)))afcsPilotTakes('col');
     if(H_.ped&&((k.KeyA||k.KeyD)||(cfg.mouseButtons&&DEV.mouse.armed&&(DEV.mouse.l||DEV.mouse.r))||Math.abs(gPed)>0.15))afcsPilotTakes('ped');
-    const mth=AFCS.go?0.08:0.016;   // on a click-to-fly trip the mouse must be moved on purpose (~130 px) to take the stick back
-    if(H_.lon&&(k.ArrowUp||k.ArrowDown||Math.abs(gLon)>0.15||ov.lon>mth))afcsPilotTakes('lon');
-    if(H_.lat&&(k.ArrowLeft||k.ArrowRight||Math.abs(gLat)>0.15||ov.lat>mth))afcsPilotTakes('lat');}
+    if(H_.lon&&(k.ArrowUp||k.ArrowDown||Math.abs(gLon)>0.15||ov.lon>0.016))afcsPilotTakes('lon');
+    if(H_.lat&&(k.ArrowLeft||k.ArrowRight||Math.abs(gLat)>0.15||ov.lat>0.016))afcsPilotTakes('lat');}
   DEV.wheel=false;
   // ---- collective
   let colKey=(k.KeyW?1:0)-(k.KeyS?1:0);

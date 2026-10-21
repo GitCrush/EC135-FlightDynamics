@@ -1,5 +1,33 @@
 # Changelog
 
+## 2.8.1 — 2026-10-21 · No more metal
+
+- **2.8 rang like metal.** The Fenestron and the gearbox were pure tones, steady to the hertz, the gearbox's rung by every blade passage, and the whole mix was 6 to 12 dB(A) louder than 2.7. Now the Fenestron's whine is mostly noise in narrow bands at its blade passage and the double (the blades' wakes smear the tones), its pure tone quieter and darker; the gearbox is a quiet whine of narrow noise bands, in the cabin only; the turbines have four partials instead of eight; the rotor's thump is softer, with a whoosh under it; nothing is quite steady (the rotor's and the Fenestron's level and the Fenestron's pitch wander a little); the mix is back at the loudness of 2.7.
+- Measured on the rendered sound: spectral flatness 250 Hz to 4 kHz −11 to −13 dB in flight (2.7: −12 to −14; 2.8: −16 to −20, the ringing), −40 dB(A) in the cockpit hover (2.7: −39; 2.8: −33).
+- `test/soundshot.py --solo` renders one source alone.
+
+## 2.8 — 2026-10-21 · The sound, from the blades up
+
+- **Main rotor**: a pressure pulse at every blade passage instead of noise with a sine on it: the thump (its harmonics peaking at 79 Hz, so small speakers play it), unevenly, as four blades never quite alike; descending at 30 to 90 kt, in vortex ring and at high speed the pulses turn sharp (the slap); the blades' swish pulsing with them.
+- **Fenestron**: ten unevenly spaced blades, as in the EC135: the tone spread over sidebands, a buzz rather than a whistle; brighter and louder with its thrust, over the rush of the duct.
+- **Turbines**: the whine on N1 (the start sweeps it up from nothing), the exhaust roar on power, a slow beat between the two engines. **Main gearbox**: its mesh tones, loudest in the cabin.
+- **Where you listen**: the cockpit through a headset (muffled highs, thump and gearbox); outside the Fenestron and the engines; from the tower the distance and the Doppler shift of a passing aircraft.
+- **The ground**: a thump at touchdown (with the sink rate), the skids sliding, the crash.
+- **Volume** in the setup (70 % by default), a soft limiter before it.
+
+Tests: `test/soundshot.py` renders the sound offline for eight situations (WAV files and spectrograms) and checks level, clipping, the headset and the Doppler shift; the browser test builds the live graph in every view.
+
+## 2.7 — 2026-10-21 · Click to fly leads, you fly
+
+- **Click to fly is guidance now, not the autopilot.** Hold `M`, point, click: the tutor's column stands at the target, and the coach's arrows turn gold and lead you there on the direct way: the speed to fly (up to 80 kt far away, so that you can stop at 0.6 m/s²), the nose into the way, the bank in cruise, the straight line down or up to the target (lifted over a hill on the way, 500 fpm down at most at low speed), then stop over it. Over it and still for 2 s, the column fades and the arrows are green again. You fly; nothing is driven, and an engaged autopilot lets go when a target is set. The arrows show with the coach off too.
+- **A point in the air**: while aiming, the wheel lifts the target from the ground (a hover at 10 ft, as in the lessons) up to 2000 ft above the ground; the column reaches up to it, with a ring at the height.
+- **Where it is**: a gold bug on the heading tape with the distance, height to go and time beside it, the target in the plan view (a pointer at the edge beyond its scale), and a gold diamond with the distance when the column is too far to see.
+- A right click while holding `M` clears the target; a reset and a tutor lesson do too. It is no longer refused above 40 kt, on the ground (the arrow says lift off) or beyond 2 km.
+- The coach learns the trim attitude on the way only while the speed is steady.
+- Removed: the autopilot's click-to-fly trip (`AFCS.go`, `afcsGoStep`, `afcsFlyTo`) and the higher override threshold it needed.
+
+Tests: a pilot who only follows the arrows reaches a ground target 150 m away (32 s), a point 300 m ahead at 100 ft (46 s), a ground target 2 km off from cruise at 1500 ft (127 s, at most 6.3 m/s of sink with 1000 fpm asked) and the ground straight below the high hover (126 s, at most 2.9 m/s of sink with 500 fpm asked); the first arrows point the right way; setting, clearing, the wheel, the autopilot letting go, refused in a lesson; in the browser: M, wheel, click, right click.
+
 ## 2.6.1 — 2026-10-20 · A real panel, click to fly that holds
 
 - **Click to fly works with the mouse as the stick.** A mode that takes the cyclic counted the deflection the mouse stick had at that moment as the pilot moving it, and the mouse stick is never quite centred: HOV, IAS and click to fly let go again at once ("HOV off: you have the cyclic"). Now the mouse stick is centred on that axis when a mode takes it; on a click-to-fly trip it takes a deliberate movement (~130 px) to take the stick back. The cursor names the reason when a spot cannot be flown to (on the ground, too fast, in a lesson, too far).

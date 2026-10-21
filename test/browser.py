@@ -70,17 +70,25 @@ async def main():
         print('predictor',pr,ph)
         bad=pr['mode']!='worker' or pr['T']!=30 or pr['end']<29 or pr['verts']<100 or pr['glErr']!=0 or ph['T']!=6 or ph['end']<5.5
         print('predictor FAILED' if bad else 'predictor ok')
-        # click to fly: hold M, point at the ground ahead, click; the autopilot takes the spot
-        await pg.evaluate("()=>{uiReset('hover');cfg.view='cockpit';}");await pg.wait_for_timeout(800)
+        # click to fly: hold M, point at the ground ahead, one wheel notch up (25 ft), click; the gold arrows lead, nothing is driven;
+        # a right click while holding M clears the target
+        await pg.evaluate("()=>{uiReset('hover');cfg.view='cockpit';afcsToggle('hov',true);}");await pg.wait_for_timeout(800)
         box=await pg.evaluate("()=>{const r=R3.canvas.getBoundingClientRect();return {x:r.left,y:r.top,w:r.width,h:r.height};}")
-        await pg.mouse.move(box['x']+box['w']*0.62,box['y']+box['h']*0.55);await pg.keyboard.down('KeyM');await pg.wait_for_timeout(200)
-        await pg.mouse.move(box['x']+box['w']*0.60,box['y']+box['h']*0.52);await pg.wait_for_timeout(200)
-        aim=await pg.evaluate("()=>({on:AIM.on,pick:aimPick(AIM.x,AIM.y)})")
-        await pg.mouse.down();await pg.mouse.up();await pg.keyboard.up('KeyM');await pg.wait_for_timeout(300)
-        go=await pg.evaluate("()=>({go:AFCS.go,hov:AFCS.hov,alt:AFCS.alt,hdg:AFCS.hdg,aim:AIM.on,d:AFCS.go?Math.hypot(AFCS.go.n-S.pos[0],AFCS.go.e-S.pos[1]):0,panel:HUD.panelA})")
-        print('click to fly',aim,go)
-        bad=not aim['on'] or not aim['pick'] or not go['go'] or not go['hov'] or go['aim'] or go['d']<3 or go['panel']<0.9
+        await pg.mouse.move(box['x']+box['w']*0.62,box['y']+box['h']*0.58);await pg.keyboard.down('KeyM');await pg.wait_for_timeout(200)
+        await pg.mouse.move(box['x']+box['w']*0.60,box['y']+box['h']*0.56);await pg.mouse.wheel(0,-100);await pg.wait_for_timeout(300)
+        aim=await pg.evaluate("()=>({on:AIM.on,pick:aimPick(AIM.x,AIM.y),h:Math.round(aimH()/FT),col:DEV.kbd.col})")
+        await pg.mouse.down();await pg.mouse.up();await pg.keyboard.up('KeyM');await pg.wait_for_timeout(1500)
+        go=await pg.evaluate("()=>({on:GUIDE.on,h:Math.round(GUIDE.h/FT),d:Math.round(GUIDE.d),ap:afcsAny(),aim:AIM.on,alive:COACH.alive,panel:HUD.panelA,col0:DEV.kbd.col})")
+        await pg.keyboard.down('KeyM');await pg.wait_for_timeout(100);await pg.mouse.down(button='right');await pg.mouse.up(button='right');await pg.keyboard.up('KeyM');await pg.wait_for_timeout(200)
+        clr=await pg.evaluate("()=>({on:GUIDE.on})")
+        print('click to fly',aim,go,clr)
+        bad=not aim['on'] or not aim['pick'] or aim['h']!=25 or not go['on'] or go['h']!=25 or go['d']<3 or go['ap'] or go['aim'] or not go['alive'] or go['panel']<0.9 or abs(go['col0']-aim['col'])>1e-6 or clr['on']
         print('click to fly FAILED' if bad else 'click to fly ok')
         print('\n'.join(errs[:20]) if errs else 'no console errors after click to fly')
+        # sound: the graph builds and follows the model in every view (the page's own loop drives it) without an error
+        snd=await pg.evaluate("async()=>{cfg.sound=true;SND.on=false;soundStart();for(const v of ['cockpit','chase','tower']){cfg.view=v;await new Promise(r=>setTimeout(r,400));}cfg.view='cockpit';return {on:SND.on,state:SND.ctx&&SND.ctx.state,graph:!!(SND.rot&&SND.fen&&SND.gbx&&SND.eng),tone:Math.round(SND.tone.frequency.value)}}")
+        print('sound',snd)
+        print('sound FAILED' if not(snd['on'] and snd['graph']) else 'sound ok')
+        print('\n'.join(errs[:20]) if errs else 'no console errors after the sound')
         await b.close()
 asyncio.run(main())

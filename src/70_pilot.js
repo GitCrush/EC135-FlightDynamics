@@ -291,7 +291,7 @@ function sasApply(dt,raw){
    a mode engages without a bump. The same function runs in the motion
    predictor, which therefore shows what the engaged modes will do. */
 const AFCS={alt:false,vs:false,hdg:false,ias:false,hov:false,tAlt:0,tVs:0,tHdg:0,tIas:0,spotN:0,spotE:0,fast:false,
-  held:{col:false,lon:false,lat:false,ped:false},colRef:null,qRef:null,go:null};   // go: click to fly, the spot HOV is flying to {n,e} (2.6)
+  held:{col:false,lon:false,lat:false,ped:false},colRef:null,qRef:null};
 function afcsAny(){return AFCS.alt||AFCS.vs||AFCS.hdg||AFCS.ias||AFCS.hov;}
 function afcsChannels(f){if(f===undefined)f=AFCS.fast;return {col:AFCS.alt||AFCS.vs,lon:f?AFCS.ias:AFCS.hov,lat:f?AFCS.hdg:AFCS.hov,ped:AFCS.hdg};}
 /* which modes drive a control (for a pilot's override) */
@@ -317,29 +317,20 @@ function afcsSet(m,on){
     if(m==='ias')AFCS.tIas=Math.round(S.ias/KT);
     if(!afcsAny()){apBumpless(AP);AFCS.held={col:false,lon:false,lat:false,ped:false};AFCS.colRef=null;AFCS.qRef=null;}
   }
-  AFCS[m]=on;if(m==='hov'&&!on)AFCS.go=null;return true;}
-function afcsOff(){for(const m of ['alt','vs','hdg','ias','hov'])AFCS[m]=false;AFCS.held={col:false,lon:false,lat:false,ped:false};AP.kci=undefined;AFCS.go=null;}
-/* Click to fly (2.6): HOV flies to a spot further away. The ground speed it commands towards it grows with
-   the distance (4 m/s, up to 10 m/s from 240 m: a hover taxi, well inside the hover regime) and is limited
-   so that it can stop at 0.6 m/s² (and 0.4 m/s per metre near the spot); within 3 m the ordinary HOV hold
-   takes the spot. HDG, when on, turns the nose into the way while the spot is more than 25 m off. */
-function afcsGoStep(){const g=AFCS.go;if(!g)return;const dn=g.n-S.pos[0],de=g.e-S.pos[1],d=Math.hypot(dn,de);
-  if(d<3){AFCS.go=null;AP.posN=AFCS.spotN;AP.posE=AFCS.spotE;return;}
-  const v=Math.min(clamp(4+d/40,4,10),Math.sqrt(2*0.6*Math.max(0,d-1.5)),0.4*d);AP.posN=AP.posE=null;AP.vN=v*dn/d;AP.vE=v*de/d;
-  if(AFCS.hdg&&d>25)AFCS.tHdg=Math.atan2(de,dn);}
+  AFCS[m]=on;return true;}
+function afcsOff(){for(const m of ['alt','vs','hdg','ias','hov'])AFCS[m]=false;AFCS.held={col:false,lon:false,lat:false,ped:false};AP.kci=undefined;}
 /* One step: targets into apStep, its outputs onto the driven controls. Called after the pilot's devices
    and the stability augmentation have written IN, before the physics. Returns the channels it drove. */
 function afcsApply(dt){
-  if(!AFCS.hov)AFCS.go=null;   // the pilot took the cyclic, or HOV let go: no spot to fly to
   if(!afcsAny())return null;
   const fast=S.ias>(AFCS.fast?35:45)*KT;
-  if(fast!==AFCS.fast){AFCS.fast=fast;if(fast){AFCS.hov=false;AFCS.go=null;}else AFCS.ias=false;}   // a mode outside its speed range lets go
+  if(fast!==AFCS.fast){AFCS.fast=fast;if(fast)AFCS.hov=false;else AFCS.ias=false;}   // a mode outside its speed range lets go
   if(S.onGround&&S.ctl.col<0.15)AFCS.tAlt=S.alt;   // on the ground: no height to hold
   const ch=afcsChannels();
   AP.on=true;AP.auto=false;AP.pOnly=false;AP.freezeInt=false;AP.mode=fast?'cruise':'hover';
   AP.alt=AFCS.alt?AFCS.tAlt:null;AP.vs=AFCS.vs?AFCS.tVs:S.vs;AP.kci=AFCS.vs?0.014:0.004;   // a set rate is captured within ~5 s
   AP.hdg=AFCS.hdg?AFCS.tHdg:S.eul[2];AP.ias=AFCS.ias?AFCS.tIas:S.ias/KT;
-  if(!fast&&AFCS.hov){AP.posN=AFCS.spotN;AP.posE=AFCS.spotE;if(AFCS.go){afcsGoStep();AP.hdg=AFCS.hdg?AFCS.tHdg:S.eul[2];}}
+  if(!fast&&AFCS.hov){AP.posN=AFCS.spotN;AP.posE=AFCS.spotE;}
   else{AP.posN=AP.posE=null;const vN=mrot(qmat(S.q),S.vb);AP.vN=vN[0];AP.vE=vN[1];}
   for(const k of ['col','lon','lat','ped'])if(ch[k]&&!AFCS.held[k])afcsSync(k);   // a channel just taken over: from the control as it is
   AFCS.held=ch;

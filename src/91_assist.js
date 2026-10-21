@@ -74,7 +74,7 @@ function afcsTargetText(m){const f=AFCS.fast;
   if(m==='alt'){const st=f?10:1;return Math.round((AFCS.tAlt-(S.alt-S.hAGL))/FT/st)*st+' ft';}
   if(m==='vs'){const v=Math.round(AFCS.tVs/FPM);return (v>0?'+':'')+v+' fpm';}
   if(m==='hdg')return hdgText(AFCS.tHdg);if(m==='ias')return Math.round(AFCS.tIas)+' kt';
-  if(m==='hov'){const d=Math.hypot(AFCS.spotN-S.pos[0],AFCS.spotE-S.pos[1]);if(AFCS.go)return 'flying to the spot, '+(d<100?d.toFixed(0):Math.round(d/10)*10)+' m';return d<0.5?'over the spot':d.toFixed(1)+' m to the spot';}return '';}
+  if(m==='hov'){const d=Math.hypot(AFCS.spotN-S.pos[0],AFCS.spotE-S.pos[1]);return d<0.5?'over the spot':d.toFixed(1)+' m to the spot';}return '';}
 const hdgText=a=>String(Math.round(((a*RAD)%360+360)%360)%360).padStart(3,'0')+'°';
 /* Called every frame after the devices and the SAS have written IN, before the physics. */
 function afcsStep(dt){
@@ -211,52 +211,3 @@ function afcsGauge(x,k,gx,gy,w,h,v,g,trail,col){
   if(g!==null&&g!==undefined){const q=P(g);x.strokeStyle='#e8e2d6';x.lineWidth=1.5;x.beginPath();x.arc(q[0],q[1],4,0,7);x.stroke();}
   x.fillStyle='#ffffff';if(k==='v')x.fillRect(gx+4,p[1]-1.5,w-8,3);else if(k==='h')x.fillRect(p[0]-1.5,gy+4,3,h-8);else{x.beginPath();x.arc(p[0],p[1],4,0,7);x.fill();}}
 
-/* ═══ Click to fly (2.6) ═══
-   Hold M: a cursor appears (with the mouse captured as the stick it is moved by the mouse while the stick
-   stays where it is; otherwise it is the mouse pointer). Under it the spot on the ground (along the line
-   of sight) or in the plan view, with its distance. A click there: HOV flies to it and hovers (70_pilot.js
-   afcsGoStep), ALT holds the height above the ground there, HDG turns the nose into the way when the spot
-   is more than 25 m off. What the autopilot does with each control shows as always: its lanes at the left,
-   its hand on the control indicator, the predicted path. Moving a control takes it back. Releasing M
-   without a click changes nothing. */
-const AIM={on:false,x:0,y:0,locked:false};
-function aimStart(){if(AIM.on)return;AIM.on=true;AIM.locked=!!DEV.mouse.armed;if(AIM.locked||!AIM.x){AIM.x=R3.w/2;AIM.y=R3.h*0.42;}}
-function aimStop(){AIM.on=false;}
-function aimMove(dx,dy,sx,sy){if(AIM.locked){AIM.x=clamp(AIM.x+dx,0,R3.w);AIM.y=clamp(AIM.y+dy,0,R3.h);}else{AIM.x=sx;AIM.y=sy;}}
-/* the spot under a point of the view: in the plan view, or where the line of sight meets the ground */
-function aimPick(sx,sy){
-  if(cfg.hud&&cfg.predict&&typeof SCOPE!=='undefined'&&SCOPE.cur){const L=PANEL.lay,[cx,cy,R]=L?[L.nav.plan.cx*L.s,L.nav.plan.cy*L.s,L.nav.plan.R*L.s]:cfg.view==='cockpit'?[-1e4,-1e4,0]:hudPlanPos(R3.w,R3.h);
-    if(Math.abs(sx-cx)<=R+8&&Math.abs(sy-cy)<=R+8){const k=R/SCOPE.cur.sc,al=-(sy-cy)/k,ac=(sx-cx)/k,c=Math.cos(S.eul[2]),s=Math.sin(S.eul[2]);return {n:S.pos[0]+al*c-ac*s,e:S.pos[1]+al*s+ac*c,src:'plan'};}}
-  if(cfg.view==='cockpit'&&HUD.panelA>0.5&&sy>HUD.panelTop)return null;   // the instrument panel
-  const c=R3.cam;if(!c.f)return null;const r=vnorm(vcross(c.f,c.u)),uu=vcross(r,c.f),ty=Math.tan(c.fov/2),tx=ty*R3.w/R3.h,xn=sx/R3.w*2-1,yn=1-sy/R3.h*2;
-  const d=vnorm(vadd(c.f,vadd(vscl(r,xn*tx),vscl(uu,yn*ty)))),under=t=>{const p=vadd(c.pos,vscl(d,t));return p[2]>=-terrainH(p[0],p[1]);};
-  let t0=0.3,t=0.3;if(under(t0))return null;
-  while(t<3000){t=Math.max(t*1.03,t+0.4);if(under(t))break;t0=t;}if(t>=3000)return null;
-  for(let i=0;i<24;i++){const m=(t0+t)/2;if(under(m))t=m;else t0=m;}
-  const p=vadd(c.pos,vscl(d,t));return {n:p[0],e:p[1],src:'view'};}
-function aimClick(){const p=aimPick(AIM.x,AIM.y);if(!p){afcsNote('Click to fly: point at the ground or into the plan view');return false;}return afcsFlyTo(p.n,p.e);}
-/* why click to fly would refuse this spot now ('' when it would go) */
-function afcsFlyCheck(n,e){if(afcsBlocked())return 'stop the tutor lesson first (Q)';if(S.ias>40*KT)return 'slow down below 40 kt first';if(S.onGround)return 'lift into the hover first';
-  if(Math.hypot(n-S.pos[0],e-S.pos[1])>2000)return 'at most 2 km away';const vN=mrot(qmat(S.q),S.vb);if(!AFCS.hov&&Math.hypot(vN[0],vN[1])>20*KT)return 'slow below 20 kt over the ground first';return '';}
-function afcsFlyTo(n,e){
-  const why=afcsFlyCheck(n,e);if(why){afcsNote('Click to fly: '+why);return false;}
-  const d=Math.hypot(n-S.pos[0],e-S.pos[1]);
-  const before=afcsAny()?afcsChannels():NONE_HELD();if(!afcsAny()){AFCS_UI.base=null;AFCS_UI.trail=[];}
-  if(!AFCS.hov&&!afcsSet('hov',true)){afcsNote('Click to fly: too fast over the ground (more than 20 kt)');return false;}
-  AFCS.spotN=n;AFCS.spotE=e;AFCS.go={n,e};
-  const hold=terrainH(n,e)+1.3+Math.max(2,S.hAGL);   // the height above the ground there as it is here now (at least 2 m)
-  if(!AFCS.alt&&!AFCS.vs){afcsSet('alt',true);AFCS.tAlt=hold;}else if(AFCS.alt)AFCS.tAlt=Math.max(AFCS.tAlt,terrainH(n,e)+1.3+2);
-  if(!AFCS.hdg)afcsSet('hdg',true);AFCS.tHdg=d>25?Math.atan2(e-S.pos[1],n-S.pos[0]):S.eul[2];
-  afcsReleased(before);if(typeof afcsButtons==='function')afcsButtons();
-  afcsNote(`Click to fly: ${Math.round(d)} m. It flies there and hovers; move a control to take it back`,AFC_COL.hov);return true;}
-function aimDraw(x){
-  if(!AIM.on)return;const W=R3.w,X=AIM.x,Y=AIM.y,p=aimPick(X,Y),col=AFC_COL.hov;
-  x.save();x.textBaseline='middle';
-  if(p&&p.src==='view'){let pr=null;const rr=Math.max(3,10*pgPx([p.n,p.e,-terrainH(p.n,p.e)]));x.strokeStyle=col;x.lineWidth=2;x.beginPath();   // the spot on the ground: a ring of 3 m (at least ~10 px)
-    for(let k=0;k<=32;k++){const a=k/32*2*Math.PI,q=project([p.n+rr*Math.cos(a),p.e+rr*Math.sin(a),-terrainH(p.n,p.e)-0.1]);if(!q){pr=null;continue;}if(pr)x.lineTo(q[0],q[1]);else x.moveTo(q[0],q[1]);pr=q;}x.stroke();}
-  x.strokeStyle=p?col:'rgba(232,226,214,0.8)';x.lineWidth=1.5;x.beginPath();x.arc(X,Y,9,0,7);x.moveTo(X-18,Y);x.lineTo(X-5,Y);x.moveTo(X+5,Y);x.lineTo(X+18,Y);x.moveTo(X,Y-18);x.lineTo(X,Y-5);x.moveTo(X,Y+5);x.lineTo(X,Y+18);x.stroke();
-  const why=p?afcsFlyCheck(p.n,p.e):'',txt=p?(why?why:`fly here · ${Math.round(Math.hypot(p.n-S.pos[0],p.e-S.pos[1]))} m`):'no ground here';x.font='bold 12px "Arial Narrow",sans-serif';const tw=x.measureText(txt).width;
-  x.fillStyle='rgba(13,12,10,0.75)';x.fillRect(X+14,Y+12,tw+12,20);x.fillStyle=p&&!why?col:why?HUD_COL.amber:'rgba(232,226,214,0.8)';x.textAlign='left';x.fillText(txt,X+20,Y+22);
-  const hint='CLICK TO FLY · click a spot on the ground or in the plan view · release M to cancel';x.font='13px "Arial Narrow",sans-serif';const hw=x.measureText(hint).width;
-  x.fillStyle='rgba(13,12,10,0.75)';x.fillRect(W/2-hw/2-10,70,hw+20,22);x.fillStyle=col;x.textAlign='center';x.fillText(hint,W/2,81);
-  x.restore();}

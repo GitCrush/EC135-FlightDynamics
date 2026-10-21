@@ -314,7 +314,7 @@ function scopeSnap(){
   const track=PD.path.slice(1).map(q=>({n:q.n,e:q.e,t:q.t,fa:q.fa,h:q.h,alt:-q.d}));
   // the scale: the path (and the hover spot) seen from the aircraft now
   let ext=4;const ex=(n,e)=>{const dn=n-S.pos[0],de=e-S.pos[1];ext=Math.max(ext,Math.abs(dn*c+de*s),Math.abs(-dn*s+de*c));};
-  for(const q of track)ex(q.n,q.e);if(AFCS.hov)ex(AFCS.spotN,AFCS.spotE);
+  for(const q of track)ex(q.n,q.e);if(AFCS.hov)ex(AFCS.spotN,AFCS.spotE);if(GUIDE.on&&Math.hypot(GUIDE.n-S.pos[0],GUIDE.e-S.pos[1])<1700)ex(GUIDE.n,GUIDE.e);   // click to fly: the target in sight, up to the 2 km scale
   const sc=[5,10,20,50,100,200,500,1000,2000].find(v=>v>=ext*1.1)||2000;
   // the profile's scale: near the ground the skid height, higher up the altitude around the present one
   const near=Math.min(S.hAGL,...track.map(q=>q.h))<45,hs=[S.hAGL,...track.map(q=>q.h)];
@@ -372,6 +372,7 @@ function predDrawPlan(x,cx,cy,R){
   if(f<1&&rho>1){const a=0.22*Math.pow(1-f,1.5),g=x.createRadialGradient(cx,cy,Math.max(0,rho-10),cx,cy,rho);g.addColorStop(0,'rgba(111,211,224,0)');g.addColorStop(1,`rgba(111,211,224,${(0.06*(1-f)).toFixed(3)})`);   // (2.5.4: fainter, at the user's request)
     x.fillStyle=g;x.beginPath();x.arc(cx,cy,rho,0,2*Math.PI);x.arc(cx,cy,Math.max(0,rho-10),0,2*Math.PI,true);x.fill();
     x.strokeStyle=`rgba(150,232,242,${a.toFixed(3)})`;x.lineWidth=1;x.beginPath();x.arc(cx,cy,rho,0,2*Math.PI);x.stroke();}
+  if(GUIDE.on)guideDrawPlan(x,X(rel(GUIDE.n,GUIDE.e)),Y(rel(GUIDE.n,GUIDE.e)),cx,cy,R);   // click to fly (92_coach.js): the target, live, over the ping
   // the aircraft: nose up
   x.fillStyle=HUD_COL.amber;x.beginPath();x.moveTo(cx,cy-8);x.lineTo(cx-5,cy+6);x.lineTo(cx,cy+3);x.lineTo(cx+5,cy+6);x.closePath();x.fill();
   x.fillStyle='rgba(138,130,116,0.95)';x.font='11px "Arial Narrow",sans-serif';x.textAlign='left';

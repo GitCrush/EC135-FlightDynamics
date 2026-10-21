@@ -5,7 +5,7 @@ const cfg={
   sas:true, attHold:true, hdgHold:true, hoverAssist:false, assistK:1,   // stability augmentation (training aids); assistK blends hover assist with the raw stick
   kbdCol:'metered', kbdPed:'heading', pedRate:25,            // keyboard pilot models; yaw rate per pedal key, °/s
   mouse:true, mouseMode:'stick', mouseTravel:1600, mouseButtons:true, padDead:0.06,   // px of mouse movement for full stick (real stick: 80 mm lateral, 108 mm longitudinal per side)
-  view:'cockpit', hud:true, rotorDisc:true, fpm:true, predict:true,predictT:'auto', sound:true, cloud:0.4,
+  view:'cockpit', hud:true, rotorDisc:true, fpm:true, predict:true,predictT:'auto', sound:true,volume:70, cloud:0.4,
   engFail:'none',
 };
 const IN={col:0.45,lon:0,lat:0,ped:0,             // controls after the pilot models, [0..1] / [-1..1]

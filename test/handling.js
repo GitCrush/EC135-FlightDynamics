@@ -127,20 +127,10 @@ console.log('\n■ Motion predictor: the model flown ahead with the controls hel
  /* over 30 s in cruise, controls held: against the flight */
  C.predStep(true);const p=C.predAt(30),s0=C.S.pos.slice();run(C,30);
  check('cruise: prediction against the flight, 30 s',p?Math.hypot(p.n-C.S.pos[0],p.e-C.S.pos[1],p.d-C.S.pos[2]):99,0,3,'m');check('… along a track of',Math.hypot(C.S.pos[0]-s0[0],C.S.pos[1]-s0[1]),1200,2000,'m');}
-{/* click to fly: HOV flies to a spot 128 m away and hovers there; ALT keeps the height, HDG turns the nose into the way */
- const F=fresh('hover');run(F,1);const n=F.S.pos[0]+100,e=F.S.pos[1]+80,h0=F.S.hAGL;check('click to fly accepted',F.afcsFlyTo(n,e)?1:0,1,1,'');let tArr=null,vmax=0;
- run(F,60,null,(t)=>{const g=gs(F);vmax=Math.max(vmax,g);if(tArr===null&&Math.hypot(F.S.pos[0]-n,F.S.pos[1]-e)<2)tArr=t;});
- check('… within 2 m of the spot after',tArr===null?99:tArr,10,35,'s');check('… at 60 s: off the spot',Math.hypot(F.S.pos[0]-n,F.S.pos[1]-e),0,0.5,'m');check('… and still',gs(F),0,0.3,'m/s');
- check('… fastest on the way',vmax,5,11,'m/s');check('… height kept',Math.abs(F.S.hAGL-h0),0,1,'m');check('… nose turned into the way (heading)',Math.abs(wrap(F.S.eul[2]*F.RAD-Math.atan2(80,100)*F.RAD)),0,15,'deg');
- /* a short hop keeps the heading; the stick takes it back; not at speed */
- const G=fresh('hover');run(G,1);const p0=G.S.eul[2];G.afcsFlyTo(G.S.pos[0]-12,G.S.pos[1]+9);run(G,3);check('short hop: heading kept',Math.abs(wrap((G.S.eul[2]-p0)*G.RAD)),0,3,'deg');
- G.DEV.keys.ArrowLeft=true;run(G,0.4);G.DEV.keys.ArrowLeft=false;check('… the stick takes it back (HOV off, no spot)',(!G.AFCS.hov&&!G.AFCS.go)?1:0,1,1,'');
- const C=fresh('cruise');check('click to fly refused at 100 kt',C.afcsFlyTo(C.S.pos[0]+500,C.S.pos[1])?1:0,0,0,'');}
 {/* with the mouse as the stick (never quite centred) a mode on the cyclic stays on: until 2.6 the deflection at the moment
-    it engaged counted as the pilot moving the stick, and HOV, IAS and click to fly let go at once */
+    it engaged counted as the pilot moving the stick, and HOV and IAS let go at once */
  const F=fresh('hover');F.DEV.mouse.armed=true;F.DEV.mouse.vx=0.06;F.DEV.mouse.vy=-0.04;run(F,1);F.afcsToggle('hov',true);run(F,1);check('mouse stick off centre: HOV stays on',F.AFCS.hov?1:0,1,1,'');
- F.afcsOffAll();F.DEV.mouse.vx=0.05;run(F,1);check('… click to fly stays on',F.afcsFlyTo(F.S.pos[0]+80,F.S.pos[1]+20)&&(run(F,1),F.AFCS.go)?1:0,1,1,'');
- F.DEV.mouse.vx=0.03;run(F,0.5);check('… a small mouse movement on the way does not end it',F.AFCS.go?1:0,1,1,'');F.DEV.mouse.vx=0.25;run(F,0.5);check('… a deliberate one does',(!F.AFCS.hov&&!F.AFCS.go)?1:0,1,1,'');F.DEV.mouse.armed=false;}
+ F.DEV.mouse.vx=0.25;run(F,0.5);check('… a deliberate movement takes it back',!F.AFCS.hov?1:0,1,1,'');F.DEV.mouse.armed=false;}
 {/* what is drawn stays calm: frames at 60 Hz, a new prediction every 100 ms delivered 50 ms later (as from the
     worker), the stick moving; the arrows on the band belong to moments of the clock and are eased, so from frame to
     frame they move by millimetres where 2.5.1's (hung at fixed times from now) jumped by decimetres */
@@ -202,5 +192,35 @@ console.log('\n■ Forward flight with the keys: accelerate, release, trim with 
 
 console.log('\n■ On the ground: arrow keys held 2 s (no tip-over)');
 {const F=fresh('pad');let mx=0;run(F,4,t=>{F.DEV.keys.ArrowRight=t<2;},()=>{mx=Math.max(mx,Math.abs(trace(F).phi));});check('max roll on the skids',mx,0,3,'deg');}
+
+console.log('\n■ Click to fly: a pilot who only follows the gold arrows reaches the target');
+/* The pilot: moves the mouse stick as long as the arrow shows (3 /s of the correction), the collective with a little lead
+   (2 × the arrow plus its integral, never slammed to the stops), and holds a pedal key while the pedal arrow is out. */
+function follower(F){const P={base:F.DEV.kbd.col,I:0};F.DEV.mouse.armed=true;
+  return ()=>{const c=F.COACH.cue,m=F.DEV.mouse,dt=F.DT;m.vx=F.sat(m.vx+c.lat*3*dt,1);m.vy=F.sat(m.vy-c.lon*3*dt,1);
+    P.I=F.clamp(P.I+c.col*dt,0.12-P.base,0.9-P.base);F.DEV.kbd.col=F.clamp(P.base+2*c.col+P.I,0.1,0.92);F.DEV.keys.KeyD=c.ped>0.15;F.DEV.keys.KeyA=c.ped<-0.15;};}
+function guided(kind,dn,de,h,sec,setup){const F=fresh(kind);if(setup)setup(F);run(F,0.5);const n=F.S.pos[0]+dn,e=F.S.pos[1]+de,ok=F.guideSet(n,e,h),R={F,ok,t:null,vmax:0,hmin:1e9,sink:0,bank:0,dh:99,d:99};const pilot=follower(F);
+  run(F,sec,pilot,t=>{if(R.t!==null)return;if(!F.GUIDE.on){R.t=t;R.d=Math.hypot(F.S.pos[0]-n,F.S.pos[1]-e);R.dh=F.S.hAGL+F.terrainH(F.S.pos[0],F.S.pos[1])-F.terrainH(n,e)-h;return;}
+    R.vmax=Math.max(R.vmax,gs(F));R.hmin=Math.min(R.hmin,F.S.hAGL);R.sink=Math.min(R.sink,F.S.vs);R.bank=Math.max(R.bank,Math.abs(F.S.eul[0]*F.RAD));});return R;}
+{const R=guided('hover',120,90,3,70);check('ground target 150 m away: set',R.ok?1:0,1,1,'');check('… reached (over it and still for 2 s) after',R.t===null?999:R.t,15,50,'s');
+ check('… then off the spot',R.d,0,3,'m');check('… and off the hover height',Math.abs(R.dh),0,1.5,'m');check('… fastest on the way',R.vmax,5,12,'m/s');check('… lowest on the way (skids)',R.hmin,2,5,'m');
+ check('… the arrows are green again (no target)',R.F.GUIDE.on?1:0,0,0,'');}
+{const R=guided('hover',300,0,100*0.3048,100);check('a point in the air, 300 m ahead at 100 ft: reached after',R.t===null?999:R.t,25,80,'s');check('… height off the target',Math.abs(R.dh),0,1.5,'m');}
+{const R=guided('cruise',1000,1732,3,240);check('from cruise (100 kt, ~1500 ft) to a ground target 2 km off, 60° right: reached after',R.t===null?999:R.t,80,200,'s');
+ check('… steepest bank on the way',R.bank,5,35,'deg');check('… fastest sink on the way (asked: 1000 fpm)',-R.sink,3,7.5,'m/s');check('… lowest before the target (skids)',R.hmin,2.5,600,'m');}
+{const R=guided('high',20,10,3,240);check('straight down to the ground from the high hover: reached after',R.t===null?999:R.t,40,200,'s');check('… fastest sink at low speed (asked: 500 fpm, vortex ring)',-R.sink,1.5,3.3,'m/s');}
+{/* what the arrows ask for at the start: the direction is right */
+ const cue=(kind,dn,de,h,sec)=>{const F=fresh(kind);run(F,0.5);F.guideSet(F.S.pos[0]+dn,F.S.pos[1]+de,h);run(F,sec||1);return F;};
+ let F=cue('hover',200,0,3);check('target 200 m ahead: stick forward (arrow)',F.COACH.cue.lon,0.06,1,'');check('… the word',F.COACH.hint==='Stick forward'?1:0,1,1,'');
+ F=cue('hover',-150,40,3);check('target behind: pedal arrow (turn)',Math.abs(F.COACH.cue.ped),0.1,1,'');
+ F=cue('hover',0,0,80);check('target straight above (80 m): collective in (arrow)',F.COACH.cue.col,0.06,1,'');
+ F=fresh('cruise');run(F,0.5);const b=F.S.eul[2]+Math.PI/2;F.guideSet(F.S.pos[0]+2000*Math.cos(b),F.S.pos[1]+2000*Math.sin(b),F.S.hAGL);run(F,1);
+ check('cruise, target 90° right: stick right (bank)',F.COACH.cue.lat,0.18,1,'');check('… the word',F.COACH.hint==='Bank right'?1:0,1,1,'');
+ F=fresh('pad');run(F,0.5);F.guideSet(F.S.pos[0]+100,F.S.pos[1],3);run(F,1);check('on the pad, collective down: collective in (lift off)',F.COACH.cue.col,0.3,0.5,'');check('… the word',F.COACH.hint==='Collective in'?1:0,1,1,'');}
+{/* setting, clearing, refusing; the autopilot lets go; the wheel picks the height */
+ const F=fresh('hover');run(F,0.5);F.afcsToggle('hov',true);F.afcsToggle('alt',true);run(F,0.5);F.guideSet(F.S.pos[0]+50,F.S.pos[1],3);check('target set with HOV and ALT on: the autopilot lets go',F.afcsAny()?1:0,0,0,'');
+ F.aimClick(2);check('… right-click while aiming clears it',F.GUIDE.on?1:0,0,0,'');F.guideSet(F.S.pos[0]+50,F.S.pos[1],3);F.uiReset('hover');check('… a reset clears it',F.GUIDE.on?1:0,0,0,'');
+ F.AIM.hi=0;F.aimWheel(-100);check('wheel up one notch: 25 ft',F.aimH()/0.3048,24.9,25.1,'ft');F.aimWheel(300);check('… down past the ground: the ground (hover 10 ft = 3 m)',F.aimH(),3,3,'m');
+ const T=fresh('hover');T.tutorStart&&T.tutorStart(3);T.TUTOR.on=true;check('refused in a tutor lesson',T.guideSet(T.S.pos[0]+50,T.S.pos[1],3)?1:0,0,0,'');}
 
 console.log(`\n${errors?errors+' ERROR(s)':'all handling checks within range'}${warns?', '+warns+' WARN':''}\n`);process.exit(errors?1:0);

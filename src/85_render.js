@@ -541,6 +541,7 @@ function buildAircraft(gl){
   const db=new MB();const dd=gDisc(0.4,5.1,40);db.add(dd.P,dd.N,[0.6,0.6,0.62],dd.I);R3.m.disc=db.upload(gl)[0];
   const sb=new MB();const sd=gDisc(0,5.2,32);sb.add(sd.P,sd.N,[0.05,0.05,0.05],sd.I);R3.m.shadow=sb.upload(gl)[0];
   const cb=new MB();const cc=gCone(0,2.2,9,2.2,16,false);cb.add(cc.P,cc.N,[1.0,0.72,0.1],cc.I);R3.m.column=cb.upload(gl)[0];   // tutor target
+  {const rb=new MB();const rc=gCone(-0.4,4.5,0.4,4.5,32,false);rb.add(rc.P,rc.N,[1.0,0.72,0.1],rc.I);R3.m.ring=rb.upload(gl)[0];}   // click to fly: the ring at a target's height in the air (92_coach.js)
   const rb=new MB();const rg=gDisc(4.2,8.5,40);rb.add(rg.P,rg.N,[0.72,0.68,0.5],rg.I);R3.m.wash=rb.upload(gl)[0];         // downwash ring
   const ph=new MB();const pl=gLoft([[3.4,0.06,0.06,0.2],[2.4,0.7,0.8,0.0],[0.8,0.8,0.9,-0.15],[-1.2,0.6,0.65,-0.25],[-2,0.4,0.4,-0.3],[-6.3,0.15,0.2,-0.4]],10);ph.add(pl.P,pl.N,[0.4,0.7,0.9],pl.I);R3.m.phantom=ph.upload(gl)[0];
 }
@@ -849,6 +850,7 @@ function render(dt){
   // (until 1.9 a pale ring stood for the downwash; ground ripples and particles show it now)
   if(UI.phantom&&UI.phantom.S){const P=UI.phantom.S;drawMesh(R3.pr.lit,R3.m.phantom,m4model(qmat(P.q),P.pos),0.45);}
   if(TUTOR.target){const [n,e]=TUTOR.target;const pulse=0.25+0.15*Math.sin(R3.time*3);drawMesh(R3.pr.lit,R3.m.column,m4model(UPX,[n,e,-terrainH(n,e)]),pulse);}
+  guideGL();   // click to fly: the target's column (92_coach.js)
   if(cfg.predict&&PRED.res){predDisplay(dt);predGL();}   // the predicted path anchored in the world and eased, the ghost (87_predict.js)
   gl.depthMask(true);gl.disable(gl.BLEND);gl.enable(gl.CULL_FACE);
   if(early){gl.depthRange(0,0.01);drawCockpitGlass();}

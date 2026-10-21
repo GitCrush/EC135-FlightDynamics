@@ -10,7 +10,7 @@ FAKEPAD='''(()=>{const pad={index:0,id:'GameSir G7 Pro (XInput STANDARD GAMEPAD)
   axes:[0.12,-0.02,0.35,-0.18],buttons:Array.from({length:17},(_,i)=>({value:i===0?1:0,pressed:i===0}))};
   navigator.getGamepads=()=>[pad,null,null,null];})();'''
 COMMON='''()=>{const w=document.getElementById('welcome');if(w)w.style.display='none';if(REPLAY.on)replayStop();UI.paused=false;UI.debrief=null;cfg.mass=2500;cfg.view='cockpit';cfg.hud=true;cfg.gfx='full';R3.soft=false;const inc=document.getElementById('inc');inc.textContent='';inc.dataset.t='';HUD.incText='';refreshTexts();cfg.sound=false;
-  coachSet('off');COACH.legendT=-1e9;UI.freeze=false;R3.cam.lockPsi=undefined;afcsOffAll();apMenuShow(false);SCOPE.fix=null;AIM.on=false;window.run=(sec,fn)=>{for(let i=0;i<sec/DT;i++){if(fn)fn(i*DT);inputStep(DT);tutorStep(DT);afcsStep(DT);coachStep(DT);step(DT);}};}'''
+  coachSet('off');COACH.legendT=-1e9;UI.freeze=false;R3.cam.lockPsi=undefined;afcsOffAll();apMenuShow(false);SCOPE.fix=null;guideReset();window.run=(sec,fn)=>{for(let i=0;i<sec/DT;i++){if(fn)fn(i*DT);inputStep(DT);tutorStep(DT);afcsStep(DT);coachStep(DT);step(DT);}};}'''
 SHOTS=[
  ('cockpit-hover','''()=>{startExercise('free');placeAt(0,0,3,205*DEG,0);trimNow(6);cfg.view='cockpit';S.vb[1]+=0.6;run(2);UI.freeze=true;}'''),
  ('cockpit-panel','''()=>{startExercise('free');placeAt(120,80,2.0,30*DEG,0);trimNow(6);cfg.hud=false;cfg.view='cockpit';run(1);UI.freeze=true;}'''),
@@ -30,9 +30,11 @@ SHOTS=[
  ('predictor-cockpit','''()=>{uiReset('cruise');cfg.view='cockpit';run(2);run(4,()=>{DEV.kbd.lat=0.22;DEV.kbd.lon=0.05;});predStep(true);UI.freeze=true;}'''),
  ('predictor-scope','''()=>{startExercise('free');placeAt(0,0,3,205*DEG,0);trimNow(6);cfg.view='cockpit';run(1);run(1.3,()=>{DEV.kbd.lon=0.06;DEV.kbd.lat=0.14;});predStep(true);render(0.016);
     const A=scopeSnap();run(0.8,()=>{DEV.kbd.lon=0;DEV.kbd.lat=-0.10;});predStep(true);render(0.016);scopeStep();SCOPE.prev=A;SCOPE.fix=0.42;UI.freeze=true;}'''),
- ('click-to-fly-aim','''()=>{startExercise('free');placeAt(0,0,3,205*DEG,0);trimNow(6);cfg.view='cockpit';run(1);predStep(true);AIM.on=true;AIM.locked=true;AIM.x=R3.w*0.66;AIM.y=R3.h*0.50;UI.freeze=true;}'''),
- ('click-to-fly','''()=>{startExercise('free');placeAt(0,0,3,205*DEG,0);trimNow(6);cfg.view='chase';R3.cam.chasePos=null;R3.cam.lockPsi=S.eul[2]-0.5;R3.cam.chasePsi=R3.cam.lockPsi;run(1);
-    const b=S.eul[2]+0.55;afcsFlyTo(S.pos[0]+90*Math.cos(b),S.pos[1]+90*Math.sin(b));run(4);for(let i=0;i<40;i++)cameraUpdate(1/30);predStep(true);UI.freeze=true;}'''),
+ ('click-to-fly-aim','''()=>{startExercise('free');placeAt(0,0,3,205*DEG,0);trimNow(6);cfg.view='cockpit';run(1);predStep(true);AIM.on=true;AIM.locked=true;AIM.hi=3;AIM.x=R3.w*0.60;AIM.y=R3.h*0.535;render(0.016);AIM.pick=aimPick(AIM.x,AIM.y);UI.freeze=true;}'''),
+ ('click-to-fly','''()=>{startExercise('free');placeAt(0,0,3,205*DEG,0);trimNow(6);cfg.view='chase';R3.cam.chasePos=null;R3.cam.lockPsi=S.eul[2]+0.15;R3.cam.chasePsi=R3.cam.lockPsi;run(1);
+    const b=S.eul[2]+0.45;guideSet(S.pos[0]+120*Math.cos(b),S.pos[1]+120*Math.sin(b),3);run(1.2);for(let i=0;i<40;i++)cameraUpdate(1/30);predStep(true);UI.freeze=true;}'''),
+ ('click-to-fly-air','''()=>{startExercise('free');placeAt(0,0,3,205*DEG,0);trimNow(6);cfg.view='cockpit';run(1);
+    const b=S.eul[2]+0.22;guideSet(S.pos[0]+260*Math.cos(b),S.pos[1]+260*Math.sin(b),300*FT);run(1.2);predStep(true);UI.freeze=true;}'''),
  ('predictor-landing','''()=>{startExercise('free');placeAt(0,0,3,205*DEG,0);trimNow(6);cfg.view='chase';R3.cam.chasePos=null;R3.cam.lockPsi=S.eul[2]+0.9;R3.cam.chasePsi=R3.cam.lockPsi;run(1);const c=IN.col-0.07;run(0.8,()=>{DEV.kbd.col=c;DEV.kbd.lat=0.05;});predStep(true);UI.freeze=true;}'''),
  ('replay','''()=>{startExercise('free');cfg.view='chase';R3.cam.chasePos=null;R3.cam.lockPsi=S.eul[2]+2.4;R3.cam.chasePsi=R3.cam.lockPsi;
     run(4,t=>{DEV.keys.ArrowRight=t>0.5&&t<1.6;});DEV.keys.ArrowRight=false;run(3,t=>{DEV.keys.KeyS=t<1.2;});DEV.keys.KeyS=false;run(4);
