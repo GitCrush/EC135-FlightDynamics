@@ -239,39 +239,140 @@ function atmo(hm,dT){
    deterministic value noise. Height is positive up. Everything that
    touches the ground (skids, tail, blade tips, ground effect) and the
    renderer read this one function, so the mesh and the physics never
-   disagree. */
+   disagree.
+   2.9, the world grows: mountains to the north (foothills from 1.6 km,
+   ridges of 700 to 900 m beyond 4 km) with a rounded summit for mountain
+   landings (the Kuppe, 2.5 km north-north-east, 260 m, a flat top of 14 m
+   radius); a hill with 8 to 12° flanks in the north-west for slope
+   landings; a river from the mountains through its valley into the lake
+   and out of it to the south-east; a small town 2.7 km to the south-west
+   with a high-rise pad and a crane; a clearing in the western forest;
+   hazy hills all round out to 7 km. */
 const TERRAIN={mound:{n:0,e:150,h:6,r:32},lake:{n:-450,e:550,r:160,h:-1.5},
-  runway:{n0:-900,n1:-100,e:-150,w:10},apron:{n:40,e:60},roads:[[-1500,-300,1500,-300],[280,-1500,280,1500]]};
+  runway:{n0:-900,n1:-100,e:-150,w:10},apron:{n:40,e:60},roads:[[-1500,-300,1500,-300],[280,-1500,280,1500]],
+  kuppe:{n:2350,e:700,h:260,top:14,R:400},hill:{n:1550,e:-950,h:42,R:170},clearing:{n:200,e:-880,r:20},
+  town:{n0:-2620,n1:-1980,e0:-1820,e1:-1180,h:0},townRoad:[-1500,-300,-2000,-1180]};
 function hash2(i,j){let x=(i*374761393+j*668265263)|0;x=(x^(x>>>13))*1274126177|0;x=x^(x>>>16);return ((x>>>0)%100000)/100000;}
 function vnoise(x,y){const i=Math.floor(x),j=Math.floor(y),fx=x-i,fy=y-j,ux=fx*fx*(3-2*fx),uy=fy*fy*(3-2*fy);
   const a=hash2(i,j),b=hash2(i+1,j),c=hash2(i,j+1),d=hash2(i+1,j+1);return (a+(b-a)*ux)*(1-uy)+(c+(d-c)*ux)*uy;}
-/* Rooftop pads: flat plateaus the physics sees (skids, blade tips, ground
-   effect) but the ground mesh does not; the renderer draws the building. */
-const BUILDINGS=[{n:-260,e:-420,w:16,l:16,h:22,pad:true}];
-function groundH(n,e){
+const rnoise=(x,y)=>{const v=1-Math.abs(2*vnoise(x,y)-1);return v*v;};   // ridged: sharp crests, broad valleys
+/* the land before the rivers cut into it */
+function groundBase(n,e){
   const r=Math.hypot(n,e);
-  const far=sm(450,1400,r);
-  let h=far*(46*(vnoise(n/520+3.1,e/520+7.3)-0.45)+14*(vnoise(n/140+1.7,e/140+2.9)-0.5)+4*(vnoise(n/45,e/45)-0.5));
-  h+=sm(2600,3900,r)*140*(0.35+0.65*vnoise(n/700+5.5,e/700+1.2));   // ridge on the horizon
+  let h=0;if(r>450){const far=sm(450,1400,r);h=far*(46*(vnoise(n/520+3.1,e/520+7.3)-0.45)+14*(vnoise(n/140+1.7,e/140+2.9)-0.5)+4*(vnoise(n/45,e/45)-0.5));   // (the physics asks some thirty times a step: nothing is computed that is not there)
+    if(r>2600)h+=sm(2600,3900,r)*140*(0.35+0.65*vnoise(n/700+5.5,e/700+1.2));}   // ridge on the horizon
+  if(n>1500){const m=sm(1600,3800,n)*(250+650*sm(2500,5500,n))*(0.55+0.45*vnoise(e/1700+3.3,n/1700+0.4));   // the mountains to the north
+    h+=m*(0.30+0.70*(0.62*rnoise(n/900+1.3,e/900+7.7)+0.38*rnoise(n/360+4.1,e/360+2.2)));}
+  if(r>4300)h+=sm(4300,6500,r)*(220*vnoise(n/1300+8.1,e/1300+2.6)+130*rnoise(n/600+1.9,e/600+6.4));   // hazy hills all round
+  const T=TERRAIN.town;if(n>T.n0-260&&n<T.n1+260&&e>T.e0-260&&e<T.e1+260){const k=sm(260,60,Math.max(T.n0-n,n-T.n1,T.e0-e,e-T.e1,0));h=lerp(h,T.h,k);}   // the town stands on level ground
+  const K=TERRAIN.kuppe,dk=Math.hypot(n-K.n,e-K.e);if(dk<K.R*3){const g=dk<K.top?1:Math.exp(-Math.pow((dk-K.top)/K.R,2));h=lerp(h,K.h,g);}   // the summit: flat on top, flanks of up to 30°
+  const Hh=TERRAIN.hill,dh=Math.hypot(n-Hh.n,e-Hh.e);if(dh<Hh.R*3)h+=Hh.h*Math.exp(-Math.pow(dh/Hh.R,2));
   h=Math.max(h,-6);
   const m=TERRAIN.mound, d2=((n-m.n)**2+(e-m.e)**2)/(2*m.r*m.r);
   h+=m.h*Math.exp(-d2);
+  return h;
+}
+/* Rivers: a Catmull-Rom line through the control points in 15 m steps, with the level of its flood plain,
+   which only falls downstream: up the inflow from the lake it rises at most 0.6 % and stays 1.6 m under the
+   land, down the outflow it falls with the land. Within 28 m beyond the water's edge the ground is the flood
+   plain (the water lies 6 cm above it); beyond that it blends back into the land over 30 m plus 2.5 m per
+   metre of height between them, at most 600 m: a valley through the hills (in the mountains the river
+   may climb 3.6 % upstream). A 200 m grid of the segments
+   near each cell keeps the lookup cheap. */
+const RIVERS=[{pts:[[3900,-260],[3300,-190],[2700,-130],[2150,-70],[1650,110],[1150,300],[700,350],[280,380],[0,450],[-220,540],[-330,585]],w:12,lake:'end'},
+  {pts:[[-560,690],[-760,900],[-1050,1120],[-1500,1250],[-2100,1300],[-2800,1450],[-3600,1700],[-4600,2000],[-6800,2500]],w:13,lake:'start'}];
+const RIV={cell:200,grid:new Map()};
+(function riverInit(){
+  for(const rv of RIVERS){const C=rv.pts,P=[];
+    for(let i=0;i<C.length-1;i++){const p0=C[Math.max(0,i-1)],p1=C[i],p2=C[i+1],p3=C[Math.min(C.length-1,i+2)],L=Math.hypot(p2[0]-p1[0],p2[1]-p1[1]),k=Math.max(1,Math.round(L/15));
+      for(let s=0;s<k;s++){const t=s/k;P.push([0,1].map(q=>0.5*(2*p1[q]+(-p0[q]+p2[q])*t+(2*p0[q]-5*p1[q]+4*p2[q]-p3[q])*t*t+(-p0[q]+3*p1[q]-3*p2[q]+p3[q])*t*t*t)));}}
+    P.push(C[C.length-1]);
+    const low=(q)=>{let m=1e9;for(const [dn,de] of [[0,0],[rv.w,0],[-rv.w,0],[0,rv.w],[0,-rv.w]])m=Math.min(m,groundBase(q[0]+dn,q[1]+de));return m-1.6;};
+    const L=new Array(P.length),lakeL=TERRAIN.lake.h+0.4;
+    if(rv.lake==='end'){L[P.length-1]=lakeL;for(let i=P.length-2;i>=0;i--){const ds=Math.hypot(P[i][0]-P[i+1][0],P[i][1]-P[i+1][1]);L[i]=Math.max(L[i+1],Math.min(L[i+1]+(0.006+0.03*sm(1600,3200,P[i][0]))*ds,low(P[i])));}}   // steeper in the mountains
+    else{L[0]=lakeL;for(let i=1;i<P.length;i++){const ds=Math.hypot(P[i][0]-P[i-1][0],P[i][1]-P[i-1][1]);L[i]=Math.min(L[i-1]-0.0003*ds,low(P[i]));}}
+    rv.P=P;rv.L=L;rv.S=[0];for(let i=1;i<P.length;i++)rv.S.push(rv.S[i-1]+Math.hypot(P[i][0]-P[i-1][0],P[i][1]-P[i-1][1]));
+    rv.R=[];for(let i=0;i<P.length-1;i++){const a=P[i],b=P[i+1],c=RIV.cell;
+      /* how far this piece reaches: out to where the land is still being blended in, sampled on both sides */
+      const mn=(a[0]+b[0])/2,me=(a[1]+b[1])/2,len=Math.hypot(b[0]-a[0],b[1]-a[1]),un=-(b[1]-a[1])/len,ue=(b[0]-a[0])/len,Lm=(L[i]+L[i+1])/2;let g=rv.w+60;
+      for(const sd of [-1,1])for(const d of [40,80,120,180,260,360,480,620])if(rv.w+28+Math.min(600,30+2.5*Math.abs(groundBase(mn+sd*un*d,me+sd*ue*d)-Lm))>d)g=Math.max(g,Math.min(d+140,rv.w+28+600));
+      rv.R.push(g+len/2);
+      for(let ci=Math.floor((Math.min(a[0],b[0])-g)/c);ci<=Math.floor((Math.max(a[0],b[0])+g)/c);ci++)for(let cj=Math.floor((Math.min(a[1],b[1])-g)/c);cj<=Math.floor((Math.max(a[1],b[1])+g)/c);cj++){
+        if(Math.hypot((ci+0.5)*c-mn,(cj+0.5)*c-me)>g+len/2+c*0.71)continue;const key=ci*100003+cj;let l=RIV.grid.get(key);if(!l){l=[];RIV.grid.set(key,l);}l.push([rv,i]);}}}
+})();
+/* the nearest river line: distance, the flood plain's level there, the half width of the water, how far along */
+function riverAt(n,e){const l=RIV.grid.get(Math.floor(n/RIV.cell)*100003+Math.floor(e/RIV.cell));if(!l)return null;let best=null,bd=1e18;
+  for(const [rv,i] of l){const a=rv.P[i],b=rv.P[i+1],R=rv.R[i];if(Math.abs(n-(a[0]+b[0])/2)>R||Math.abs(e-(a[1]+b[1])/2)>R)continue;const bx=b[0]-a[0],by=b[1]-a[1],t=clamp(((n-a[0])*bx+(e-a[1])*by)/(bx*bx+by*by),0,1),dx=n-a[0]-bx*t,dy=e-a[1]-by*t,d2=dx*dx+dy*dy;
+    if(d2<bd){bd=d2;best={d:0,L:rv.L[i]+(rv.L[i+1]-rv.L[i])*t,w:rv.w,s:rv.S[i]+(rv.S[i+1]-rv.S[i])*t,rv};}}
+  if(best)best.d=Math.sqrt(bd);return best;}
+function groundH(n,e){
+  let h=groundBase(n,e);
+  const q=riverAt(n,e);if(q){const W1=q.w+28,Wb=Math.min(600,30+2.5*Math.abs(h-q.L));if(q.d<W1+Wb)h=lerp(h,q.L,sm(W1+Wb,W1,q.d));}
   const L=TERRAIN.lake, dl=Math.hypot(n-L.n,e-L.e);
   if(dl<L.r+90){const th=Math.atan2(e-L.e,n-L.n);const rl=L.r*(0.8+0.4*vnoise(2.2+Math.cos(th)*1.4,3.7+Math.sin(th)*1.4));h=lerp(h,L.h,sm(rl+50,rl,dl));}   // shoreline follows a noise
   return h;
 }
+/* Buildings the physics sees (skids, blade tips, ground effect: flat roofs, plateaus the ground mesh does
+   not have): the hospital with its pad, and the town's blocks, high-rises and the crane's mast (2.9). The
+   renderer draws them by kind. */
+const BUILDINGS=[{n:-260,e:-420,w:16,l:16,h:22,pad:true,kind:'hospital'}];
+const TOWN_B=(()=>{const T=TERRAIN.town,rng=makeRng(29),B=[],cn=(T.n0+T.n1)/2,ce=(T.e0+T.e1)/2;
+  for(let n=T.n0+5;n<T.n1-40;n+=64)for(let e=T.e0+5;e<T.e1-40;e+=64){   // blocks of 54 m between 10 m streets
+    const bn=n+27,be=e+27,dc=Math.hypot(bn-cn,be-ce),core=sm(330,60,dc);
+    if(Math.abs(bn-(-2268))<10&&Math.abs(be-(-1468))<10){B.push({n:bn,e:be,w:13,l:13,h:66,pad:true,kind:'tower'});B.push({n:bn+20,e:be-20,w:0.9,l:0.9,h:52,kind:'mast'});continue;}   // the high-rise with the pad (-2268, -1468), the crane beside it
+    if(rng()<0.13)continue;   // a park
+    const k=rng()<0.5?1:rng()<0.6?2:4;
+    for(let q=0;q<k;q++){const w=k===1?18+6*rng():k===2?11+3*rng():10+2*rng(),l=k===1?18+6*rng():k===2?22+3*rng():10+2*rng();
+      const on=k===1?0:k===2?(q?13:-13):(q&1?13:-13),oe=k===1||k===2?0:(q&2?13:-13);
+      const tall=rng()<0.25*core;const hh=tall?32+38*rng()*core:6+(8+14*core)*rng();
+      B.push({n:bn+on,e:be+oe,w:w/2,l:l/2,h:Math.round(hh/3.2)*3.2,kind:tall?'tower':'block',c:rng()});}}
+  return B;})();
 function terrainH(n,e){
   let h=groundH(n,e);
   for(const b of BUILDINGS)if(Math.abs(n-b.n)<b.w&&Math.abs(e-b.e)<b.l)h=Math.max(h,groundH(b.n,b.e)+b.h);
+  const T=TERRAIN.town;if(n>T.n0&&n<T.n1&&e>T.e0&&e<T.e1)for(const b of TOWN_B)if(Math.abs(n-b.n)<b.w&&Math.abs(e-b.e)<b.l)h=Math.max(h,T.h+b.h);
   return h;
 }
 function inLake(n,e){return groundH(n,e)<TERRAIN.lake.h+0.4&&Math.hypot(n-TERRAIN.lake.n,e-TERRAIN.lake.e)<TERRAIN.lake.r*1.3;}
+/* where no tree may stand (2.9): the rivers' banks, the town, under the wires, the clearing, the summit, the slope site */
+function treeBlocked(n,e,m=0){   // m: a margin all round (the canopy's mesh keeps 6 m further off, so the trees at its edge stand in front of it)
+  const T=TERRAIN.town;if(n>T.n0-25-m&&n<T.n1+25+m&&e>T.e0-25-m&&e<T.e1+25+m)return true;
+  if(Math.abs(e+322)<12+m||(Math.abs(e+300)<10+m&&Math.abs(n)<1510)||(Math.abs(n-280)<10+m&&Math.abs(e)<1510)||(Math.abs(e+150)<26+m&&n<-80+m&&n>-920-m))return true;   // the wires, the roads, the runway
+  if(n>1080-m&&n<1200+m&&e>-280-m&&e<720+m)return true;
+  if(Math.hypot(n-900,e+700)<12+m||Math.hypot(n-1010,e+560)<12+m||Math.hypot(n-1120,e+420)<12+m)return true;   // the wind turbines' feet
+  const C=TERRAIN.clearing,K=TERRAIN.kuppe;if(Math.hypot(n-C.n,e-C.e)<C.r+6+m||Math.hypot(n-K.n,e-K.e)<45+m||Math.hypot(n-1550,e+988)<26+m)return true;
+  {const R=TERRAIN.townRoad,bx=R[2]-R[0],by=R[3]-R[1],t=clamp(((n-R[0])*bx+(e-R[1])*by)/(bx*bx+by*by),0,1);if(Math.hypot(n-R[0]-bx*t,e-R[1]-by*t)<10+m)return true;}
+  const q=riverAt(n,e);return !!q&&q.d<q.w+22+m;}
+/* The forest's crowns as the physics sees them (2.9): where the forest density passes 0.56 the crowns close
+   over the ground, 11 to 17 m up (groups of crowns a couple of metres apart), lower towards the tree line. The
+   trees drawn (85_render.js) stand at these heights. Height over the ground; 0 where there is no forest. The
+   rotor's blades in it are a crash (60_sim.js). */
+function canopyH(n,e){const C=TERRAIN.clearing,dc=Math.hypot(n-C.n,e-C.e);
+  const r=dc>C.r+4.5&&dc<C.r+14?13*sm(C.r+4.5,C.r+6.5,dc):0;   // the clearing's ring of trees (85_render.js), from 24.5 m out
+  const d=forestD(n,e);if(d<0.56)return r;const g=groundH(n,e);if(g>480||treeBlocked(n,e))return r;
+  return Math.max(r,(11+6*vnoise(n/90+4.4,e/90+1.1)+3.2*(vnoise(n/8.5+0.3,e/8.5+5.7)-0.5))*sm(0.56,0.60,d)*(1-sm(400,480,g)));}   // the crowns' height, groups standing out by a couple of metres; at the forest's edge rising over some 10 m
+function inRiver(n,e){const q=riverAt(n,e);return !!q&&q.d<q.w;}
+function inWater(n,e){return inLake(n,e)||inRiver(n,e);}
 function terrainN(n,e){ // unit normal pointing up (NED: negative D), from finite differences
   const d=0.5, hn=(terrainH(n+d,e)-terrainH(n-d,e))/(2*d), he=(terrainH(n,e+d)-terrainH(n,e-d))/(2*d);
   return vnorm([-hn,-he,-1]);
 }
-/* Forest density, shared by the tree placement and the ground colour. */
-function forestD(n,e){const r=Math.hypot(n,e);return vnoise(n/260+9.2,e/260+4.4)*sm(90,220,r)*sm(60,140,Math.hypot(n-260,e+220))*sm(170,300,Math.hypot(n-(-450),e-550));}
+/* Wires the rotor can hit (2.9): the power line along the north-south road and the one across the river
+   valley, each wire as straight pieces between the pylons and the low point of its sag; and the town
+   crane's jib and hoist cable. [n0,e0,h0, n1,e1,h1, kind] */
+const WIRES=(()=>{const W=[];const span=(a,b,top,sag)=>{const za=groundH(a[0],a[1])+top,zb=groundH(b[0],b[1])+top,m=[(a[0]+b[0])/2,(a[1]+b[1])/2,(za+zb)/2-sag];W.push([a[0],a[1],za,m[0],m[1],m[2],'w'],[m[0],m[1],m[2],b[0],b[1],zb,'w']);};
+  for(let n=-1400;n<1400;n+=70)for(const dy of [-1.4,0,1.4])span([n,-322+dy],[n+70,-322+dy],10.5,1.2);
+  const V=[[1180,-260],[1160,-20],[1140,220],[1120,460],[1100,700]];for(let i=0;i<V.length-1;i++)for(const dn of [-2.2,0,2.2])span([V[i][0]+dn,V[i][1]],[V[i+1][0]+dn,V[i+1][1]],24,4.5);
+  for(const m of TOWN_B)if(m.kind==='mast'){const h=TERRAIN.town.h+m.h+0.6;W.push([m.n,m.e-12,h,m.n,m.e+38,h,'j'],[m.n,m.e+30,h,m.n,m.e+30,TERRAIN.town.h+24,'j']);}   // the crane's jib and hoist cable ('j': drawn as the crane)
+  return W;})();
+/* Forest density, shared by the tree placement and the ground colour (2.9: none in the clearing, on the
+   rivers' flood plains, in the town; up the mountains to the tree line at 480 m). */
+function forestD(n,e,raw){const r=Math.hypot(n,e);let d=vnoise(n/260+9.2,e/260+4.4)*sm(90,220,r)*sm(60,140,Math.hypot(n-260,e+220))*sm(170,300,Math.hypot(n-(-450),e-550));
+  if(raw)return d;   // (as until 2.8: the tree placement near the field keeps its random stream)
+  const C=TERRAIN.clearing;d*=sm(C.r,C.r+18,Math.hypot(n-C.n,e-C.e));
+  d*=sm(48,80,Math.hypot(n+245,e+420));   // (2.9.2) the hospital stands in a clearing of its own, its lawn and car park round it
+  if(n>1500)d=Math.max(d,sm(1700,2600,n)*(0.35+0.6*vnoise(n/330+2.7,e/330+8.1)));   // the mountain forests
+  return d;}
 /* Wind: steady vector plus a Dryden-like turbulence (two first-order
    filters per axis on white noise, bandwidth scaled with airspeed/length
    scale) plus a slow gust envelope. Reported in NED. */
@@ -1098,7 +1199,7 @@ const cfg={
   sas:true, attHold:true, hdgHold:true, hoverAssist:false, assistK:1,   // stability augmentation (training aids); assistK blends hover assist with the raw stick
   kbdCol:'metered', kbdPed:'heading', pedRate:25,            // keyboard pilot models; yaw rate per pedal key, °/s
   mouse:true, mouseMode:'stick', mouseTravel:1600, mouseButtons:true, padDead:0.06,   // px of mouse movement for full stick (real stick: 80 mm lateral, 108 mm longitudinal per side)
-  view:'cockpit', hud:true, rotorDisc:true, fpm:true, predict:true,predictT:'auto', sound:true,volume:70, cloud:0.4,
+  view:'cockpit', hud:true, rotorDisc:true, fpm:true, predict:true,predictT:'auto', sound:true,volume:70, cloud:0.4,tod:11,vis:12,
   engFail:'none',
 };
 const IN={col:0.45,lon:0,lat:0,ped:0,             // controls after the pilot models, [0..1] / [-1..1]
@@ -1266,9 +1367,17 @@ function step(dt){
       const ph=[-Math.cos(psi)*rt.R*Math.cos(b),-rt.s*Math.sin(psi)*rt.R*Math.cos(b),-rt.R*Math.sin(b)];
       const pw=vadd(S.pos,mrot(R,vadd(rt.hub,mrot(rt.Rbh,ph))));
       if(pw[2]+terrainH(pw[0],pw[1])>0){S.crash='Blade strike';break;}
+      if(S.hAGL<26&&pw[2]+groundH(pw[0],pw[1])+canopyH(pw[0],pw[1])>0){S.crash='Blade strike: trees';break;}   // (2.9) the forest's canopy
     }
     if(ge.contact&&(Math.abs(S.eul[0])>0.9||Math.abs(S.eul[1])>0.9))S.crash='Rolled over';
     if(ge.contact&&inLake(S.pos[0],S.pos[1]))S.crash='Ditched in the lake';
+    if(ge.contact&&inRiver(S.pos[0],S.pos[1]))S.crash='Ditched in the river';
+    /* wires (2.9): one passing through the disc (within the rotor radius of the hub and 0.8 m of its plane: the
+       closest point with the height scaled by R/0.8) or within 1.6 m of the cabin */
+    {const hb=vadd(S.pos,mrot(R,rt.hub)),kz=rt.R/0.8;
+     for(const w of WIRES){if(hb[0]<Math.min(w[0],w[3])-7||hb[0]>Math.max(w[0],w[3])+7||hb[1]<Math.min(w[1],w[4])-7||hb[1]>Math.max(w[1],w[4])+7)continue;
+       const near=(p,k)=>{const a=[w[0],w[1],-w[2]*k],b=[w[3],w[4],-w[5]*k],q=[p[0],p[1],p[2]*k],ab=vsub(b,a),t=clamp(vdot(vsub(q,a),ab)/vdot(ab,ab),0,1);return vlen(vsub(q,vadd(a,vscl(ab,t))));};
+       if(near(hb,kz)<rt.R||near(S.pos,1)<1.6){S.crash='Wire strike';break;}}}
     if(ge.contact&&ge.maxSink>6)S.crash='Crash landing';
   }
   if(S.crash){st.Om=Math.max(0,st.Om-dt*8);for(const en of S.eng.e)en.fail=true;}
@@ -1754,39 +1863,140 @@ function atmo(hm,dT){
    deterministic value noise. Height is positive up. Everything that
    touches the ground (skids, tail, blade tips, ground effect) and the
    renderer read this one function, so the mesh and the physics never
-   disagree. */
+   disagree.
+   2.9, the world grows: mountains to the north (foothills from 1.6 km,
+   ridges of 700 to 900 m beyond 4 km) with a rounded summit for mountain
+   landings (the Kuppe, 2.5 km north-north-east, 260 m, a flat top of 14 m
+   radius); a hill with 8 to 12° flanks in the north-west for slope
+   landings; a river from the mountains through its valley into the lake
+   and out of it to the south-east; a small town 2.7 km to the south-west
+   with a high-rise pad and a crane; a clearing in the western forest;
+   hazy hills all round out to 7 km. */
 const TERRAIN={mound:{n:0,e:150,h:6,r:32},lake:{n:-450,e:550,r:160,h:-1.5},
-  runway:{n0:-900,n1:-100,e:-150,w:10},apron:{n:40,e:60},roads:[[-1500,-300,1500,-300],[280,-1500,280,1500]]};
+  runway:{n0:-900,n1:-100,e:-150,w:10},apron:{n:40,e:60},roads:[[-1500,-300,1500,-300],[280,-1500,280,1500]],
+  kuppe:{n:2350,e:700,h:260,top:14,R:400},hill:{n:1550,e:-950,h:42,R:170},clearing:{n:200,e:-880,r:20},
+  town:{n0:-2620,n1:-1980,e0:-1820,e1:-1180,h:0},townRoad:[-1500,-300,-2000,-1180]};
 function hash2(i,j){let x=(i*374761393+j*668265263)|0;x=(x^(x>>>13))*1274126177|0;x=x^(x>>>16);return ((x>>>0)%100000)/100000;}
 function vnoise(x,y){const i=Math.floor(x),j=Math.floor(y),fx=x-i,fy=y-j,ux=fx*fx*(3-2*fx),uy=fy*fy*(3-2*fy);
   const a=hash2(i,j),b=hash2(i+1,j),c=hash2(i,j+1),d=hash2(i+1,j+1);return (a+(b-a)*ux)*(1-uy)+(c+(d-c)*ux)*uy;}
-/* Rooftop pads: flat plateaus the physics sees (skids, blade tips, ground
-   effect) but the ground mesh does not; the renderer draws the building. */
-const BUILDINGS=[{n:-260,e:-420,w:16,l:16,h:22,pad:true}];
-function groundH(n,e){
+const rnoise=(x,y)=>{const v=1-Math.abs(2*vnoise(x,y)-1);return v*v;};   // ridged: sharp crests, broad valleys
+/* the land before the rivers cut into it */
+function groundBase(n,e){
   const r=Math.hypot(n,e);
-  const far=sm(450,1400,r);
-  let h=far*(46*(vnoise(n/520+3.1,e/520+7.3)-0.45)+14*(vnoise(n/140+1.7,e/140+2.9)-0.5)+4*(vnoise(n/45,e/45)-0.5));
-  h+=sm(2600,3900,r)*140*(0.35+0.65*vnoise(n/700+5.5,e/700+1.2));   // ridge on the horizon
+  let h=0;if(r>450){const far=sm(450,1400,r);h=far*(46*(vnoise(n/520+3.1,e/520+7.3)-0.45)+14*(vnoise(n/140+1.7,e/140+2.9)-0.5)+4*(vnoise(n/45,e/45)-0.5));   // (the physics asks some thirty times a step: nothing is computed that is not there)
+    if(r>2600)h+=sm(2600,3900,r)*140*(0.35+0.65*vnoise(n/700+5.5,e/700+1.2));}   // ridge on the horizon
+  if(n>1500){const m=sm(1600,3800,n)*(250+650*sm(2500,5500,n))*(0.55+0.45*vnoise(e/1700+3.3,n/1700+0.4));   // the mountains to the north
+    h+=m*(0.30+0.70*(0.62*rnoise(n/900+1.3,e/900+7.7)+0.38*rnoise(n/360+4.1,e/360+2.2)));}
+  if(r>4300)h+=sm(4300,6500,r)*(220*vnoise(n/1300+8.1,e/1300+2.6)+130*rnoise(n/600+1.9,e/600+6.4));   // hazy hills all round
+  const T=TERRAIN.town;if(n>T.n0-260&&n<T.n1+260&&e>T.e0-260&&e<T.e1+260){const k=sm(260,60,Math.max(T.n0-n,n-T.n1,T.e0-e,e-T.e1,0));h=lerp(h,T.h,k);}   // the town stands on level ground
+  const K=TERRAIN.kuppe,dk=Math.hypot(n-K.n,e-K.e);if(dk<K.R*3){const g=dk<K.top?1:Math.exp(-Math.pow((dk-K.top)/K.R,2));h=lerp(h,K.h,g);}   // the summit: flat on top, flanks of up to 30°
+  const Hh=TERRAIN.hill,dh=Math.hypot(n-Hh.n,e-Hh.e);if(dh<Hh.R*3)h+=Hh.h*Math.exp(-Math.pow(dh/Hh.R,2));
   h=Math.max(h,-6);
   const m=TERRAIN.mound, d2=((n-m.n)**2+(e-m.e)**2)/(2*m.r*m.r);
   h+=m.h*Math.exp(-d2);
+  return h;
+}
+/* Rivers: a Catmull-Rom line through the control points in 15 m steps, with the level of its flood plain,
+   which only falls downstream: up the inflow from the lake it rises at most 0.6 % and stays 1.6 m under the
+   land, down the outflow it falls with the land. Within 28 m beyond the water's edge the ground is the flood
+   plain (the water lies 6 cm above it); beyond that it blends back into the land over 30 m plus 2.5 m per
+   metre of height between them, at most 600 m: a valley through the hills (in the mountains the river
+   may climb 3.6 % upstream). A 200 m grid of the segments
+   near each cell keeps the lookup cheap. */
+const RIVERS=[{pts:[[3900,-260],[3300,-190],[2700,-130],[2150,-70],[1650,110],[1150,300],[700,350],[280,380],[0,450],[-220,540],[-330,585]],w:12,lake:'end'},
+  {pts:[[-560,690],[-760,900],[-1050,1120],[-1500,1250],[-2100,1300],[-2800,1450],[-3600,1700],[-4600,2000],[-6800,2500]],w:13,lake:'start'}];
+const RIV={cell:200,grid:new Map()};
+(function riverInit(){
+  for(const rv of RIVERS){const C=rv.pts,P=[];
+    for(let i=0;i<C.length-1;i++){const p0=C[Math.max(0,i-1)],p1=C[i],p2=C[i+1],p3=C[Math.min(C.length-1,i+2)],L=Math.hypot(p2[0]-p1[0],p2[1]-p1[1]),k=Math.max(1,Math.round(L/15));
+      for(let s=0;s<k;s++){const t=s/k;P.push([0,1].map(q=>0.5*(2*p1[q]+(-p0[q]+p2[q])*t+(2*p0[q]-5*p1[q]+4*p2[q]-p3[q])*t*t+(-p0[q]+3*p1[q]-3*p2[q]+p3[q])*t*t*t)));}}
+    P.push(C[C.length-1]);
+    const low=(q)=>{let m=1e9;for(const [dn,de] of [[0,0],[rv.w,0],[-rv.w,0],[0,rv.w],[0,-rv.w]])m=Math.min(m,groundBase(q[0]+dn,q[1]+de));return m-1.6;};
+    const L=new Array(P.length),lakeL=TERRAIN.lake.h+0.4;
+    if(rv.lake==='end'){L[P.length-1]=lakeL;for(let i=P.length-2;i>=0;i--){const ds=Math.hypot(P[i][0]-P[i+1][0],P[i][1]-P[i+1][1]);L[i]=Math.max(L[i+1],Math.min(L[i+1]+(0.006+0.03*sm(1600,3200,P[i][0]))*ds,low(P[i])));}}   // steeper in the mountains
+    else{L[0]=lakeL;for(let i=1;i<P.length;i++){const ds=Math.hypot(P[i][0]-P[i-1][0],P[i][1]-P[i-1][1]);L[i]=Math.min(L[i-1]-0.0003*ds,low(P[i]));}}
+    rv.P=P;rv.L=L;rv.S=[0];for(let i=1;i<P.length;i++)rv.S.push(rv.S[i-1]+Math.hypot(P[i][0]-P[i-1][0],P[i][1]-P[i-1][1]));
+    rv.R=[];for(let i=0;i<P.length-1;i++){const a=P[i],b=P[i+1],c=RIV.cell;
+      /* how far this piece reaches: out to where the land is still being blended in, sampled on both sides */
+      const mn=(a[0]+b[0])/2,me=(a[1]+b[1])/2,len=Math.hypot(b[0]-a[0],b[1]-a[1]),un=-(b[1]-a[1])/len,ue=(b[0]-a[0])/len,Lm=(L[i]+L[i+1])/2;let g=rv.w+60;
+      for(const sd of [-1,1])for(const d of [40,80,120,180,260,360,480,620])if(rv.w+28+Math.min(600,30+2.5*Math.abs(groundBase(mn+sd*un*d,me+sd*ue*d)-Lm))>d)g=Math.max(g,Math.min(d+140,rv.w+28+600));
+      rv.R.push(g+len/2);
+      for(let ci=Math.floor((Math.min(a[0],b[0])-g)/c);ci<=Math.floor((Math.max(a[0],b[0])+g)/c);ci++)for(let cj=Math.floor((Math.min(a[1],b[1])-g)/c);cj<=Math.floor((Math.max(a[1],b[1])+g)/c);cj++){
+        if(Math.hypot((ci+0.5)*c-mn,(cj+0.5)*c-me)>g+len/2+c*0.71)continue;const key=ci*100003+cj;let l=RIV.grid.get(key);if(!l){l=[];RIV.grid.set(key,l);}l.push([rv,i]);}}}
+})();
+/* the nearest river line: distance, the flood plain's level there, the half width of the water, how far along */
+function riverAt(n,e){const l=RIV.grid.get(Math.floor(n/RIV.cell)*100003+Math.floor(e/RIV.cell));if(!l)return null;let best=null,bd=1e18;
+  for(const [rv,i] of l){const a=rv.P[i],b=rv.P[i+1],R=rv.R[i];if(Math.abs(n-(a[0]+b[0])/2)>R||Math.abs(e-(a[1]+b[1])/2)>R)continue;const bx=b[0]-a[0],by=b[1]-a[1],t=clamp(((n-a[0])*bx+(e-a[1])*by)/(bx*bx+by*by),0,1),dx=n-a[0]-bx*t,dy=e-a[1]-by*t,d2=dx*dx+dy*dy;
+    if(d2<bd){bd=d2;best={d:0,L:rv.L[i]+(rv.L[i+1]-rv.L[i])*t,w:rv.w,s:rv.S[i]+(rv.S[i+1]-rv.S[i])*t,rv};}}
+  if(best)best.d=Math.sqrt(bd);return best;}
+function groundH(n,e){
+  let h=groundBase(n,e);
+  const q=riverAt(n,e);if(q){const W1=q.w+28,Wb=Math.min(600,30+2.5*Math.abs(h-q.L));if(q.d<W1+Wb)h=lerp(h,q.L,sm(W1+Wb,W1,q.d));}
   const L=TERRAIN.lake, dl=Math.hypot(n-L.n,e-L.e);
   if(dl<L.r+90){const th=Math.atan2(e-L.e,n-L.n);const rl=L.r*(0.8+0.4*vnoise(2.2+Math.cos(th)*1.4,3.7+Math.sin(th)*1.4));h=lerp(h,L.h,sm(rl+50,rl,dl));}   // shoreline follows a noise
   return h;
 }
+/* Buildings the physics sees (skids, blade tips, ground effect: flat roofs, plateaus the ground mesh does
+   not have): the hospital with its pad, and the town's blocks, high-rises and the crane's mast (2.9). The
+   renderer draws them by kind. */
+const BUILDINGS=[{n:-260,e:-420,w:16,l:16,h:22,pad:true,kind:'hospital'}];
+const TOWN_B=(()=>{const T=TERRAIN.town,rng=makeRng(29),B=[],cn=(T.n0+T.n1)/2,ce=(T.e0+T.e1)/2;
+  for(let n=T.n0+5;n<T.n1-40;n+=64)for(let e=T.e0+5;e<T.e1-40;e+=64){   // blocks of 54 m between 10 m streets
+    const bn=n+27,be=e+27,dc=Math.hypot(bn-cn,be-ce),core=sm(330,60,dc);
+    if(Math.abs(bn-(-2268))<10&&Math.abs(be-(-1468))<10){B.push({n:bn,e:be,w:13,l:13,h:66,pad:true,kind:'tower'});B.push({n:bn+20,e:be-20,w:0.9,l:0.9,h:52,kind:'mast'});continue;}   // the high-rise with the pad (-2268, -1468), the crane beside it
+    if(rng()<0.13)continue;   // a park
+    const k=rng()<0.5?1:rng()<0.6?2:4;
+    for(let q=0;q<k;q++){const w=k===1?18+6*rng():k===2?11+3*rng():10+2*rng(),l=k===1?18+6*rng():k===2?22+3*rng():10+2*rng();
+      const on=k===1?0:k===2?(q?13:-13):(q&1?13:-13),oe=k===1||k===2?0:(q&2?13:-13);
+      const tall=rng()<0.25*core;const hh=tall?32+38*rng()*core:6+(8+14*core)*rng();
+      B.push({n:bn+on,e:be+oe,w:w/2,l:l/2,h:Math.round(hh/3.2)*3.2,kind:tall?'tower':'block',c:rng()});}}
+  return B;})();
 function terrainH(n,e){
   let h=groundH(n,e);
   for(const b of BUILDINGS)if(Math.abs(n-b.n)<b.w&&Math.abs(e-b.e)<b.l)h=Math.max(h,groundH(b.n,b.e)+b.h);
+  const T=TERRAIN.town;if(n>T.n0&&n<T.n1&&e>T.e0&&e<T.e1)for(const b of TOWN_B)if(Math.abs(n-b.n)<b.w&&Math.abs(e-b.e)<b.l)h=Math.max(h,T.h+b.h);
   return h;
 }
 function inLake(n,e){return groundH(n,e)<TERRAIN.lake.h+0.4&&Math.hypot(n-TERRAIN.lake.n,e-TERRAIN.lake.e)<TERRAIN.lake.r*1.3;}
+/* where no tree may stand (2.9): the rivers' banks, the town, under the wires, the clearing, the summit, the slope site */
+function treeBlocked(n,e,m=0){   // m: a margin all round (the canopy's mesh keeps 6 m further off, so the trees at its edge stand in front of it)
+  const T=TERRAIN.town;if(n>T.n0-25-m&&n<T.n1+25+m&&e>T.e0-25-m&&e<T.e1+25+m)return true;
+  if(Math.abs(e+322)<12+m||(Math.abs(e+300)<10+m&&Math.abs(n)<1510)||(Math.abs(n-280)<10+m&&Math.abs(e)<1510)||(Math.abs(e+150)<26+m&&n<-80+m&&n>-920-m))return true;   // the wires, the roads, the runway
+  if(n>1080-m&&n<1200+m&&e>-280-m&&e<720+m)return true;
+  if(Math.hypot(n-900,e+700)<12+m||Math.hypot(n-1010,e+560)<12+m||Math.hypot(n-1120,e+420)<12+m)return true;   // the wind turbines' feet
+  const C=TERRAIN.clearing,K=TERRAIN.kuppe;if(Math.hypot(n-C.n,e-C.e)<C.r+6+m||Math.hypot(n-K.n,e-K.e)<45+m||Math.hypot(n-1550,e+988)<26+m)return true;
+  {const R=TERRAIN.townRoad,bx=R[2]-R[0],by=R[3]-R[1],t=clamp(((n-R[0])*bx+(e-R[1])*by)/(bx*bx+by*by),0,1);if(Math.hypot(n-R[0]-bx*t,e-R[1]-by*t)<10+m)return true;}
+  const q=riverAt(n,e);return !!q&&q.d<q.w+22+m;}
+/* The forest's crowns as the physics sees them (2.9): where the forest density passes 0.56 the crowns close
+   over the ground, 11 to 17 m up (groups of crowns a couple of metres apart), lower towards the tree line. The
+   trees drawn (85_render.js) stand at these heights. Height over the ground; 0 where there is no forest. The
+   rotor's blades in it are a crash (60_sim.js). */
+function canopyH(n,e){const C=TERRAIN.clearing,dc=Math.hypot(n-C.n,e-C.e);
+  const r=dc>C.r+4.5&&dc<C.r+14?13*sm(C.r+4.5,C.r+6.5,dc):0;   // the clearing's ring of trees (85_render.js), from 24.5 m out
+  const d=forestD(n,e);if(d<0.56)return r;const g=groundH(n,e);if(g>480||treeBlocked(n,e))return r;
+  return Math.max(r,(11+6*vnoise(n/90+4.4,e/90+1.1)+3.2*(vnoise(n/8.5+0.3,e/8.5+5.7)-0.5))*sm(0.56,0.60,d)*(1-sm(400,480,g)));}   // the crowns' height, groups standing out by a couple of metres; at the forest's edge rising over some 10 m
+function inRiver(n,e){const q=riverAt(n,e);return !!q&&q.d<q.w;}
+function inWater(n,e){return inLake(n,e)||inRiver(n,e);}
 function terrainN(n,e){ // unit normal pointing up (NED: negative D), from finite differences
   const d=0.5, hn=(terrainH(n+d,e)-terrainH(n-d,e))/(2*d), he=(terrainH(n,e+d)-terrainH(n,e-d))/(2*d);
   return vnorm([-hn,-he,-1]);
 }
-/* Forest density, shared by the tree placement and the ground colour. */
-function forestD(n,e){const r=Math.hypot(n,e);return vnoise(n/260+9.2,e/260+4.4)*sm(90,220,r)*sm(60,140,Math.hypot(n-260,e+220))*sm(170,300,Math.hypot(n-(-450),e-550));}
+/* Wires the rotor can hit (2.9): the power line along the north-south road and the one across the river
+   valley, each wire as straight pieces between the pylons and the low point of its sag; and the town
+   crane's jib and hoist cable. [n0,e0,h0, n1,e1,h1, kind] */
+const WIRES=(()=>{const W=[];const span=(a,b,top,sag)=>{const za=groundH(a[0],a[1])+top,zb=groundH(b[0],b[1])+top,m=[(a[0]+b[0])/2,(a[1]+b[1])/2,(za+zb)/2-sag];W.push([a[0],a[1],za,m[0],m[1],m[2],'w'],[m[0],m[1],m[2],b[0],b[1],zb,'w']);};
+  for(let n=-1400;n<1400;n+=70)for(const dy of [-1.4,0,1.4])span([n,-322+dy],[n+70,-322+dy],10.5,1.2);
+  const V=[[1180,-260],[1160,-20],[1140,220],[1120,460],[1100,700]];for(let i=0;i<V.length-1;i++)for(const dn of [-2.2,0,2.2])span([V[i][0]+dn,V[i][1]],[V[i+1][0]+dn,V[i+1][1]],24,4.5);
+  for(const m of TOWN_B)if(m.kind==='mast'){const h=TERRAIN.town.h+m.h+0.6;W.push([m.n,m.e-12,h,m.n,m.e+38,h,'j'],[m.n,m.e+30,h,m.n,m.e+30,TERRAIN.town.h+24,'j']);}   // the crane's jib and hoist cable ('j': drawn as the crane)
+  return W;})();
+/* Forest density, shared by the tree placement and the ground colour (2.9: none in the clearing, on the
+   rivers' flood plains, in the town; up the mountains to the tree line at 480 m). */
+function forestD(n,e,raw){const r=Math.hypot(n,e);let d=vnoise(n/260+9.2,e/260+4.4)*sm(90,220,r)*sm(60,140,Math.hypot(n-260,e+220))*sm(170,300,Math.hypot(n-(-450),e-550));
+  if(raw)return d;   // (as until 2.8: the tree placement near the field keeps its random stream)
+  const C=TERRAIN.clearing;d*=sm(C.r,C.r+18,Math.hypot(n-C.n,e-C.e));
+  d*=sm(48,80,Math.hypot(n+245,e+420));   // (2.9.2) the hospital stands in a clearing of its own, its lawn and car park round it
+  if(n>1500)d=Math.max(d,sm(1700,2600,n)*(0.35+0.6*vnoise(n/330+2.7,e/330+8.1)));   // the mountain forests
+  return d;}
 /* Wind: steady vector plus a Dryden-like turbulence (two first-order
    filters per axis on white noise, bandwidth scaled with airspeed/length
    scale) plus a slow gust envelope. Reported in NED. */
@@ -2613,7 +2823,7 @@ const cfg={
   sas:true, attHold:true, hdgHold:true, hoverAssist:false, assistK:1,   // stability augmentation (training aids); assistK blends hover assist with the raw stick
   kbdCol:'metered', kbdPed:'heading', pedRate:25,            // keyboard pilot models; yaw rate per pedal key, °/s
   mouse:true, mouseMode:'stick', mouseTravel:1600, mouseButtons:true, padDead:0.06,   // px of mouse movement for full stick (real stick: 80 mm lateral, 108 mm longitudinal per side)
-  view:'cockpit', hud:true, rotorDisc:true, fpm:true, predict:true,predictT:'auto', sound:true,volume:70, cloud:0.4,
+  view:'cockpit', hud:true, rotorDisc:true, fpm:true, predict:true,predictT:'auto', sound:true,volume:70, cloud:0.4,tod:11,vis:12,
   engFail:'none',
 };
 const IN={col:0.45,lon:0,lat:0,ped:0,             // controls after the pilot models, [0..1] / [-1..1]
@@ -2781,9 +2991,17 @@ function step(dt){
       const ph=[-Math.cos(psi)*rt.R*Math.cos(b),-rt.s*Math.sin(psi)*rt.R*Math.cos(b),-rt.R*Math.sin(b)];
       const pw=vadd(S.pos,mrot(R,vadd(rt.hub,mrot(rt.Rbh,ph))));
       if(pw[2]+terrainH(pw[0],pw[1])>0){S.crash='Blade strike';break;}
+      if(S.hAGL<26&&pw[2]+groundH(pw[0],pw[1])+canopyH(pw[0],pw[1])>0){S.crash='Blade strike: trees';break;}   // (2.9) the forest's canopy
     }
     if(ge.contact&&(Math.abs(S.eul[0])>0.9||Math.abs(S.eul[1])>0.9))S.crash='Rolled over';
     if(ge.contact&&inLake(S.pos[0],S.pos[1]))S.crash='Ditched in the lake';
+    if(ge.contact&&inRiver(S.pos[0],S.pos[1]))S.crash='Ditched in the river';
+    /* wires (2.9): one passing through the disc (within the rotor radius of the hub and 0.8 m of its plane: the
+       closest point with the height scaled by R/0.8) or within 1.6 m of the cabin */
+    {const hb=vadd(S.pos,mrot(R,rt.hub)),kz=rt.R/0.8;
+     for(const w of WIRES){if(hb[0]<Math.min(w[0],w[3])-7||hb[0]>Math.max(w[0],w[3])+7||hb[1]<Math.min(w[1],w[4])-7||hb[1]>Math.max(w[1],w[4])+7)continue;
+       const near=(p,k)=>{const a=[w[0],w[1],-w[2]*k],b=[w[3],w[4],-w[5]*k],q=[p[0],p[1],p[2]*k],ab=vsub(b,a),t=clamp(vdot(vsub(q,a),ab)/vdot(ab,ab),0,1);return vlen(vsub(q,vadd(a,vscl(ab,t))));};
+       if(near(hb,kz)<rt.R||near(S.pos,1)<1.6){S.crash='Wire strike';break;}}}
     if(ge.contact&&ge.maxSink>6)S.crash='Crash landing';
   }
   if(S.crash){st.Om=Math.max(0,st.Om-dt*8);for(const en of S.eng.e)en.fail=true;}
@@ -3310,7 +3528,7 @@ function inputInit(stage){
 }
 function keyAction(code){
   if(replayKey(code))return;
-  const map={KeyL:()=>replayStart(),KeyV:()=>apDemoToggle(),KeyU:()=>afcsToggle('alt'),KeyI:()=>afcsToggle(S.ias>40*KT?'ias':'hov'),KeyO:()=>afcsToggle('hdg'),KeyJ:()=>apMenuToggle(),Escape:()=>apMenuShow(false),KeyK:()=>coachCycle(),Slash:()=>{UI.showKeys=!UI.showKeys;},F1:()=>{UI.showKeys=!UI.showKeys;},KeyR:()=>uiReset(cfg.resetKind||'pad'),Digit1:()=>setView('cockpit'),Digit2:()=>setView('chase'),Digit3:()=>setView('tower'),
+  const map={KeyL:()=>replayStart(),KeyV:()=>apDemoToggle(),KeyU:()=>afcsToggle('alt'),KeyI:()=>afcsToggle(S.ias>40*KT?'ias':'hov'),KeyO:()=>afcsToggle('hdg'),KeyJ:()=>apMenuToggle(),Escape:()=>apMenuShow(false),KeyK:()=>coachCycle(),Slash:()=>{UI.showKeys=!UI.showKeys;},F1:()=>{UI.showKeys=!UI.showKeys;},KeyR:()=>{const k=cfg.resetKind||'pad';if(k.startsWith('ex:'))startExercise(k.slice(3));else uiReset(k);},Digit1:()=>setView('cockpit'),Digit2:()=>setView('chase'),Digit3:()=>setView('tower'),
     KeyT:()=>trimSet(),
     KeyY:()=>trimClear(),
     KeyH:()=>{cfg.hoverAssist=!cfg.hoverAssist;uiSync();},
@@ -3437,11 +3655,31 @@ float seg(vec2 p,vec2 a,vec2 b){vec2 pa=p-a,ba=b-a;float t=clamp(dot(pa,ba)/dot(
 `;
 const VS_LIT=`attribute vec3 aP;attribute vec3 aN;attribute vec3 aC;uniform mat4 uMVP;uniform mat4 uM;varying vec3 vN;varying vec3 vC;varying vec3 vW;
 void main(){vec4 w=uM*vec4(aP,1.0);vW=w.xyz;vN=normalize(mat3(uM)*aN);vC=aC;gl_Position=uMVP*vec4(aP,1.0);}`;
-const FS_LIT=`${GLSL_PREC}varying vec3 vN;varying vec3 vC;varying vec3 vW;uniform vec3 uSun;uniform vec3 uCam;uniform float uAlpha;uniform vec3 uFog;uniform float uSpec;
-void main(){vec3 n=normalize(vN);float d=max(dot(n,uSun),0.0);float amb=mix(0.30,0.52,clamp(-n.z*0.5+0.5,0.0,1.0));
-  vec3 c=vC*(amb+0.62*d);
-  if(uSpec>0.0){vec3 v=normalize(uCam-vW);float sp=pow(max(dot(reflect(-uSun,n),v),0.0),28.0);c+=vec3(1.0,0.97,0.9)*sp*uSpec*step(0.0,dot(n,uSun));}   // painted metal and glass catch the sun
-  float dist=length(vW-uCam);float f=1.0-exp(-dist*0.00036);c=mix(c,uFog,f);gl_FragColor=vec4(c,uAlpha);}`;
+const FS_LIT=`${GLSL_PREC}varying vec3 vN;varying vec3 vC;varying vec3 vW;uniform vec3 uSun;uniform vec3 uCam;uniform float uAlpha;uniform vec3 uFog;uniform float uSpec;uniform float uFogK;
+uniform vec3 uSunC;uniform vec3 uAmbC;uniform float uCloud;uniform vec2 uWind;uniform float uT;uniform sampler2D uNoise;
+float cloudShadow(vec2 p,float alt){vec2 uv=p+uSun.xy/max(-uSun.z,0.12)*(1500.0-alt)-uWind*uT;float k=dot(texture2D(uNoise,uv/13600.0),vec4(0.5,0.25,0.125,0.0625));return 1.0-0.6*smoothstep(0.55-uCloud*0.25,0.75-uCloud*0.2,k)*step(0.01,uCloud);}   // the sky's own cloud field, met along the sun's ray at the cloud base (1500 m), drifting with the wind
+void main(){vec3 n=normalize(vN);float d=max(dot(n,uSun),0.0)*cloudShadow(vW.xy,-vW.z);float amb=mix(0.30,0.52,clamp(-n.z*0.5+0.5,0.0,1.0));
+  vec3 c=vC*(amb*uAmbC+0.62*d*uSunC);
+  if(uSpec>0.0){vec3 v=normalize(uCam-vW);float sp=pow(max(dot(reflect(-uSun,n),v),0.0),28.0);c+=uSunC*sp*uSpec*step(0.0,dot(n,uSun));}   // painted metal and glass catch the sun
+  float dist=length(vW-uCam);float f=1.0-exp(-dist*uFogK);c=mix(c,uFog,f);gl_FragColor=vec4(c,uAlpha);}`;
+/* Shadows of the scenery (2.11): the static meshes (buildings, the village, the farms, pylons) carry the ground's z
+   under each vertex in aT.x (the mesh builder's wDefault; aT.y = 0 marks pieces without a shadow, the wires);
+   each vertex goes down the sun's ray to that plane, then a little toward the eye (at most 2.5 m, along the line
+   of sight, so nothing moves on the screen) so the coarse ground mesh does not swallow it. A mesh without the
+   attribute (the turbines' rotors, the cars) gets the plane as a constant (pr.aTconst). The trees: the instanced
+   shapes projected on the tangent plane at the foot (the ground's gradient, packed into aI2.w per 30 m cell),
+   fading out between uBand.x and .y. All of it on the stencil with the aircraft's shadow: a pixel darkened once. */
+const VS_SHD=`attribute vec3 aP;attribute vec2 aT;uniform mat4 uMVP;uniform mat4 uM;uniform vec3 uSun;uniform vec3 uCam;varying float vA;
+void main(){vec4 w=uM*vec4(aP,1.0);vec3 p=w.xyz;if(aT.y<0.5){gl_Position=vec4(2.0,2.0,2.0,1.0);vA=0.0;return;}
+  p-=uSun*((p.z-aT.x)/uSun.z);vec3 d=uCam-p;float l=length(d);p+=d*min(0.004,2.5/max(l,1.0));vA=1.0;gl_Position=uMVP*vec4(p,1.0);}`;
+const VS_INST_SHD=`attribute vec3 aP;attribute vec4 aI0;attribute vec4 aI1;attribute vec4 aI2;uniform mat4 uMVP;uniform vec3 uSun;uniform vec3 uCam;uniform vec3 uEye;uniform vec2 uBand;uniform float uK;varying float vA;
+void main(){vec2 cs=aI1.xy;float kz=abs(aI2.x),s=aI0.w*uK;vec3 F=aI0.xyz;float dd=length(F-uEye);
+  float a=(1.0-smoothstep(uBand.x,uBand.y,dd))*step(0.0,aI2.x);if(a<0.01){gl_Position=vec4(2.0,2.0,2.0,1.0);vA=0.0;return;}
+  vec3 p=vec3(cs.x*aP.x-cs.y*aP.y,cs.y*aP.x+cs.x*aP.y,aP.z*kz)*s+F;
+  float w=aI2.w,ga=floor(w/4096.0),gb=w-ga*4096.0,gn=ga/4095.0*4.0-2.0,ge=gb/4095.0*4.0-2.0;   // the ground's gradient at the foot
+  vec3 dv=p-F;float t=(F.z-p.z-gn*dv.x-ge*dv.y)/max(-uSun.z-gn*uSun.x-ge*uSun.y,0.15);
+  p-=uSun*t;vec3 d=uCam-p;float l=length(d);p+=d*min(0.004,2.5/max(l,1.0));vA=a;gl_Position=uMVP*vec4(p,1.0);}`;
+const FS_SHD=`${GLSL_PREC}varying float vA;uniform float uAlpha;void main(){gl_FragColor=vec4(0.02,0.03,0.02,uAlpha*vA);}`;
 /* Shadow: the aircraft's own meshes flattened onto the ground along the sun (planar projection) */
 const FS_SHADOW=`${GLSL_PREC}uniform float uAlpha;void main(){gl_FragColor=vec4(0.02,0.03,0.02,uAlpha);}`;
 /* The ground. Noise comes from one mipmapped, anisotropically filtered
@@ -3456,8 +3694,11 @@ const FS_SHADOW=`${GLSL_PREC}uniform float uAlpha;void main(){gl_FragColor=vec4(
    average. The airfield and the roads are only evaluated inside their own
    bounds. */
 const FS_GND=`#extension GL_OES_standard_derivatives : enable
-${GLSL_PREC}varying vec3 vN;varying vec3 vC;varying vec3 vW;uniform vec3 uSun;uniform vec3 uCam;uniform float uAlpha;uniform vec3 uFog;uniform float uT;uniform vec4 uWash;uniform sampler2D uNoise;
+${GLSL_PREC}varying vec3 vN;varying vec3 vC;varying vec3 vW;uniform vec3 uSun;uniform vec3 uCam;uniform float uAlpha;uniform vec3 uFog;uniform float uT;uniform vec4 uWash;uniform sampler2D uNoise;uniform float uFogK;
+uniform vec3 uSunC;uniform vec3 uAmbC;uniform float uCloud;uniform vec2 uWind;uniform sampler2D uShore;
 ${GLSL_COMMON}
+float cloudShadow(vec2 p,float alt){vec2 uv=p+uSun.xy/max(-uSun.z,0.12)*(1500.0-alt)-uWind*uT;float k=dot(texture2D(uNoise,uv/13600.0),vec4(0.5,0.25,0.125,0.0625));return 1.0-0.6*smoothstep(0.55-uCloud*0.25,0.75-uCloud*0.2,k)*step(0.01,uCloud);}   // the sky's own cloud field, met along the sun's ray at the cloud base (1500 m), drifting with the wind
+
 float line(float d,float hw,float fw){return min(clamp((hw-d)/fw+0.5,0.0,1.0),2.0*hw/fw);}   // a line of half-width hw, d from its centre: coverage of the pixel
 float fill(float d,float w){return clamp(0.5-d/w,0.0,1.0);}                               // inside a shape, d signed (negative inside)
 float sq(float x,float fx){x=fract(x);fx=max(fx,1e-4);vec2 a=vec2(x-0.5*fx,x+0.5*fx);vec2 i=floor(a)*0.5+max(fract(a)-0.5,0.0);return (i.y-i.x)/fx;}   // step(0.5,fract(x)) averaged over the pixel
@@ -3477,13 +3718,17 @@ void main(){
   vec4 nF=texture2D(uNoise,p/25.6+vec2(0.07,0.61));     // R 1.6 m, G 0.8 m, B 0.4 m, A 0.1 m
 #ifndef LITE
   vec4 nX=texture2D(uNoise,p/9.86+vec2(0.83,0.41));     // R 0.62 m, G 0.31 m, B 0.15 m, A 3.9 cm
-  vec4 nW=texture2D(uNoise,(p+uT*vec2(0.30,-0.22))/144.0+vec2(0.19,0.77));   // the lake's surface, drifting
+  vec4 nW=texture2D(uNoise,(p+uT*(vec2(0.30,-0.22)+uWind*0.08))/144.0+vec2(0.19,0.77));   // the lake's surface, drifting (with the wind)
 #endif
-  /* fields: 45 m cells, each with a crop type and a row direction */
-  vec2 cell=floor(p/45.0), fc=fract(p/45.0);
-  float r1=h(cell), r2=h(cell+3.7), r3=h(cell+11.1);
+  /* fields (2.10): 90 m cells, each left whole, halved or quartered by its hash, every piece with a crop of its
+     own (meadow, green crop, ripe grain, stubble, maize, ploughed, fallow) and its row direction; hedgerows and
+     farm tracks along some of the pieces' edges (decided per 45 m of edge, so both sides agree) */
+  vec2 cell=floor(p/90.0), fc=fract(p/90.0);
+  float sp=h(cell+1.9);vec2 ks=vec2(sp<0.3?1.0:sp<0.5?2.0:sp<0.7?1.0:2.0, sp<0.5?1.0:2.0);   // pieces across and along
+  vec2 piece=cell*4.0+floor(fc*ks);
+  float r1=h(piece+0.3), r2=h(piece+3.7), r3=h(piece+11.1);
   vec3 fld;
-  if(r1<0.55){
+  if(r1<0.40){   // meadow
     vec3 grass=mix(vec3(0.33,0.46,0.20),vec3(0.47,0.55,0.25),nB.b);
     grass=mix(grass,vec3(0.30,0.40,0.17),0.4*(nM.r*0.6+nM.b*0.4));
 #ifndef LITE
@@ -3495,19 +3740,47 @@ void main(){
     fld=grass;
   }else{
     float rowc=(r2<0.5)?p.x:p.y,rowf=(r2<0.5)?fwv.x:fwv.y;
-    if(r1<0.85)fld=mix(vec3(0.42,0.50,0.18),vec3(0.62,0.58,0.26),r3)*(0.86+0.14*tri(rowc/0.9,rowf/0.9))*(0.94+0.12*nM.g);   // 0.9 m rows
-    else fld=vec3(0.36,0.28,0.18)*(0.80+0.20*tri(rowc/0.6,rowf/0.6))*(0.93+0.14*nF.r);                                    // ploughed, 0.6 m furrows
+    if(r1<0.55)fld=mix(vec3(0.42,0.50,0.18),vec3(0.55,0.56,0.24),r3)*(0.86+0.14*tri(rowc/0.9,rowf/0.9))*(0.94+0.12*nM.g);   // a green crop, 0.9 m rows
+    else if(r1<0.67)fld=mix(vec3(0.72,0.62,0.30),vec3(0.80,0.70,0.36),r3)*(0.90+0.10*tri(rowc/0.9,rowf/0.9))*(0.92+0.16*nM.g);   // ripe grain
+    else if(r1<0.75)fld=vec3(0.70,0.64,0.44)*(0.92+0.08*tri(rowc/0.35,rowf/0.35))*(0.90+0.20*nM.b);   // stubble
+    else if(r1<0.83)fld=mix(vec3(0.27,0.40,0.15),vec3(0.33,0.45,0.17),r3)*(0.78+0.22*tri(rowc/0.75,rowf/0.75))*(0.94+0.12*nM.g);   // maize, 0.75 m rows
+    else if(r1<0.92)fld=vec3(0.36,0.28,0.18)*(0.80+0.20*tri(rowc/0.6,rowf/0.6))*(0.93+0.14*nF.r);   // ploughed, 0.6 m furrows
+    else fld=mix(vec3(0.40,0.42,0.22),vec3(0.50,0.47,0.26),nM.r)*(0.90+0.2*nF.g);   // fallow, weedy
   }
-  {vec2 e=min(fc,1.0-fc)*45.0;   // hedgerows along some cell edges, ~1.1 m wide
-   float hx=step(0.35,h(cell+5.5))*line(e.x,0.56,max(fwv.x,0.5)),hy=step(0.35,h(cell+8.1))*line(e.y,0.56,max(fwv.y,0.5));
-   fld=mix(fld,vec3(0.16,0.25,0.10)*(0.8+0.4*nM.a),max(hx,hy)*0.85);}
-  /* forest floor (the same noise the trees were planted by) and rock */
-  float fd=vn(p/260.0+vec2(9.2,4.4));
-  fld=mix(fld,vec3(0.20,0.27,0.13),smoothstep(0.5,0.65,fd)*0.7);
-  float slope=1.0-(-n.z);
+  {vec2 q=p/45.0,li=floor(q+0.5),e=abs(fract(q+0.5)-0.5)*45.0;   // the 45 m lattice: a line is a piece's edge at a cell's boundary, or inside a cell split along it
+   vec2 isEdge=max(1.0-step(0.25,fract(li*0.5)),step(1.5,ks));   // a cell's boundary (li even) or a split inside it
+   float ex=h(vec2(li.x*2.0+0.5,floor(q.y))+5.5)*isEdge.x,ey=h(vec2(floor(q.x),li.y*2.0+0.5)+8.1)*isEdge.y;   // one hash per edge: a hedgerow (~1.1 m wide) above 0.6, a farm track (2.6 m) below 0.12
+   float hx=step(0.6,ex),hy=step(0.6,ey),tx=step(0.001,ex)*(1.0-step(0.12,ex)),ty=step(0.001,ey)*(1.0-step(0.12,ey));
+   float hg=max(hx*line(e.x,0.56,max(fwv.x,0.5)),hy*line(e.y,0.56,max(fwv.y,0.5))),tk=max(tx*line(e.x,1.3,max(fwv.x,0.5)),ty*line(e.y,1.3,max(fwv.y,0.5)));
+   fld=mix(fld,vec3(0.58,0.50,0.36)*(0.9+0.2*nF.r),tk*0.8);
+   fld=mix(fld,vec3(0.16,0.25,0.10)*(0.8+0.4*nM.a),hg*0.85);}
+  /* no fields on the high or steep ground (2.9): pasture */
+  float slope=1.0-(-n.z),wild=max(smoothstep(60.0,190.0,alt),smoothstep(0.03,0.07,slope));
+  if(wild>0.0)fld=mix(fld,mix(vec3(0.33,0.45,0.21),vec3(0.46,0.53,0.27),nB.b*0.6+nM.g*0.4),wild);
+  /* the land by height (2.9): dry grass on the hills, alpine meadows above 150 m, forest (the same noise the
+     trees were planted by; up the mountains to the tree line at 480 m; none in the clearing), rock on the steep
+     flanks and the high ridges, snow above some 700 m where it can lie */
+  float fd=vC.x;   // the forests' density at the mesh's vertices (10_atmo.js forestD, none where no tree stands): the floor under the trees
+  fld=mix(fld,vec3(0.55,0.47,0.33),clamp((alt-16.0)/12.0,0.0,1.0)*0.5*(1.0-smoothstep(150.0,320.0,alt)));
+  if(alt>150.0)fld=mix(fld,mix(vec3(0.40,0.49,0.25),vec3(0.55,0.56,0.35),nB.g*0.7+nM.r*0.3),smoothstep(150.0,320.0,alt));
+#ifndef LITE
+  /* flowers (2.9): on the pasture and the meadows, in drifts; white and yellow, pink, and on the alpine meadows
+     blue-violet; a dot of 12 to 18 cm in some 45 cm cells, fading into the tint they give the meadow from afar */
+  {float fm=(r1<0.40?1.0:wild)*(1.0-smoothstep(0.10,0.18,slope))*smoothstep(0.40,0.66,nB.g*0.55+nM.r*0.45);
+   vec3 mt=mix(vec3(0.96,0.90,0.58),vec3(0.82,0.74,0.86),smoothstep(150.0,320.0,alt)*0.5);   // their tint from afar (a pixel over 10 cm: no dots to draw)
+   if(fm>0.01&&fw>=0.10)fld=mix(fld,mt,fm*0.055);
+   else if(fm>0.01)ONCE{vec2 q=p/0.45,ci=floor(q);vec2 o=vec2(h(ci+vec2(2.3,9.7)),h(ci+vec2(7.9,1.3)))*0.5+0.25;
+     float d=length(fract(q)-o)*0.45,rad=0.06+0.03*h(ci+vec2(5.5,3.3)),hc=h(ci+vec2(11.7,8.8)),al=smoothstep(150.0,320.0,alt);
+     vec3 fc=hc<0.45?vec3(0.95,0.94,0.88):hc<0.78?vec3(0.98,0.82,0.18):mix(vec3(0.90,0.52,0.68),vec3(0.52,0.46,0.92),al);
+     float cov=step(1.0-fm*0.65,h(ci+vec2(17.3,4.1)))*fill(d-rad,max(fw,0.004)),fz=smoothstep(0.03,0.10,fw);
+     fld=mix(fld,mix(fc,mix(vec3(0.96,0.90,0.58),vec3(0.82,0.74,0.86),al*0.5),fz),mix(cov,fm*0.055,fz));}}
+#endif
+  float fr=smoothstep(1300.0,2300.0,dist);   // beyond the trees drawn (~2 km) the forest as one: darker, mottled
+  fld=mix(fld,mix(vec3(0.20,0.27,0.13),mix(vec3(0.11,0.19,0.09),vec3(0.21,0.30,0.14),nM.r),fr),smoothstep(0.5,0.65,fd)*mix(0.7,0.95,fr));
   vec3 rock=mix(vec3(0.42,0.38,0.33),vec3(0.55,0.50,0.44),nM.g);
-  fld=mix(fld,rock,smoothstep(0.045,0.09,slope));
-  fld=mix(fld,vec3(0.55,0.47,0.33),clamp((alt-16.0)/12.0,0.0,1.0)*0.5);
+  float hiA=smoothstep(250.0,600.0,alt);   // grass holds on steeper ground low down (rock from 26° below 250 m, from 17° above 600 m)
+  fld=mix(fld,rock,clamp(smoothstep(mix(0.10,0.045,hiA),mix(0.20,0.09,hiA),slope)+smoothstep(560.0,720.0,alt+(nB.b-0.5)*90.0)*0.7,0.0,1.0));
+  if(alt>600.0)fld=mix(fld,vec3(0.90,0.93,0.97)*(0.92+0.1*nM.b),smoothstep(700.0,760.0,alt+(nB.r-0.5)*140.0)*(1.0-smoothstep(0.22,0.40,slope)));
   vec3 col=fld;float paved=0.0;
   /* roads, 7 m wide, with dashed centre lines */
   if(min(abs(p.y+300.0),abs(p.x-280.0))<4.5+fw)ONCE{
@@ -3517,6 +3790,23 @@ void main(){
     float dash=sq(p.x/12.0,fwv.x/12.0)*line(abs(p.y+300.0),0.12,fwv.y)+sq(p.y/12.0,fwv.y/12.0)*line(abs(p.x-280.0),0.12,fwv.x);
     col=mix(col,vec3(0.9,0.9,0.85),min(dash,1.0)*fill(road-3.25,max(fw,0.5)));
     paved=k;}
+  /* the road to the town, and the town: streets on a 64 m grid, pavements, yards (2.9) */
+  {float tr=seg(p,vec2(-1500.0,-300.0),vec2(-2000.0,-1180.0));if(tr<4.5+fw)ONCE{float k=fill(tr-3.55,max(fw,0.5));col=mix(col,vec3(0.28,0.28,0.29)*(0.9+0.2*nF.r),k);paved=max(paved,k);}}
+  if(p.x>-2640.0&&p.x<-1960.0&&p.y>-1840.0&&p.y<-1160.0)ONCE{
+    vec2 sd=abs(mod(p-vec2(-2620.0,-1820.0)+32.0,64.0)-32.0);float st=min(sd.x,sd.y);
+    vec3 tc=mix(vec3(0.50,0.50,0.47),vec3(0.35,0.44,0.24),smoothstep(0.45,0.62,nM.r))*(0.92+0.12*nF.r);
+    tc=mix(tc,vec3(0.63,0.62,0.59)*(0.94+0.1*nM.b),fill(st-7.0,max(fw,0.4)));
+    tc=mix(tc,vec3(0.27,0.27,0.28)*(0.9+0.2*nF.r),fill(st-5.0,max(fw,0.4)));
+    float inT=fill(max(max(-2620.0-p.x,p.x+1980.0),max(-1820.0-p.y,p.y+1180.0)),max(fw,2.0));
+    col=mix(col,tc,inT);paved=max(paved,inT);}
+  /* the hospital's car park (2.11): asphalt with bays, east of the building */
+  {vec2 q=p-vec2(-258.0,-378.0);if(abs(q.x)<24.0&&abs(q.y)<9.0)ONCE{float k=fill(max(abs(q.x)-22.0,abs(q.y)-7.5),max(fw,0.4));col=mix(col,vec3(0.30,0.30,0.31)*(0.9+0.2*nF.r),k);
+    float bays=line(abs(fract((q.x+1.5)/3.0)-0.5)*3.0,0.06,fwv.x)*step(abs(q.y),6.0)*step(2.0,abs(q.y));col=mix(col,vec3(0.9,0.9,0.85),bays*k);paved=max(paved,k);}}
+  /* the pad on the summit (2.9) */
+  {float dk=length(p-vec2(2350.0,700.0));if(dk<11.0)ONCE{
+    col=mix(col,vec3(0.56,0.55,0.52)*(0.92+0.12*nM.b),fill(dk-9.0,max(fw,0.3)));col=mix(col,vec3(0.95,0.95,0.92),line(abs(dk-8.2),0.3,fw));
+    vec2 q=p-vec2(2350.0,700.0);float Hm=line(abs(q.y),2.2,fwv.y)*line(abs(q.x),0.35,fwv.x)+line(abs(abs(q.y)-1.85),0.35,fwv.y)*line(abs(q.x),2.0,fwv.x);
+    col=mix(col,vec3(0.95,0.95,0.92),min(Hm,1.0)*step(dk,7.5));paved=max(paved,fill(dk-9.0,max(fw,0.3)));}}
   /* airfield: runway 18/36, taxiway, apron and pad, all in world metres */
   if(p.x>-915.0-fw&&p.x<45.0+fw&&p.y>-166.0-fw&&p.y<65.0+fw)ONCE{
     float rw=seg(p,vec2(-900.0,-150.0),vec2(-100.0,-150.0));
@@ -3548,9 +3838,10 @@ void main(){
     float tl=line(abs(max(abs(p.x)-14.0,abs(p.y)-14.0)),0.2,fw)*sq((p.x+p.y)/3.0,(fwv.x+fwv.y)/3.0);
     col=mix(col,vec3(0.95,0.80,0.15),tl);
     paved=max(paved,max(max(krw,ktw),kap));}
-  /* lake: the shore follows the terrain's height, antialiased like an edge */
+  /* lake: the shore follows the terrain's height, antialiased like an edge (2.10: inside the lake's own bounds only; the river's plain near the inflow lies as low) */
   float dl=length(p-vec2(-450.0,550.0));
-  float wet=dl<235.0?fill(alt+1.1,fwa):0.0;
+  float wet=0.0;if(dl<235.0)ONCE{float th=atan(p.y-550.0,p.x+450.0)/6.2832+0.5;float rl=texture2D(uShore,vec2(th,0.5)).r*255.0;   // (2.10) the shore the terrain follows (10_atmo.js groundH, the radius by bearing in a 1-D texture): outside it the low ground is the river's plain, not the lake
+    wet=fill(alt+1.1,fwa)*(1.0-smoothstep(8.0,22.0,dl-rl));}
   if(wet>0.0)ONCE{vec3 v=normalize(uCam-vW);
 #ifdef LITE
     vec3 water=mix(vec3(0.16,0.30,0.38),vec3(0.28,0.42,0.48),nM.r);vec3 nn=vec3(0.0,0.0,-1.0);
@@ -3558,7 +3849,8 @@ void main(){
     vec3 water=mix(vec3(0.16,0.30,0.38),vec3(0.28,0.42,0.48),nW.r);
     vec3 nn=normalize(vec3((nW.g-0.5)*0.06,(nW.b-0.5)*0.06,-1.0));
 #endif
-    float spec=pow(max(dot(reflect(-uSun,nn),v),0.0),60.0);col=mix(col,water+spec*0.7,wet);}
+    water=mix(water,uFog*0.9,pow(1.0-max(-v.z,0.0),3.0)*0.5);   // the sky in it at a grazing look
+    float spec=pow(max(dot(reflect(-uSun,nn),v),0.0),60.0);col=mix(col,water+spec*0.7*uSunC,wet);}
   /* close to the eye: texture down to a few centimetres, the hover pilot's optic flow (the mip chain
      fades it where a pixel covers more) */
 #ifdef LITE
@@ -3571,23 +3863,68 @@ void main(){
   float wd=length(p-uWash.xy);
   if(uWash.z>0.001&&wd<uWash.w*3.0)ONCE{float wk=uWash.z*exp(-wd/uWash.w)*smoothstep(0.5,2.5,wd);
     float rip=0.5+0.5*sin(wd*2.3-uT*13.0+vn(p*0.8+uT*0.4)*4.0);
-    float veg=(1.0-paved)*(r1<0.85?1.0:0.35)*(1.0-wet);
+    float veg=(1.0-paved)*(r1<0.83||r1>0.92?1.0:0.35)*(1.0-wet);
     col=mix(col,col*1.30+vec3(0.05,0.06,0.02),wk*veg*0.6);col*=1.0+wk*veg*(rip-0.5)*0.55;   // flattened blades show their lighter undersides, in moving bands
     col+=vec3(0.30,0.33,0.34)*wk*pow(rip,3.0)*wet;}
-  float d=max(dot(n,uSun),0.0);float amb=mix(0.34,0.54,clamp(-n.z*0.5+0.5,0.0,1.0));
-  col=col*(amb+0.62*d);
-  float f=1.0-exp(-dist*0.00036);col=mix(col,uFog,f);
+  float d=max(dot(n,uSun),0.0)*cloudShadow(p,alt);float amb=mix(0.34,0.54,clamp(-n.z*0.5+0.5,0.0,1.0));
+  col=col*(amb*uAmbC+0.62*d*uSunC);
+  float f=1.0-exp(-dist*uFogK);col=mix(col,uFog,f);
   gl_FragColor=vec4(col,1.0);}`;
+/* Rivers (2.9): a ribbon over the flood plain, drawn after the ground. Its vertices are moved 0.4 % of the
+   way toward the eye (along the line of sight, so nothing moves on the screen), so the coarse ground mesh far
+   away cannot cover it. aC carries the flow coordinates: metres along / 10 and the side (-1 .. 1). The surface
+   drifts downstream, darkens to gravel at the banks, mirrors the sky at a grazing look. */
+const VS_WATER=`attribute vec3 aP;attribute vec3 aN;attribute vec3 aC;uniform mat4 uMVP;uniform vec3 uCam;varying vec3 vC;varying vec3 vW;
+void main(){vW=aP;vC=aC;vec3 d=uCam-aP;float l=length(d);gl_Position=uMVP*vec4(aP+d*min(0.004,2.0/max(l,1.0)),1.0);}`;   // (2.10: at most 2 m, so from high up the ribbon stays on the plain)
+const FS_WATER=`${GLSL_PREC}varying vec3 vC;varying vec3 vW;uniform vec3 uSun;uniform vec3 uCam;uniform vec3 uFog;uniform float uT;uniform float uFogK;uniform sampler2D uNoise;uniform vec3 uSunC;uniform vec3 uAmbC;
+void main(){vec3 v=normalize(uCam-vW);float dist=length(vW-uCam);
+  vec2 fl=vec2(vC.x-uT*0.16,vC.y*0.6);
+  vec4 q=texture2D(uNoise,fl*vec2(0.06,0.5)+vec2(0.21,0.63)),q2=texture2D(uNoise,fl*vec2(0.35,1.6)+vec2(0.71,0.13));
+  vec3 water=mix(vec3(0.13,0.25,0.30),vec3(0.27,0.40,0.43),q.r*0.6+q2.g*0.4);
+  vec3 nn=normalize(vec3((q2.b-0.5)*0.12,(q2.g-0.5)*0.12,-1.0));
+  float fres=pow(1.0-max(-v.z,0.0),3.0);water=mix(water,uFog*0.92,fres*0.55);
+  water=mix(water,vec3(0.47,0.44,0.37),smoothstep(0.78,1.0,abs(vC.y))*0.7);
+  water*=mix(uAmbC,uSunC,0.45);water+=pow(max(dot(reflect(-uSun,nn),v),0.0),60.0)*0.6*uSunC;
+  float f=1.0-exp(-dist*uFogK);gl_FragColor=vec4(mix(water,uFog,f),1.0);}`;
+/* The vegetation's vertex shader (2.9.2): one shape (a template at unit size) drawn many times, each instance
+   with its place and size (aI0: north, east, down, scale) and its turn, horizontal stretch, brightness, rank
+   and phase (aI1: cos and sin of the turn times the stretch, brightness, rank x 1000 + phase 0..1). Each
+   vertex carries how much it may move (aT.x: 0 at the foot, 1 at the top): the crowns lean downwind and sway
+   in gusts, and under a hovering rotor they are pushed away from the wake and shake.
+   2.9.3, no popping: each instance decides for itself, by its own distance, whether this draw's shape (the
+   band uBand of distances) is its own, and whether it is kept at all: a share keep(d) of the instances is
+   kept (all near, fewer with distance: uKD the distances, uKV the shares between them and an overall
+   factor), those of a rank below it; one about to be dropped shrinks away over 5 % of rank, the kept ones
+   grow a little to fill the gaps (uCE). So nothing appears or changes at once, and never a whole tile. */
+const VS_INST=`attribute vec3 aP;attribute vec3 aN;attribute vec3 aC;attribute vec2 aT;attribute vec4 aI0;attribute vec4 aI1;attribute vec4 aI2;
+uniform mat4 uMVP;uniform float uT;uniform vec2 uWind;uniform vec4 uWash;uniform float uK;uniform vec3 uEye;uniform vec2 uBand;uniform vec4 uKD;uniform vec3 uKV;uniform float uCE;uniform float uBW;
+varying vec3 vN;varying vec3 vC;varying vec3 vW;varying float vA;
+float keep(float d){float k=d<uKD.y?mix(1.0,uKV.x,smoothstep(uKD.x,uKD.y,d)):d<uKD.z?mix(uKV.x,uKV.y,smoothstep(uKD.y,uKD.z,d)):mix(uKV.y,0.0,smoothstep(uKD.z,uKD.w,d));return k*uKV.z;}
+void main(){vec2 cs=aI1.xy;float k2=dot(cs,cs),rank=floor(aI1.w)*0.001,ph01=fract(aI1.w);
+  float d=length(aI0.xyz-uEye),kp=keep(d);
+  float bf=(uBand.x<=0.0?1.0:smoothstep(uBand.x-uBW,uBand.x+uBW,d))*(1.0-smoothstep(uBand.y-uBW,uBand.y+uBW,d));   // (2.12) this shape's share: cross-faded with the next over 2 uBW
+  vA=clamp((kp-rank)/0.08,0.0,1.0)*bf;   // and whether the tree is kept at this distance: faded, not shrunk (alpha to coverage; 2.9.3 to 2.11 grew the trees out of the ground)
+  float s=aI0.w*uK*pow(max(kp,0.05),-uCE)*step(0.001,vA),kz=abs(aI2.x);   // (2.10) each its own height to width (2.11: negative = no shadow)
+  vec3 p=vec3(cs.x*aP.x-cs.y*aP.y,cs.y*aP.x+cs.x*aP.y,aP.z*kz)*s+aI0.xyz;
+  float w=aT.x,ph=ph01*6.2832,ws=length(uWind);vec2 wd=ws>0.2?uWind/ws:vec2(0.0);
+  float g=sin(uT*1.3+ph)*0.6+sin(uT*2.7+ph*1.7)*0.4;
+  vec2 off=wd*w*(0.035*ws)*(0.75+0.45*g);
+  vec2 dv=p.xy-uWash.xy;float dd=length(dv);float k=uWash.z*exp(-dd/max(uWash.w,1.0))*smoothstep(1.0,4.0,dd);
+  off+=dv/max(dd,0.1)*k*w*(0.9+0.5*sin(uT*7.0+ph+dd*0.5));
+  p.xy+=off*step(0.001,s);vW=p;vN=normalize(vec3(cs.x*aN.x-cs.y*aN.y,cs.y*aN.x+cs.x*aN.y,aN.z*k2/kz));
+  float hue=aI2.y;vec3 c=aC*aI1.z*vec3(1.0+0.26*hue,1.0+0.04*abs(hue),1.0-0.22*hue);   // (2.10) each its own green, yellow to blue
+  vC=mix(c,mix(vec3(0.84,0.82,0.76),vec3(0.42,0.33,0.22),fract(ph01*5.17)*0.5)*aI1.z,aT.y*aI2.z);   // a birch's white trunk (aT.y marks the trunk)
+  gl_Position=uMVP*vec4(p,1.0);}`;
 const VS_SKY=`attribute vec3 aP;uniform mat4 uMVP;varying vec3 vD;void main(){vD=aP;vec4 c=uMVP*vec4(aP,1.0);gl_Position=vec4(c.xy,c.w*0.9999,c.w);}`;   // just inside the far plane
 /* Sky and clouds, drawn last, so only the pixels nothing else covers are
    shaded. The cloud field is the noise texture at two scales (four
    octaves in one fetch); its mip chain keeps the deck near the horizon,
    where a pixel spans kilometres of it, from crawling. */
-const FS_SKY=`${GLSL_PREC}varying vec3 vD;uniform vec3 uSun;uniform vec3 uCam;uniform float uT;uniform vec3 uFog;uniform float uCloud;uniform vec2 uWind;uniform sampler2D uNoise;
+const FS_SKY=`${GLSL_PREC}varying vec3 vD;uniform vec3 uSun;uniform vec3 uCam;uniform float uT;uniform vec3 uFog;uniform float uCloud;uniform vec2 uWind;uniform sampler2D uNoise;uniform vec3 uSunC;uniform vec3 uZen;
 void main(){vec3 d=normalize(vD);float up=clamp(-d.z,-0.05,1.0);
-  vec3 zen=vec3(0.30,0.48,0.82),hor=uFog;
+  vec3 zen=uZen,hor=uFog;
   vec3 c=mix(hor,zen,pow(max(up,0.0),0.45));
-  float s=max(dot(d,uSun),0.0);c+=vec3(1.0,0.92,0.75)*(pow(s,600.0)*1.5+pow(s,12.0)*0.12);
+  float s=max(dot(d,uSun),0.0);c+=uSunC*(pow(s,600.0)*1.5+pow(s,12.0)*0.12+pow(s,4.0)*0.10*(1.0-up));   // the sun, its glow, warmer low down
   float hc=1500.0+uCam.z;vec2 uv=uCam.xy+d.xy/max(up,0.01)*hc-uWind*uT;   // cloud base 1500 m above sea level
   vec4 q=texture2D(uNoise,uv/13600.0);   // 850, 425, 212 and 53 m cells
   float k=dot(q,vec4(0.5,0.25,0.125,0.0625));float cov=smoothstep(0.55-uCloud*0.25,0.75-uCloud*0.2,k);
@@ -3596,24 +3933,36 @@ void main(){vec3 d=normalize(vD);float up=clamp(-d.z,-0.05,1.0);
 #else
   float shade=mix(0.68,1.0,dot(texture2D(uNoise,uv/4800.0+vec2(0.37,0.11)),vec4(0.5,0.25,0.125,0.0625)));
 #endif
-  vec3 cc=mix(vec3(0.62,0.66,0.72),vec3(1.0,1.0,1.0),shade);
-  float fade=smoothstep(0.0,0.12,up);c=mix(c,cc,cov*fade*0.95);
+  vec3 cc=mix(vec3(0.62,0.66,0.72)*mix(vec3(1.0),uSunC,0.35),uSunC*1.05,shade);cc=mix(cc,uFog,0.25*(1.0-dot(uSunC,vec3(0.333))));   // lit by the hour's sun
+  float fade=smoothstep(0.0,0.12,up);
+#ifndef LITE
+  {vec2 uv2=(uCam.xy+d.xy/max(up,0.01)*(7000.0+uCam.z)-uWind*uT*2.5);float ci=texture2D(uNoise,vec2(uv2.x/70000.0,uv2.y/22000.0)+vec2(0.61,0.29)).g;   // (2.10) cirrus, high and thin, streaked along the wind
+   c=mix(c,mix(uSunC,vec3(1.0),0.4)*0.98,smoothstep(0.52,0.78,ci)*0.45*(0.35+0.65*uCloud)*fade);}
+#endif
+  c=mix(c,cc,cov*fade*0.95);
   gl_FragColor=vec4(c,1.0);}`;
 /* Textured, unlit (the instrument displays light themselves) */
 const VS_TEX=`attribute vec3 aP;attribute vec2 aT;uniform mat4 uMVP;varying vec2 vT;void main(){vT=aT;gl_Position=uMVP*vec4(aP,1.0);}`;
 const FS_TEX=`${GLSL_PREC}varying vec2 vT;uniform sampler2D uTex;uniform float uAlpha;void main(){vec4 c=texture2D(uTex,vT);gl_FragColor=vec4(c.rgb,c.a*uAlpha);}`;
 function glProg(gl,vs,fs){const p=gl.createProgram();for(const [t,s] of [[gl.VERTEX_SHADER,vs],[gl.FRAGMENT_SHADER,fs]]){const sh=gl.createShader(t);gl.shaderSource(sh,s);gl.compileShader(sh);if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(sh));gl.attachShader(p,sh);}
-  gl.linkProgram(p);const o={p,a:{},u:{}};for(const n of ['aP','aN','aC','aT'])o.a[n]=gl.getAttribLocation(p,n);for(const n of ['uMVP','uM','uSun','uCam','uAlpha','uFog','uT','uCloud','uWind','uTex','uSpec','uWash','uScale','uNoise','uTint'])o.u[n]=gl.getUniformLocation(p,n);return o;}
+  gl.linkProgram(p);const o={p,a:{},u:{}};for(const n of ['aP','aN','aC','aT','aI0','aI1','aI2'])o.a[n]=gl.getAttribLocation(p,n);for(const n of ['uMVP','uM','uSun','uCam','uAlpha','uFog','uT','uCloud','uWind','uTex','uSpec','uWash','uScale','uNoise','uTint','uFogK','uSunC','uAmbC','uZen','uK','uEye','uBand','uKD','uKV','uCE','uShore','uBW'])o.u[n]=gl.getUniformLocation(p,n);return o;}
 /* ---- mesh builder: primitives appended with a transform, chunked at 60k vertices ---- */
 function MB(){this.chunks=[];this.cur=null;this.fresh();}
-MB.prototype.fresh=function(){this.cur={P:[],N:[],C:[],I:[]};this.chunks.push(this.cur);};
-MB.prototype.add=function(pos,nrm,col,idx,M){if(this.cur.P.length/3+pos.length/3>60000)this.fresh();const c=this.cur,b=c.P.length/3;const R=M&&M.R?M.R:null,T=M&&M.T?M.T:[0,0,0],S=M&&M.S?M.S:null;
-  for(let i=0;i<pos.length;i+=3){let p=[pos[i],pos[i+1],pos[i+2]],n=[nrm[i],nrm[i+1],nrm[i+2]];if(S){p=[p[0]*S[0],p[1]*S[1],p[2]*S[2]];n=vnorm([n[0]/S[0],n[1]/S[1],n[2]/S[2]]);}if(R){p=mrot(R,p);n=mrot(R,n);}c.P.push(p[0]+T[0],p[1]+T[1],p[2]+T[2]);c.N.push(n[0],n[1],n[2]);const cc=Array.isArray(col[0])?col[(i/3)|0]||col[0]:col;c.C.push(cc[0],cc[1],cc[2]);}
+MB.prototype.fresh=function(){this.cur={P:[],N:[],C:[],I:[],W:[]};this.chunks.push(this.cur);};
+// (2.11) wDefault: a per-vertex attribute for every piece added, e.g. the ground's z under it, for the shadows
+MB.prototype.add=function(pos,nrm,col,idx,M,Wf){Wf=Wf||this.wDefault;if(Wf)this.hasW=true;if(this.cur.P.length/3+pos.length/3>60000)this.fresh();const c=this.cur,b=c.P.length/3;const R=M&&M.R?M.R:null,T=M&&M.T?M.T:[0,0,0],S=M&&M.S?M.S:null;
+  for(let i=0;i<pos.length;i+=3){let p=[pos[i],pos[i+1],pos[i+2]],n=[nrm[i],nrm[i+1],nrm[i+2]];if(S){p=[p[0]*S[0],p[1]*S[1],p[2]*S[2]];n=vnorm([n[0]/S[0],n[1]/S[1],n[2]/S[2]]);}if(R){p=mrot(R,p);n=mrot(R,n);}c.P.push(p[0]+T[0],p[1]+T[1],p[2]+T[2]);c.N.push(n[0],n[1],n[2]);const cc=Array.isArray(col[0])?col[(i/3)|0]||col[0]:col;c.C.push(cc[0],cc[1],cc[2]);const ww=Wf?Wf(c.P.slice(-3)):null;c.W.push(ww?ww[0]:0,ww?ww[1]:0);}
   for(const i of idx)c.I.push(i+b);return this;};
-MB.prototype.upload=function(gl){return this.chunks.filter(c=>c.I.length).map(c=>{const m={n:c.I.length};
-  m.vp=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,m.vp);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(c.P),gl.STATIC_DRAW);
-  m.vn=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,m.vn);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(c.N),gl.STATIC_DRAW);
-  m.vc=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,m.vc);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(c.C),gl.STATIC_DRAW);
+/* pack (2.9.1, the trees): normals and colours as bytes (4 a vertex, one unused), the sway weight and phase as
+   two bytes: 22 bytes a vertex instead of 44, half the forest's memory (colours must stay within 0..1) */
+MB.prototype.upload=function(gl,pack){return this.chunks.filter(c=>c.I.length).map(c=>{const m={n:c.I.length},nv=c.P.length/3;
+  const buf=a=>{const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,a,gl.STATIC_DRAW);return b;};
+  m.vp=buf(new Float32Array(c.P));
+  if(pack){const N=new Int8Array(nv*4),C=new Uint8Array(nv*4);for(let i=0;i<nv;i++)for(let k=0;k<3;k++){N[i*4+k]=Math.round(clamp(c.N[i*3+k],-1,1)*127);C[i*4+k]=Math.round(clamp(c.C[i*3+k],0,1)*255);}
+    m.vn=buf(N);m.vc=buf(C);m.packed=true;
+    if(this.hasW){const W=new Uint8Array(nv*2);for(let i=0;i<nv;i++){W[i*2]=Math.round(clamp(c.W[i*2],0,1)*255);W[i*2+1]=Math.round(clamp(c.W[i*2+1],0,1)*255);}m.vt=buf(W);}}   // (2.10: the second a flag, the trunk)
+  else{m.vn=buf(new Float32Array(c.N));m.vc=buf(new Float32Array(c.C));
+    if(this.hasW)m.vt=buf(new Float32Array(c.W));}   // (2.9) the trees' sway weights
   m.ib=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,m.ib);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(c.I),gl.STATIC_DRAW);return m;});};
 // box centred at c with half sizes s (flat-shaded)
 function gBox(c,s){const P=[],N=[],I=[];const f=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
@@ -3717,7 +4066,8 @@ function glInit(canvas){
   if(!gl)throw new Error('WebGL not available');
   R3.deriv=!!gl.getExtension('OES_standard_derivatives');   // footprint filtering in the ground and sky shaders (enabled before they compile)
   R3.gl=gl;R3.canvas=canvas;R3.pr.lit=glProg(gl,VS_LIT,FS_LIT);R3.pr.gndFull=glProg(gl,VS_LIT,FS_GND);R3.pr.gndLite=glProg(gl,VS_LIT,'#define LITE\n'+FS_GND);
-  R3.pr.skyFull=glProg(gl,VS_SKY,FS_SKY);R3.pr.skyLite=glProg(gl,VS_SKY,'#define LITE\n'+FS_SKY);R3.pr.tex=glProg(gl,VS_TEX,FS_TEX);R3.pr.shadow=glProg(gl,VS_LIT,FS_SHADOW);
+  R3.pr.skyFull=glProg(gl,VS_SKY,FS_SKY);R3.pr.skyLite=glProg(gl,VS_SKY,'#define LITE\n'+FS_SKY);R3.pr.tex=glProg(gl,VS_TEX,FS_TEX);R3.pr.shadow=glProg(gl,VS_LIT,FS_SHADOW);R3.pr.water=glProg(gl,VS_WATER,FS_WATER);R3.ext=gl.getExtension('ANGLE_instanced_arrays');R3.pr.inst=glProg(gl,VS_INST,FS_LIT.replace('varying vec3 vN;','varying vec3 vN;varying float vA;').replace('gl_FragColor=vec4(c,uAlpha);','gl_FragColor=vec4(c,uAlpha*vA);'));   // (2.9.2) the vegetation, instanced; (2.12) its alpha from the vertex shader, to the coverage
+  R3.pr.shd=glProg(gl,VS_SHD,FS_SHD);R3.pr.shd.sway=true;R3.pr.instShd=glProg(gl,VS_INST_SHD,FS_SHD);   // (2.11) the scenery's shadows
   // what this GPU gives us; the far plane follows the depth buffer
   const hp=gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER,gl.HIGH_FLOAT);
   R3.info={deriv:R3.deriv,depthBits:gl.getParameter(gl.DEPTH_BITS),stencil:gl.getParameter(gl.STENCIL_BITS)>0,fragHighp:hp&&hp.precision>0,renderer:(gl.getExtension('WEBGL_debug_renderer_info')?gl.getParameter(gl.getExtension('WEBGL_debug_renderer_info').UNMASKED_RENDERER_WEBGL):'?')};
@@ -3725,16 +4075,22 @@ function glInit(canvas){
   // a software renderer (the browser's GPU switched off or blocklisted): auto picks light and a small pixel budget, no anisotropic filtering, and the side panel says so
   R3.soft=/swiftshader|llvmpipe|softpipe|software|microsoft basic render/i.test(String(R3.info.renderer));GFX.mode=gfxEffective();
   R3.noiseTex=makeNoiseTex(gl);R3.info.aniso=R3.aniso;
+  {const L=TERRAIN.lake,N=256,d=new Uint8Array(N*4);for(let i=0;i<N;i++){const th=(i/N-0.5)*2*Math.PI,rl=L.r*(0.8+0.4*vnoise(2.2+Math.cos(th)*1.4,3.7+Math.sin(th)*1.4));d[i*4]=Math.round(clamp(rl,0,255));d[i*4+3]=255;}   // (2.10) the lake's shore radius by bearing, for the ground shader
+   const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,N,1,0,gl.RGBA,gl.UNSIGNED_BYTE,d);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);R3.shoreTex=t;}
   console.log('EC135 Flight Dynamics GL:',JSON.stringify(R3.info));
   gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.enable(gl.CULL_FACE);gl.cullFace(gl.BACK);
   // sky dome
   {const b=new MB();const d=gEll([5000,5000,5000],24,12);b.add(d.P,d.N.map(v=>-v),[1,1,1],d.I.slice().reverse());R3.m.sky=b.upload(gl)[0];}
-  // terrain: warped grid, fine near the pad, coarse at 4 km
-  {const N=200;const P=[],Nn=[],C=[],I=[];const w=u=>4000*Math.sign(u)*Math.pow(Math.abs(u),1.8);
+  // terrain: warped grid, fine near the pad (10 m), 30 m at 500 m, 75 m at 3 km, out to the hazy hills at 7 km (2.9; was 4 km)
+  {const N=250;const P=[],Nn=[],C=[],I=[];const w=u=>7000*Math.sign(u)*u*u;
     const gN=(n,e)=>{const d=0.5,hn=(groundH(n+d,e)-groundH(n-d,e))/(2*d),he=(groundH(n,e+d)-groundH(n,e-d))/(2*d);return vnorm([-hn,-he,-1]);};
-    for(let j=0;j<=N;j++)for(let i=0;i<=N;i++){const n=w(j/N*2-1),e=w(i/N*2-1);const hgt=groundH(n,e),nn=gN(n,e);P.push(n,e,-hgt);Nn.push(nn[0],nn[1],nn[2]);C.push(0,0,0);}
-    for(let j=0;j<N;j++)for(let i=0;i<N;i++){const a=j*(N+1)+i;I.push(a,a+1,a+N+1,a+1,a+N+2,a+N+1);}
-    const m={n:I.length};
+    for(let j=0;j<=N;j++)for(let i=0;i<=N;i++){const n=w(j/N*2-1),e=w(i/N*2-1);const hgt=groundH(n,e),nn=gN(n,e);P.push(n,e,-hgt);Nn.push(nn[0],nn[1],nn[2]);
+      let fd=forestD(n,e);if(fd>0.4&&treeBlocked(n,e))fd=0;C.push(fd*(1-sm(420,500,hgt)),0,0);}   // (2.9.2) the forest's density for the floor under the trees (the shader's own noise was not the trees')
+    const blocks=[],K=10,bs=N/K;   // (2.9.2) in blocks with a bounding sphere each (10 x 10 since 2.10): the blocks behind the camera are not drawn, the far ones get the light shader
+    for(let bj=0;bj<K;bj++)for(let bi=0;bi<K;bi++){const I0=I.length;let lo=[1e9,1e9,1e9],hi=[-1e9,-1e9,-1e9];
+      for(let j=bj*bs;j<(bj+1)*bs;j++)for(let i=bi*bs;i<(bi+1)*bs;i++){const a=j*(N+1)+i;I.push(a,a+1,a+N+1,a+1,a+N+2,a+N+1);for(const v of [a,a+N+2])for(let k=0;k<3;k++){lo[k]=Math.min(lo[k],P[v*3+k]);hi[k]=Math.max(hi[k],P[v*3+k]);}}
+      blocks.push({o:I0*2,n:I.length-I0,c:[0,1,2].map(k=>(lo[k]+hi[k])/2),r:Math.hypot(hi[0]-lo[0],hi[1]-lo[1],hi[2]-lo[2])/2});}
+    const m={n:I.length,blocks};
     m.vp=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,m.vp);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(P),gl.STATIC_DRAW);
     m.vn=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,m.vn);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(Nn),gl.STATIC_DRAW);
     m.vc=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,m.vc);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(C),gl.STATIC_DRAW);
@@ -3745,17 +4101,8 @@ function glInit(canvas){
 function gfxLite(){return (GFX.mode=gfxEffective())==='light';}   // from the setting itself, so a change of cfg.gfx takes effect on the next frame
 function buildScenery(gl){
   const b=new MB(),rng=makeRng(3);const hAt=(n,e)=>-terrainH(n,e);
-  /* trees: placed here (same random stream as before), meshed per graphics mode in buildTrees */
-  const TREES=[];const tree=(n,e,s,kind)=>{TREES.push({n,e,s,kind,dark:0.85+0.3*rng()});};
-  // forests from the shared density function, jittered grid, 20 m spacing within 1300 m
-  let nT=0;
-  for(let n=-1300;n<=1300;n+=20)for(let e=-1300;e<=1300;e+=20){const jn=n+(rng()-0.5)*14,je=e+(rng()-0.5)*14;const d=forestD(jn,je);
-    if(d<0.53||inLake(jn,je))continue;if(Math.hypot(jn,je)<90)continue;if(Math.abs(je+150)<24&&jn<-90&&jn>-910)continue;if(Math.abs(je+300)<8||Math.abs(jn-280)<8)continue;
-    if(rng()>0.75+(d-0.5)*1.5)continue;tree(jn,je,0.75+rng()*0.7,rng()<0.6?'pine':'broad');nT++;}
-  // scattered single trees, hedgerow trees
-  for(let i=0;i<220;i++){const n=(rng()*2-1)*1400,e=(rng()*2-1)*1400;if(Math.hypot(n,e)<120||inLake(n,e))continue;if(Math.abs(e+150)<30&&n<-80&&n>-920)continue;if(Math.abs(e+300)<10||Math.abs(n-280)<10)continue;tree(n,e,0.9+rng()*0.8,'broad');TREES[TREES.length-1].single=true;}
-  for(let i=0;i<14;i++){const a=i/14*2*Math.PI;tree(260+28*Math.cos(a),-220+28*Math.sin(a),1.3,'broad');TREES[TREES.length-1].single=true;}   // confined area
-  R3.treeList=TREES;
+  const wGround=p=>[-groundH(p[0],p[1]),1];b.wDefault=wGround;R3.parked=[];R3.houses=[];   // (2.11) every piece carries the ground's z under its vertices, for its shadow; the parked cars and the houses are listed for 86_life.js
+  R3.veg=vegList();let nT=0;for(const v of R3.veg)if(v.kind==='pine'||v.kind==='broad')nT++;   // (2.9.2) the vegetation, drawn instanced (drawForest)
   // control tower (the tower camera sits in its cab)
   {const c=gCone(0,2.2,-11,1.8,10);b.add(c.P,c.N,[0.75,0.74,0.70],c.I,{R:UPX,T:[-70,55,hAt(-70,55)]});
     const cab=gBox([0,0,-12.5],[3.2,3.2,1.6]);b.add(cab.P,cab.N,[0.22,0.30,0.38],cab.I,{T:[-70,55,hAt(-70,55)]});
@@ -3768,18 +4115,29 @@ function buildScenery(gl){
     for(const [dn,de] of [[6,4],[6,-4],[-6,4],[-6,-4]])tube(b,[-70+dn,-80+de,z],[-70+dn,-80+de,z-4.4],0.12,0.12,[0.6,0.6,0.6],5);}
   for(let e=-62;e<=62;e+=8)for(const n of [-42,42]){tube(b,[n,e,hAt(n,e)],[n,e,hAt(n,e)-1.5],0.05,0.05,[0.55,0.55,0.55],4);}
   // pad perimeter lights, runway edge and threshold lights, windsock pole, approach cones
+  b.wDefault=null;   // (no shadows: the lights, the wires)
   for(let i=0;i<12;i++){const a=i/12*2*Math.PI,n=9*Math.cos(a),e=9*Math.sin(a);const l=gBox([n,e,hAt(n,e)-0.08],[0.1,0.1,0.08]);b.add(l.P,l.N,[1.0,0.85,0.2],l.I);}
   for(let n=-900;n<=-100;n+=50)for(const e of [-161,-139]){const l=gBox([n,e,hAt(n,e)-0.2],[0.15,0.15,0.2]);b.add(l.P,l.N,n===-900||n===-100?[0.2,1.0,0.3]:[1.0,1.0,0.9],l.I);}
-  tube(b,[35,-45,hAt(35,-45)],[35,-45,hAt(35,-45)-7],0.06,0.05,[0.8,0.8,0.8],6);
+  b.wDefault=wGround;
+  R3.socks=[[35,-45,7],[2366,700,6],[212,-872,6],[1563,-976,6],[-2258,-1458,5]];   // the field, the summit, the clearing, the hill, the high-rise (2.9)
+  for(const [n,e,hp] of R3.socks)tube(b,[n,e,hAt(n,e)],[n,e,hAt(n,e)-hp],0.06,0.05,[0.8,0.8,0.8],6);
   for(const [n,e] of [[25,25],[25,-25],[-25,25],[-25,-25]]){const c=gCone(0,0.35,-1.0,0.0,8);b.add(c.P,c.N,[0.95,0.45,0.1],c.I,{R:UPX,T:[n,e,hAt(n,e)]});}
   // power line along the north-south road: the hazard low flying is about
-  for(let n=-1400;n<=1400;n+=70){const e=-322,z=hAt(n,e);tube(b,[n,e,z],[n,e,z-11],0.18,0.14,[0.45,0.40,0.35],5);const cb=gBox([0,0,-10.6],[0.12,1.6,0.08]);b.add(cb.P,cb.N,[0.45,0.40,0.35],cb.I,{T:[n,e,z]});
-    if(n<1400)for(const dy of [-1.4,0,1.4]){const z2=hAt(n+70,e);const a=[n,e+dy,z-10.5],c=[n+70,e+dy,z2-10.5];const mid=[n+35,e+dy,(z+z2)/2-10.5+1.2];tube(b,a,mid,0.03,0.03,[0.15,0.15,0.15],3);tube(b,mid,c,0.03,0.03,[0.15,0.15,0.15],3);}}
+  for(let n=-1400;n<=1400;n+=70){const e=-322,z=hAt(n,e);tube(b,[n,e,z],[n,e,z-11],0.18,0.14,[0.45,0.40,0.35],5);const cb=gBox([0,0,-10.6],[0.12,1.6,0.08]);b.add(cb.P,cb.N,[0.45,0.40,0.35],cb.I,{T:[n,e,z]});}
+  // every wire the rotor can hit (10_atmo.js WIRES: this line, the one across the river valley), as the physics sees it
+  b.wDefault=null;for(const w of WIRES)if(w[6]!=='j')tube(b,[w[0],w[1],-w[2]],[w[3],w[4],-w[5]],0.03,0.03,[0.15,0.15,0.15],3);b.wDefault=wGround;
   // village east of the road
+  R3.chimneys=[];
   for(let i=0;i<16;i++){const n=300+rng()*140,e=480+rng()*220;if(Math.abs(n-280)<14)continue;const z=hAt(n,e),w=5+rng()*3,l=6+rng()*4,hh=3+rng()*1.5;const R=rotZ(rng()<0.5?0:Math.PI/2);
-    const hb=gBox([0,0,-hh/2],[l,w,hh/2]);b.add(hb.P,hb.N,[0.80+0.1*rng(),0.76,0.68],hb.I,{R,T:[n,e,z]});const rf=gRoof(l+0.4,w+0.4,-hh,-hh-w*0.7);b.add(rf.P,rf.N,[0.55+0.2*rng(),0.25,0.20],rf.I,{R,T:[n,e,z]});}
+    if(R3.chimneys.length<3){const ch=gBox([0,0,-hh-w*0.7-0.2],[0.35,0.35,0.8]);b.add(ch.P,ch.N,[0.55,0.32,0.25],ch.I,{T:[n,e,z]});R3.chimneys.push([n,e,z-hh-w*0.7-1.1]);}   // (2.9) three that smoke
+    const hb=gBox([0,0,-hh/2],[l,w,hh/2]);b.add(hb.P,hb.N,[0.80+0.1*rng(),0.76,0.68],hb.I,{R,T:[n,e,z]});const rf=gRoof(l+0.4,w+0.4,-hh,-hh-w*0.7);b.add(rf.P,rf.N,[0.55+0.2*rng(),0.25,0.20],rf.I,{R,T:[n,e,z]});
+    house(b,n,e,R,l,w,i%3===0,i%2===0);}   // (2.11) a garden with a fence behind, every third a car beside it
   {const z=hAt(400,600);const ch=gBox([0,0,-4],[8,5,4]);b.add(ch.P,ch.N,[0.82,0.80,0.74],ch.I,{T:[400,600,z]});const rf=gRoof(8.4,5.4,-8,-12);b.add(rf.P,rf.N,[0.4,0.4,0.42],rf.I,{T:[400,600,z]});
-    const tw=gBox([9.5,0,-9],[2,2,9]);b.add(tw.P,tw.N,[0.82,0.80,0.74],tw.I,{T:[400,600,z]});const sp=gCone(0,2.4,-9,0.0,4);b.add(sp.P,sp.N,[0.35,0.35,0.38],sp.I,{R:UPX,T:[409.5,600,z-18]});}
+    const tw=gBox([9.5,0,-9],[2,2,9]);b.add(tw.P,tw.N,[0.82,0.80,0.74],tw.I,{T:[400,600,z]});const sp=gCone(0,2.4,-9,0.0,4);b.add(sp.P,sp.N,[0.35,0.35,0.38],sp.I,{R:UPX,T:[409.5,600,z-18]});
+    // (2.11) the churchyard: a wall of 1.2 m round it with a gap at the gate, rows of gravestones
+    for(const [cn,ce,sn,se] of [[0,-16,22,0.15],[0,16,22,0.15],[22,0,0.15,16],[-22,-7,0.15,9],[-22,9,0.15,7]]){const wl=gBox([cn,ce,-0.6],[sn,se,0.6]);b.add(wl.P,wl.N,[0.70,0.66,0.60],wl.I,{T:[400,600,hAt(400+cn,600+ce)]});}
+    for(let i=0;i<5;i++)for(let j=0;j<7;j++){if(j===3)continue;const gn=400-19+i*3.2,ge=600-12+j*4,gs=gBox([0,0,-0.4],[0.1,0.35,0.4]);b.add(gs.P,gs.N,[0.58,0.57,0.55],gs.I,{T:[gn,ge,hAt(gn,ge)]});}}
+  buildHamlet(b,hAt);   // (2.11) the second settlement, on the north-south road
   // hospital with the rooftop pad (the plateau the physics sees is in BUILDINGS)
   for(const bd of BUILDINGS){const z=-groundH(bd.n,bd.e);const bx=gBox([0,0,-bd.h/2],[bd.w,bd.l,bd.h/2]);b.add(bx.P,bx.N,[0.78,0.76,0.72],bx.I,{T:[bd.n,bd.e,z]});
     for(let f=1;f<bd.h/3.2;f++){const band=gBox([0,0,-f*3.2],[bd.w+0.05,bd.l+0.05,0.5]);b.add(band.P,band.N,[0.35,0.42,0.50],band.I,{T:[bd.n,bd.e,z]});}
@@ -3794,21 +4152,57 @@ function buildScenery(gl){
   for(const [n,e] of R3.turbines){const z=hAt(n,e);tube(b,[n,e,z],[n,e,z-60],2.2,1.3,[0.90,0.90,0.90],10);}
   // jetty on the lake
   {const z=1.5;tube(b,[-300,520,hAt(-300,520)],[-330,530,z-0.6],0.5,0.5,[0.45,0.35,0.25],4);}
-  R3.m.scene=b.upload(gl);R3.nTrees=nT;
+  buildWorld29(b,hAt);buildFarms(b,hAt);
+  R3.m.scene=b.upload(gl);R3.nTrees=nT;R3.m.river=buildRivers(gl);
   const wb=new MB();const ws=gCone(0,0.35,2.6,0.12,8,false);wb.add(ws.P,ws.N,[1.0,0.45,0.05],ws.I);R3.m.sock=wb.upload(gl)[0];
   const tb=new MB();const nac=gBox([0,0,0],[3.6,1.4,1.4]);tb.add(nac.P,nac.N,[0.9,0.9,0.9],nac.I,{T:[-1.5,0,0]});for(let k=0;k<3;k++){const bl=gBox([0,0,-14.5],[0.25,0.7,14.5]);tb.add(bl.P,bl.N,[0.92,0.92,0.92],bl.I,{R:rotX(k*2*Math.PI/3),T:[2.4,0,0]});}R3.m.turbine=tb.upload(gl)[0];
 }
-/* Trees, meshed in 400 m tiles with a bounding sphere each, so a tile
-   outside the view is not drawn (in the cockpit three quarters of the
-   forest are behind or beside the camera), and in two levels of detail:
-   near (tiles within ~700 m of the camera) lumpy crowns that carry their
-   own light and shade (darker underneath, lighter on top, an irregular
-   outline) and conifers in three tiers; far a plain low ellipsoid or cone,
-   where a crown is a few pixels across. (2.2's dark discs under the
-   crowns, meant as shade, read as polygons on the grass and are gone.)
-   The light graphics mode keeps a little over half of the forest trees, a
-   bit larger, with fewer faces; the single trees and the confined area
-   stay. */
+/* 2.9: the bridge, the town (blocks, glass towers, the high-rise pad, the crane), the second power line's
+   pylons with marker balls, the cones of the slope site */
+function roofPad(b,n,e,z){const pd=gDisc(0,11,32);b.add(pd.P,pd.N,[0.22,0.22,0.24],pd.I,{T:[n,e,z-0.12]});const rg=gDisc(9.5,10.5,32);b.add(rg.P,rg.N,[0.95,0.95,0.92],rg.I,{T:[n,e,z-0.20]});
+  const hb=gBox([0,0,-0.20],[2.2,0.35,0.02]);b.add(hb.P,hb.N,[0.95,0.95,0.92],hb.I,{T:[n,e,z]});for(const y of [-1.8,1.8]){const bb=gBox([0,y,-0.20],[0.35,2.0,0.02]);b.add(bb.P,bb.N,[0.95,0.95,0.92],bb.I,{T:[n,e,z]});}
+  for(let i=0;i<8;i++){const a=i/8*2*Math.PI;const l=gBox([12*Math.cos(a),12*Math.sin(a),-0.6],[0.1,0.1,0.6]);b.add(l.P,l.N,[1.0,0.85,0.2],l.I,{T:[n,e,z]});}}
+function buildWorld29(b,hAt){
+  // the bridge where the road crosses the inflow (n 280, e 380): deck, railings, piers
+  {const dk=gBox([280,380,-0.25],[5.6,75,0.3]);b.add(dk.P,dk.N,[0.40,0.40,0.41],dk.I);for(const dn of [-5.5,5.5]){const r=gBox([280+dn,380,-1.0],[0.08,75,0.45]);b.add(r.P,r.N,[0.75,0.75,0.73],r.I);}
+   for(const de of [-26,-8,8,26]){const z=hAt(280,380+de);const pr=gBox([280,380+de,(z-0.6)/2],[4.2,0.7,Math.abs(z-0.6)/2+0.3]);b.add(pr.P,pr.N,[0.62,0.61,0.58],pr.I);}}
+  // the town
+  {const z=-TERRAIN.town.h,walls=[[0.82,0.78,0.70],[0.78,0.74,0.66],[0.86,0.83,0.76],[0.74,0.70,0.64],[0.80,0.62,0.52]];
+   for(const bd of TOWN_B){const T=[bd.n,bd.e,z],c=bd.c===undefined?0.5:bd.c;
+     if(bd.kind==='mast'){const Y=[0.95,0.74,0.10];const m=gBox([0,0,-bd.h/2],[0.9,0.9,bd.h/2]);b.add(m.P,m.N,Y,m.I,{T});
+       const jb=gBox([0,19,-bd.h-0.6],[0.6,19,0.6]);b.add(jb.P,jb.N,Y,jb.I,{T});const cj=gBox([0,-6,-bd.h-0.6],[0.6,6,0.6]);b.add(cj.P,cj.N,Y,cj.I,{T});
+       const cw=gBox([0,-10,-bd.h-0.2],[1.4,2,1.6]);b.add(cw.P,cw.N,[0.55,0.55,0.55],cw.I,{T});const cab=gBox([1.3,0.8,-bd.h+1.2],[0.9,0.9,1.0]);b.add(cab.P,cab.N,[0.85,0.85,0.82],cab.I,{T});
+       const tp=gCone(0,1.2,-5,0.1,4);b.add(tp.P,tp.N,Y,tp.I,{R:UPX,T:[bd.n,bd.e,z-bd.h-1.2]});
+       tube(b,[bd.n,bd.e+30,z-bd.h],[bd.n,bd.e+30,z-24],0.04,0.04,[0.15,0.15,0.15],3);const hk=gBox([0,30,-23.6],[0.4,0.4,0.4]);b.add(hk.P,hk.N,[0.85,0.2,0.1],hk.I,{T});continue;}
+     const tower=bd.kind==='tower',wall=tower?[0.60+0.12*c,0.63+0.1*c,0.66+0.08*c]:walls[Math.min(4,Math.floor(c*5))];
+     const bx=gBox([0,0,-bd.h/2],[bd.w,bd.l,bd.h/2]);b.add(bx.P,bx.N,wall,bx.I,{T});
+     for(let f=0;(f+0.55)*3.2+(tower?1.0:0.55)<=bd.h-0.3;f++){const band=gBox([0,0,-(f+0.55)*3.2],[bd.w+0.04,bd.l+0.04,tower?1.0:0.55]);b.add(band.P,band.N,tower?[0.28+0.06*c,0.36+0.05*c,0.45]:[0.26,0.28,0.31],band.I,{T});}
+     const rc=[wall[0]*0.78,wall[1]*0.78,wall[2]*0.78];   // the roof, flat at h as the physics sees it, and a low parapet round its edge (none round a pad)
+     const rf=gBox([0,0,-bd.h-0.02],[bd.w,bd.l,0.03]);b.add(rf.P,rf.N,[0.46,0.46,0.47],rf.I,{T});
+     if(!bd.pad)for(const [cn,ce,sn,se] of [[bd.w,0,0.15,bd.l],[-bd.w,0,0.15,bd.l],[0,bd.l,bd.w,0.15],[0,-bd.l,bd.w,0.15]]){const pw=gBox([cn,ce,-bd.h-0.45],[sn,se,0.45]);b.add(pw.P,pw.N,rc,pw.I,{T});}
+     if(bd.pad)roofPad(b,bd.n,bd.e,z-bd.h);
+     else if(bd.w>6&&bd.l>6){const mc=gBox([bd.w*0.3*(c-0.5),bd.l*0.2,-bd.h-1.1],[Math.min(3,bd.w*0.3),Math.min(2.5,bd.l*0.25),1.1]);b.add(mc.P,mc.N,[0.55,0.56,0.57],mc.I,{T});}}}
+  // the line across the river valley: lattice pylons (square frustums), cross-arms, orange marker balls mid-span on the middle wire
+  {const V=[[1180,-260],[1160,-20],[1140,220],[1120,460],[1100,700]];
+   for(const [n,e] of V){const z=hAt(n,e),c=gCone(0,1.7,24,0.45,4,false);b.add(c.P,c.N,[0.62,0.63,0.64],c.I,{R:mmul(rotZ(Math.PI/4),UPX),T:[n,e,z]});const ca=gBox([0,0,-23.7],[2.9,0.25,0.25]);b.add(ca.P,ca.N,[0.62,0.63,0.64],ca.I,{T:[n,e,z]});}
+   for(let i=0;i<V.length-1;i++){const m=[(V[i][0]+V[i+1][0])/2,(V[i][1]+V[i+1][1])/2],z=-((groundH(V[i][0],V[i][1])+groundH(V[i+1][0],V[i+1][1]))/2+24-4.5);
+     for(const off of [-40,0,40]){const k=off/((Math.hypot(V[i+1][0]-V[i][0],V[i+1][1]-V[i][1]))/2),zz=z-4.5*(Math.abs(k));const ball=gEll([0.45,0.45,0.45],8,6);b.add(ball.P,ball.N,i%2?[0.95,0.95,0.95]:[0.95,0.42,0.08],ball.I,{T:[m[0]+(V[i+1][0]-V[i][0])*off/((Math.hypot(V[i+1][0]-V[i][0],V[i+1][1]-V[i][1]))),m[1]+(V[i+1][1]-V[i][1])*off/((Math.hypot(V[i+1][0]-V[i][0],V[i+1][1]-V[i][1]))),zz+0.45]});}}}
+  // the factory by the town: a hall and its stack (it smokes: 86_life.js)
+  {const n=-2100,e=-1150,z=hAt(n,e);tube(b,[n,e,z],[n,e,z-40],1.7,1.1,[0.55,0.30,0.22],10);for(const hz of [-12,-24,-36]){const r=gBox([0,0,hz],[1.6-0.012*Math.abs(hz),1.6-0.012*Math.abs(hz),0.25]);b.add(r.P,r.N,[0.85,0.85,0.85],r.I,{T:[n,e,z]});}
+   const hall=gBox([-30,0,-6],[22,14,6]);b.add(hall.P,hall.N,[0.66,0.64,0.60],hall.I,{T:[n,e,z]});const sr=gRoof(22.4,14.4,-12,-15);b.add(sr.P,sr.N,[0.42,0.44,0.46],sr.I,{T:[n-30,e,z]});}
+  // the slope site on the hill: four orange cones round a 14 m square
+  for(const [dn,de] of [[7,7],[7,-7],[-7,7],[-7,-7]]){const n=1550+dn,e=-988+de,c=gCone(0,0.35,-1.0,0.0,8);b.add(c.P,c.N,[0.95,0.45,0.1],c.I,{R:UPX,T:[n,e,hAt(n,e)]});}
+}
+function buildRivers(gl){const b=new MB();
+  for(const rv of RIVERS){const P=rv.P,L=rv.L,w=rv.w;let i0=0,i1=P.length-1;
+    if(rv.lake==='end'){while(i1>0&&inLake(P[i1][0],P[i1][1]))i1--;}else{while(i0<P.length-1&&inLake(P[i0][0],P[i0][1]))i0++;}   // the lake has its own water
+    const pos=[],nrm=[],col=[],idx=[];
+    for(let i=i0;i<=i1;i++){const a=P[Math.max(0,i-1)],c=P[Math.min(P.length-1,i+1)],dx=c[0]-a[0],dy=c[1]-a[1],l=Math.hypot(dx,dy)||1,un=-dy/l,ue=dx/l,z=-(L[i]+0.06);
+      for(const sd of [-1,-0.5,0,0.5,1]){pos.push(P[i][0]+un*w*sd,P[i][1]+ue*w*sd,z);nrm.push(0,0,-1);col.push([rv.S[i]/10,sd,0]);}   // (2.10) five across: the 0.4 % lift toward the eye is per vertex, a wide ribbon's middle would otherwise sink into the plain seen from above
+      if(i<i1){const k=(i-i0)*5;for(let j=0;j<4;j++)idx.push(k+j,k+5+j,k+j+1,k+j+1,k+5+j,k+6+j);}}
+    b.add(pos,nrm,col,idx);}
+  return b.upload(gl);}
+/* the crowns' shape: */
 function gCrown(r,sa,sb,amp,rng,col){   // ellipsoid with its poles up and down, the radius rippled by a few random-phase harmonics, flatter underneath
   const ph=[0,0,0,0,0].map(()=>rng()*6.283),G=[];
   for(let j=0;j<=sb;j++){const t=j/sb*Math.PI,st=Math.sin(t),ct=Math.cos(t),row=[];
@@ -3822,34 +4216,222 @@ function gCrown(r,sa,sb,amp,rng,col){   // ellipsoid with its poles up and down,
     const sh=0.62+0.22*(0.5-0.5*n[2])+0.16*clamp(-p[2]/r[2],-1,1);C.push([col[0]*sh,col[1]*sh,col[2]*sh]);}
   for(let j=0;j<sb;j++)for(let i=0;i<sa;i++){const b=j*(sa+1)+i;I.push(b,b+1,b+sa+1,b+1,b+sa+2,b+sa+1);}
   return {P,N,C,I};}
-function buildTrees(gl,lite){
-  const tiles=new Map(),hAt=(n,e)=>-terrainH(n,e);
-  const cone=(b,n,e,z,r,h,seg,col,rng)=>{const c=gCone(0,r,h,0.04,seg,false);   // along +x, which UPX turns upward (2.2's pine tiers pointed down)
-    const C=[];for(let v=0;v<c.P.length/3;v++){const k=v%2===0?0.72:1.08;C.push([col[0]*k,col[1]*k,col[2]*k]);}
-    b.add(c.P,c.N,C,c.I,{R:mmul(rotZ(rng()*6.28),UPX),T:[n,e,z]});};
-  let idx=0;
-  for(const t of R3.treeList){idx++;
-    if(lite&&!t.single&&ngHash(t.n*3.7,t.e*1.9)>0.55)continue;
-    const rng=makeRng(idx*7919+13),s=t.s*(lite&&!t.single?1.15:1),n=t.n,e=t.e,dark=t.dark,z=hAt(n,e);
-    const key=Math.floor((n+1600)/400)*16+Math.floor((e+1600)/400);
-    let tl=tiles.get(key);if(!tl){tl={b:new MB(),f:new MB(),n0:Math.floor((n+1600)/400)*400-1600,e0:Math.floor((e+1600)/400)*400-1600,zs:[]};tiles.set(key,tl);}
-    const b=tl.b,f=tl.f;tl.zs.push(z);
-    if(t.kind==='pine'){
-      const col=[0.10*dark,0.27*dark,0.12*dark];
-      tube(b,[n,e,z],[n,e,z-2.2*s],0.22*s,0.15*s,[0.30,0.22,0.14],lite?4:5);
-      for(const [zz,r,hh] of lite?[[1.5,2.1,5.2],[4.0,1.4,3.8]]:[[1.4,2.2,4.4],[3.4,1.75,3.8],[5.5,1.2,3.2]])
-        cone(b,n,e,z-zz*s,r*s*(0.9+0.2*rng()),hh*s,lite?6:8,col,rng);
-      cone(f,n,e,z-1.4*s,2.1*s,8.0*s,5,col,rng);}
-    else{
-      const g=0.25*rng(),col=[(0.19+0.10*g)*dark,(0.40+0.02*g)*dark,(0.14-0.02*g)*dark];
-      tube(b,[n,e,z],[n,e,z-2.6*s],0.27*s,0.17*s,[0.34,0.25,0.16],lite?4:6);
-      const cr=gCrown([2.7*s,2.6*s,2.4*s],lite?9:13,lite?5:7,0.16,rng,col);b.add(cr.P,cr.N,cr.C,cr.I,{T:[n,e,z-4.6*s]});
-      if(!lite){const a=rng()*6.28;for(const [dx,dz,k] of [[1.3,-1.0,0.62],[-1.1,-0.2,0.55]]){const l=gCrown([1.9*s*k/0.6,1.8*s*k/0.6,1.6*s*k/0.6],9,5,0.18,rng,col);
-        b.add(l.P,l.N,l.C,l.I,{T:[n+dx*s*Math.cos(a),e+dx*s*Math.sin(a),z-(4.6-dz)*s]});}}
-      const fc=gCrown([2.8*s,2.8*s,2.6*s],6,3,0,rng,col);f.add(fc.P,fc.N,fc.C,fc.I,{T:[n,e,z-4.8*s]});}}
-  const out=[];for(const tl of tiles.values()){const zm=tl.zs.reduce((a,b)=>a+b,0)/tl.zs.length,zr=Math.max(...tl.zs.map(z=>Math.abs(z-zm)));
-    out.push({c:[tl.n0+200,tl.e0+200,zm-8],r:Math.hypot(200,200)+zr+12,meshes:tl.b.upload(gl),far:tl.f.upload(gl)});}
-  return out;}
+/* Rocks and reeds (2.9), meshed with the trees in their tiles: boulders in groups of one to four on the
+   steep flanks and the high ground, a few on the hill pastures, none in the forest; stones along the
+   rivers' banks and in their shallows; reeds in patches round the lake's shore, where the water is
+   shallow, and along the rivers' lowland reaches. Their own random streams: the trees stand where they did. */
+function natureList(T){
+  const rr=makeRng(47);
+  for(let n=-2700;n<=2700;n+=22)for(let e=-2700;e<=2700;e+=22){const jn=n+(rr()-0.5)*18,je=e+(rr()-0.5)*18,u=rr(),k=1+Math.floor(rr()*4),seed=rr();
+    if(u>0.7||Math.hypot(jn,je)<450||forestD(jn,je)>0.55)continue;const g=groundH(jn,je);if(g<18)continue;
+    const gn=(groundH(jn+2,je)-g)/2,ge=(groundH(jn,je+2)-g)/2,sl=Math.hypot(gn,ge);
+    if(u>0.7*(0.9*sm(0.26,0.5,sl)+0.45*sm(280,520,g)+0.06*sm(40,90,g))||treeBlocked(jn,je))continue;
+    const cr=makeRng(Math.floor(seed*1e6));for(let i=0;i<k;i++){const a=cr()*6.28,dd=i?2+cr()*4:0,sz=cr();
+      T.push({n:jn+dd*Math.cos(a),e:je+dd*Math.sin(a),s:i?0.35+0.9*sz*sz:0.6+1.7*sz*sz,kind:'rock',sl,dark:0.8+0.4*cr()});}}
+  const rq=makeRng(53);
+  for(const rv of RIVERS)for(let i=0;i<rv.P.length-1;i++){const a=rv.P[i],b=rv.P[i+1];if(Math.abs(a[0])>2700||Math.abs(a[1])>2700)continue;
+    const len=Math.hypot(b[0]-a[0],b[1]-a[1]),un=-(b[1]-a[1])/len,ue=(b[0]-a[0])/len,low=rv.L[i]<12&&vnoise(a[0]/60+3.3,a[1]/60+1.7)>0.5;
+    for(let k=0;k<4;k++){const f=rq(),sd=rq()<0.5?-1:1,off=rv.w*(0.7+0.7*rq()),sz=rq(),dk=rq();if(rq()>0.6)continue;   // stones
+      const n=a[0]+(b[0]-a[0])*f+un*off*sd,e=a[1]+(b[1]-a[1])*f+ue*off*sd;if(inLake(n,e)||Math.hypot(n-280,e-380)<20)continue;
+      T.push({n,e,s:0.3+0.8*sz*sz,kind:'rock',river:true,sl:0,dark:0.8+0.4*dk});}
+    if(low)for(let k=0;k<6;k++){const f=rq(),sd=rq()<0.5?-1:1,off=rv.w+(rq()-0.3)*3,s=rq();   // reeds on the lowland banks
+      const n=a[0]+(b[0]-a[0])*f+un*off*sd,e=a[1]+(b[1]-a[1])*f+ue*off*sd;if(inLake(n,e)||Math.hypot(n-280,e-380)<20)continue;T.push({n,e,s:0.7+0.4*s,kind:'reed'});}}
+  const L=TERRAIN.lake;
+  for(let n=L.n-320;n<=L.n+320;n+=3)for(let e=L.e-320;e<=L.e+320;e+=3){const jn=n+(rq()-0.5)*2.6,je=e+(rq()-0.5)*2.6,u=rq(),s=rq();
+    const dl=Math.hypot(jn-L.n,je-L.e),th=Math.atan2(je-L.e,jn-L.n),rl=L.r*(0.8+0.4*vnoise(2.2+Math.cos(th)*1.4,3.7+Math.sin(th)*1.4));if(dl<rl||dl>rl+45)continue;   // the shore (10_atmo.js groundH)
+    const g=groundH(jn,je);if(g<L.h+0.05||g>L.h+0.75||u>0.85*sm(0.35,0.6,vnoise(jn/35+2.1,je/35+6.3))||Math.hypot(jn+315,je-525)<14)continue;   // shallow water and the wet bank, in patches; not at the jetty
+    T.push({n:jn,e:je,s:0.8+0.5*s,kind:'reed'});}}
+function gRock(r,sa,sb,amp,rng,col){   // a lumpy ellipsoid, flat-shaded (each face its own normal and shade), flatter underneath
+  const G=[];for(let j=0;j<=sb;j++){const t=j/sb*Math.PI,st=Math.sin(t),ct=Math.cos(t),row=[],k0=1+amp*(2*rng()-1),ao=rng()*0.6;
+    for(let i=0;i<sa;i++){const a=(i+ao)/sa*2*Math.PI,k=j===0||j===sb?k0:1+amp*(2*rng()-1);row.push([st*Math.cos(a)*r[0]*k,st*Math.sin(a)*r[1]*k,-ct*r[2]*k*(ct<0?0.6:1)]);}G.push(row);}
+  const P=[],N=[],C=[],I=[];
+  const tri=(A,B,D)=>{let n=vcross(vsub(B,A),vsub(D,A));const l=vlen(n);if(l<1e-6)return;n=vscl(n,1/l);const m=vscl(vadd(vadd(A,B),D),1/3);if(vdot(n,m)<0){n=vscl(n,-1);[B,D]=[D,B];}
+    const sh=(0.70+0.25*(-n[2])+0.10*(rng()-0.5))*(1+0.12*(rng()-0.5)),q=P.length/3;for(const v of [A,B,D]){P.push(v[0],v[1],v[2]);N.push(n[0],n[1],n[2]);C.push([col[0]*sh,col[1]*sh*(1+0.04*(rng()-0.5)),col[2]*sh]);}I.push(q,q+1,q+2);};
+  for(let j=0;j<sb;j++)for(let i=0;i<sa;i++){const a=G[j][i],b=G[j][(i+1)%sa],c=G[j+1][i],d=G[j+1][(i+1)%sa];if(j>0)tri(a,b,c);if(j<sb-1)tri(b,d,c);}
+  return {P,N,C,I};}
+function gReeds(s,rng,lite){   // a clump of reed blades, both faces, green at the foot to straw at the tip; a few with a seed head
+  const P=[],N=[],C=[],I=[],nb=lite?9:14;
+  for(let i=0;i<nb;i++){const a=rng()*6.28,rb=0.55*s*Math.sqrt(rng()),x=rb*Math.cos(a),y=rb*Math.sin(a),hb=(1.0+1.0*rng())*s,la=Math.atan2(y,x)+(rng()-0.5)*1.6,lean=(0.06+0.22*rng())*hb,w=0.075*s,fa=rng()*6.28;
+    const tip=[x+lean*Math.cos(la),y+lean*Math.sin(la),-hb],l=[x-w*Math.sin(fa),y+w*Math.cos(fa),0],r=[x+w*Math.sin(fa),y-w*Math.cos(fa),0],nv=vnorm([0.35*Math.cos(fa),0.35*Math.sin(fa),-1]);
+    const g=rng(),foot=[0.17+0.04*g,0.30+0.05*g,0.11],top=[0.42+0.16*g,0.50+0.06*g,0.24+0.04*g],q=P.length/3;
+    for(const [v,c] of [[l,foot],[r,foot],[tip,top]]){P.push(v[0],v[1],v[2]);N.push(nv[0],nv[1],nv[2]);C.push(c);}I.push(q,q+1,q+2,q,q+2,q+1);
+    if(i%6===0){const hd=gBox([tip[0],tip[1],tip[2]+0.12*s],[0.035*s,0.035*s,0.13*s]);for(let k=0;k<hd.P.length;k+=3){P.push(hd.P[k],hd.P[k+1],hd.P[k+2]);N.push(hd.N[k],hd.N[k+1],hd.N[k+2]);C.push([0.36,0.24,0.15]);}const b0=q+3;for(const k of hd.I)I.push(k+b0);}}
+  return {P,N,C,I};}
+/* The vegetation (2.9.2): every tree, bush, rock and clump of reeds is an instance of one of a few shapes, drawn
+   with ANGLE_instanced_arrays, so a real forest costs a few megabytes and draws in a few calls. The forests from
+   the density function (10_atmo.js forestD): a jittered grid 9 m apart within 1.5 km of the field, 12 m further
+   out to 2.7 km, the trees as tall as the crowns the physics sees (canopyH: 11 to 17 m, lower towards the tree
+   line at 480 m), conifers or broadleaves by the stand and the height; at the edge (density 0.53 to 0.57) bushes
+   and smaller trees; none where no tree may stand (treeBlocked), in the lake or on the steepest rock. Then the
+   single trees, the confined area's ring, the clearing's two rows, the boulders, the river's stones and the
+   reeds (natureList). 2.9 and 2.9.1 drew the forests' inside as a canopy mesh with trees round it: from the
+   cockpit a strange green mass. */
+/* Houses' surroundings (2.11): a garden behind a house, fenced (rails on corner posts), a shed in it; a car parked
+   beside every third house (86_life.js draws them). The hamlet: eleven houses along the north-south road from
+   640 to 790 N (east of it, and west beyond the power line), a chapel at its north end, a barn at the south. */
+const HAMLET={n0:635,n1:810,e:-300};
+function nearHamlet(n,e,r){return n>HAMLET.n0-r&&n<HAMLET.n1+r&&Math.abs(e-HAMLET.e)<75+r;}
+function house(b,n,e,R,l,w,car,shed){const z=-groundH(n,e),T=[n,e,z],fl=10,fw=w+1.5,bk=-l-fl;   // the garden behind the house (its -x side)
+  const rail=[0.55,0.45,0.32];for(const [cx,cy,sx,sy] of [[bk,0,0.04,fw],[(bk-l)/2,fw,(fl)/2,0.04],[(bk-l)/2,-fw,(fl)/2,0.04]])for(const zz of [-0.45,-0.9]){const r=gBox([cx,cy,zz],[sx,sy,0.03]);b.add(r.P,r.N,rail,r.I,{R,T});}
+  for(const [cx,cy] of [[bk,fw],[bk,-fw],[-l,fw],[-l,-fw],[bk,0],[(bk-l)/2,fw],[(bk-l)/2,-fw]]){const p=gBox([cx,cy,-0.5],[0.06,0.06,0.5]);b.add(p.P,p.N,rail,p.I,{R,T});}
+  if(shed){const sb=gBox([bk+2.2,fw-2.2,-1.1],[1.6,1.4,1.1]);b.add(sb.P,sb.N,[0.45,0.38,0.30],sb.I,{R,T});const sr=gRoof(1.8,1.6,-2.2,-3.0);b.add(sr.P,sr.N,[0.35,0.33,0.32],sr.I,{R,T:[n+mrot(R,[bk+2.2,fw-2.2,0])[0],e+mrot(R,[bk+2.2,fw-2.2,0])[1],z]});}
+  R3.houses.push([n,e]);if(car){const q=mrot(R,[0,w+2.6,0]),psi=Math.atan2(R[3],R[0]);R3.parked.push([n+q[0],e+q[1],psi,groundH(n+q[0],e+q[1])]);}}
+function buildHamlet(b,hAt){const rng=makeRng(37),H=HAMLET;
+  const put=(n,e,facing,i)=>{const w=4.5+rng()*2,l=5.5+rng()*2.5,hh=3.0+rng()*1.3,R=rotZ(facing),z=hAt(n,e),T=[n,e,z];
+    const hb=gBox([0,0,-hh/2],[l,w,hh/2]);b.add(hb.P,hb.N,[0.78+0.14*rng(),0.74+0.06*rng(),0.66],hb.I,{R,T});const rf=gRoof(l+0.4,w+0.4,-hh,-hh-w*0.65);b.add(rf.P,rf.N,[0.45+0.3*rng(),0.26,0.21],rf.I,{R,T});
+    if(i%4===1){const ch=gBox([0,0,-hh-w*0.65-0.2],[0.3,0.3,0.7]);b.add(ch.P,ch.N,[0.55,0.32,0.25],ch.I,{T});}
+    house(b,n,e,R,l,w,i%3===1,i%2===1);};
+  let i=0;for(let n=650;n<=775;n+=25,i++)put(n,-255,Math.PI,i);   // east of the road, facing it (their gardens eastward)
+  for(let n=660;n<=780;n+=30,i++)put(n,-352,0,i);                // west, beyond the power line
+  {const n=H.n1-8,e=-255,z=hAt(n,e),T=[n,e,z];const ch=gBox([0,0,-3.5],[5,3.2,3.5]);b.add(ch.P,ch.N,[0.86,0.84,0.78],ch.I,{T});const rf=gRoof(5.4,3.6,-7,-10);b.add(rf.P,rf.N,[0.36,0.36,0.38],rf.I,{T});   // the chapel
+   const tw=gBox([-3.5,0,-8],[1.2,1.2,8]);b.add(tw.P,tw.N,[0.86,0.84,0.78],tw.I,{T});const sp=gCone(0,1.5,-6,0.0,4);b.add(sp.P,sp.N,[0.36,0.36,0.38],sp.I,{R:UPX,T:[n-3.5,e,z-16]});}
+  {const n=H.n0+8,e=-262,z=hAt(n,e),T=[n,e,z];const bb=gBox([0,0,-2.4],[9,5,2.4]);b.add(bb.P,bb.N,[0.58,0.50,0.40],bb.I,{T});const br=gRoof(9.4,5.4,-4.8,-7.6);b.add(br.P,br.N,[0.40,0.40,0.42],br.I,{T});}   // the barn
+  R3.parked.push([H.n1-14,-262,Math.PI/2,groundH(H.n1-14,-262)]);}
+/* Farms (2.10): eight farmsteads in the fields, placed by their own random stream where the land is flat, open
+   and away from the field, the village, the town and the water: a house with a tiled roof, a barn with a grey
+   roof, some a silo, each with four trees round it. Drawn only, not in the physics (as the village). */
+let FARMS=null;
+function farmSites(){if(FARMS)return FARMS;const F=[],rng=makeRng(23);
+  for(let t=0;t<4000&&F.length<8;t++){const n=(rng()*2-1)*1500,e=(rng()*2-1)*1500,a=rng()<0.5?0:Math.PI/2,silo=rng()<0.5;
+    if(Math.hypot(n,e)<380||Math.hypot(n-380,e-590)<260||forestD(n,e)>0.22||treeBlocked(n,e,45)||inLake(n,e)||nearHamlet(n,e,120))continue;
+    const g=groundH(n,e);if(g>70||Math.hypot(groundH(n+6,e)-groundH(n-6,e),groundH(n,e+6)-groundH(n,e-6))/12>0.05)continue;
+    if(F.some(f=>Math.hypot(f.n-n,f.e-e)<320))continue;F.push({n,e,a,silo,g});}
+  return FARMS=F;}
+function nearFarm(n,e,r){for(const f of farmSites())if(Math.hypot(f.n-n,f.e-e)<r)return true;return false;}
+function buildFarms(b,hAt){const rng=makeRng(31);
+  for(const f of farmSites()){const R=rotZ(f.a),z=hAt(f.n,f.e),T=[f.n,f.e,z];
+    const hw=4.5+rng(),hl=5.5+1.5*rng(),hh=3.2+0.6*rng();const hb=gBox([0,0,-hh/2],[hl,hw,hh/2]);b.add(hb.P,hb.N,[0.84+0.08*rng(),0.78,0.68],hb.I,{R,T});const hr=gRoof(hl+0.4,hw+0.4,-hh,-hh-hw*0.75);b.add(hr.P,hr.N,[0.55+0.15*rng(),0.28,0.22],hr.I,{R,T});
+    const bw=4.5,bl=8+2*rng(),bh=4.2;const bb=gBox([-hl-bl-6,0,-bh/2],[bl,bw,bh/2]);b.add(bb.P,bb.N,[0.62,0.55,0.45],bb.I,{R,T});const br=gRoof(bl+0.5,bw+0.5,-bh,-bh-bw*0.6);b.add(br.P,br.N,[0.40,0.40,0.42],br.I,{R,T});
+    const sh=gBox([0,hw+9,-1.6],[6,3,1.6]);b.add(sh.P,sh.N,[0.50,0.46,0.40],sh.I,{R,T});const sr=gRoof(6.4,3.4,-3.2,-4.6);b.add(sr.P,sr.N,[0.45,0.42,0.40],sr.I,{R,T});   // a shed
+    {const q=mrot(R,[hl+4,-hw-1,0]);R3.parked.push([f.n+q[0],f.e+q[1],f.a+Math.PI/2,groundH(f.n+q[0],f.e+q[1])]);}   // (2.11) a car in the yard
+    if(f.silo){const sp=mrot(R,[-hl-bl-6,-bw-4,0]);tube(b,[f.n+sp[0],f.e+sp[1],z],[f.n+sp[0],f.e+sp[1],z-7.5],1.5,1.5,[0.72,0.74,0.76],10);const cap=gCone(0,1.6,-1.2,0.1,10);b.add(cap.P,cap.N,[0.55,0.56,0.58],cap.I,{R:UPX,T:[f.n+sp[0],f.e+sp[1],z-7.5]});}}}
+function vegList(){const V=[],L=TERRAIN.lake,rr=makeRng(5),CS=30,G=new Map(),B=new Map();
+  const cell=(M,n,e,f)=>{const i=Math.floor((n+3000)/CS),j=Math.floor((e+3000)/CS),k=i*1000+j;let v=M.get(k);if(v===undefined){v=f(i*CS-3000+CS/2,j*CS-3000+CS/2);M.set(k,v);}return v;};
+  const GR=new Map(),grad=(n,e)=>cell(GR,n,e,(a,b)=>{const g0=groundH(a,b);return [(groundH(a+8,b)-g0)/8,(groundH(a,b+8)-g0)/8];});   // (2.11) the ground's gradient per 30 m cell, for the shadows' plane
+  const add=(n,e,g,s,kind,o)=>{const gr=grad(n,e),pk=Math.floor(clamp((gr[0]+2)/4,0,1)*4095)*4096+Math.floor(clamp((gr[1]+2)/4,0,1)*4095);V.push(Object.assign({n,e,z:-g,s,kind,rot:rr()*6.2832,kxy:0.88+0.24*rr(),bright:0.85+0.3*rr(),ph:rr(),rank:o&&o.single?0:ngHash(n*0.37+1.3,e*0.61+2.9),gr:pk},o||{}));};   // rank: which are dropped first with distance (a hash of the place, so the random stream is as it was)
+  for(const [lo,hi,SP,inner] of [[-1500,1500,9,0],[-2700,2700,12,1500]])
+    for(let n=lo;n<=hi;n+=SP)for(let e=lo;e<=hi;e+=SP){if(inner&&Math.abs(n)<inner&&Math.abs(e)<inner)continue;
+      const jn=n+(rr()-0.5)*SP*0.8,je=e+(rr()-0.5)*SP*0.8,u=rr(),v=rr(),w=rr();
+      if(!cell(G,jn,je,(a,b)=>forestD(a,b)>0.40))continue;const d=forestD(jn,je);if(d<0.53||nearFarm(jn,je,32)||nearHamlet(jn,je,20))continue;   // (the density changes by less than 0.1 within a 30 m cell)
+      if(cell(B,jn,je,(a,b)=>treeBlocked(a,b,22))&&treeBlocked(jn,je))continue;
+      if(Math.abs(jn-L.n)<L.r*1.4&&Math.abs(je-L.e)<L.r*1.4&&inLake(jn,je))continue;
+      const g=groundH(jn,je);if(g>480)continue;
+      if(g>150&&Math.hypot(groundH(jn+2,je)-g,groundH(jn,je+2)-g)/2>0.7)continue;   // bare rock
+      const edge=d<0.57;if(edge&&u>0.8)continue;
+      if(edge&&u<0.45){add(jn,je,g,0.8+0.6*w,'bush');continue;}
+      const con=clamp(0.35+0.8*(g-150)/300+(vnoise(jn/240+3.7,je/240+9.1)-0.5)*0.9,0,1),pine=v<con;
+      const H=(11+6*vnoise(jn/90+4.4,je/90+1.1))*(1-0.3*sm(380,470,g))*(0.88+0.24*w)*(edge?0.8:1)*(inner?1.08:1);
+      const st=vnoise(jn/170+7.7,je/170+2.3),birch=!pine&&g<160&&st>0.62&&rr()<0.5;   // (2.10) stands of birches on the low ground
+      add(jn,je,g,pine?H/8.7:H/7.0,pine?'pine':'broad',{kz:pine?0.85+0.4*rr():0.8+0.5*rr(),hue:birch?0.6+0.4*rr():(st-0.5)*1.6+(rr()-0.5)*0.5,trunk:birch?1:0});}
+  for(const f of farmSites())for(let i=0;i<4;i++){const a=f.a+i*1.5708+0.6,r=17+6*rr(),n=f.n+r*Math.cos(a),e=f.e+r*Math.sin(a);add(n,e,groundH(n,e),1.2+0.5*rr(),'broad',{single:true,kz:0.9+0.3*rr(),hue:(rr()-0.5)*0.6});}   // (2.10) the trees round the farms
+  const sr=makeRng(3);
+  for(let i=0;i<220;i++){const n=(sr()*2-1)*1400,e=(sr()*2-1)*1400,s=0.9+sr()*0.8;if(Math.hypot(n,e)<260||inLake(n,e)||treeBlocked(n,e)||forestD(n,e)>0.5||nearFarm(n,e,30)||nearHamlet(n,e,25))continue;add(n,e,groundH(n,e),s,'broad',{single:true,kz:0.85+0.4*sr(),hue:(sr()-0.5)*0.8});}   // single trees in the fields
+  for(let i=0;i<8;i++)R3.parked.push([-258-21+i*3+(i>3?3:0),-378+(i%2?3.8:-3.8),Math.PI/2,groundH(-258,-378)]);   // (2.11) the hospital's car park
+  for(const [n,e,s] of [[380,588,1.2],[380,612,1.1],[420,586,1.0],[662,-232,1.1],[712,-232,1.3],[762,-232,1.0],[690,-378,1.2],[750,-378,1.1],[804,-238,0.9]])add(n,e,groundH(n,e),s,'broad',{single:true,kz:0.9+0.3*sr(),hue:(sr()-0.5)*0.6});   // (2.11) the churchyard's and the hamlet's trees
+  for(let i=0;i<14;i++){const a=i/14*2*Math.PI,n=260+28*Math.cos(a),e=-220+28*Math.sin(a);add(n,e,groundH(n,e),1.3,'broad',{single:true});}   // the confined area
+  {const C=TERRAIN.clearing,cr=makeRng(59);   // the clearing: a row of tall trees from 28.6 m, smaller trees and bushes before it from 25 m
+   for(let a=0;a<2*Math.PI-0.05;a+=0.142){const r=28.6+2.4*cr(),b=a+0.05*(cr()-0.5),n=C.n+r*Math.cos(b),e=C.e+r*Math.sin(b),s=1.35+0.35*cr(),pine=cr()<0.6;add(n,e,groundH(n,e),pine?s*1.15:s*1.3,pine?'pine':'broad',{single:true});}
+   for(let a=0.07;a<2*Math.PI-0.05;a+=0.23){const r=25.4+2.0*cr(),b=a+0.06*(cr()-0.5),u=cr(),n=C.n+r*Math.cos(b),e=C.e+r*Math.sin(b);add(n,e,groundH(n,e),u<0.55?0.8+0.4*cr():0.95+0.3*cr(),u<0.55?'bush':cr()<0.5?'pine':'broad',{single:true});}}
+  const N=[];natureList(N);   // boulders, stones, reeds
+  for(const t of N){const g=groundH(t.n,t.e);
+    if(t.kind==='rock')add(t.n,t.e,g+0.62*0.45*t.s-t.sl*0.5*t.s,t.s,'rock',{kxy:t.river?1.3:0.9+0.2*rr(),bright:t.dark*(t.river?1.13:1),rank:clamp(1-(t.s-0.3)/1.8,0,0.99)});   // sunk into the slope; the large ones kept furthest
+    else add(t.n,t.e,g,t.s,'reed');}
+  return V;}
+/* The shapes, at unit size: a conifer of three tiers (8.7 m), a broadleaf with a lumpy crown and a smaller one
+   beside it (7 m), each in three levels of detail (near, to ~900 m, beyond); a bush, a boulder, a clump of reeds. */
+function vegTemplates(gl,lite){const rng=makeRng(17),T={},sway=H=>q=>[Math.pow(clamp(-q[2]/H,0,1),1.5),0];
+  const up=(b)=>b.upload(gl,true)[0];
+  const cone=(b,z,r,h,seg,col)=>{const c=gCone(0,r,h,0.04,seg,false),C=[];for(let v=0;v<c.P.length/3;v++){const k=v%2===0?0.72:1.08;C.push([col[0]*k,col[1]*k,col[2]*k]);}b.add(c.P,c.N,C,c.I,{R:mmul(rotZ(rng()*6.28),UPX),T:[0,0,z]},sway(9));};
+  const pc=[0.10,0.27,0.12],bc=[0.215,0.405,0.135];
+  const trunk=(b,h,r0,r1,seg)=>{const t=gCone(0,r0,-h,r1,seg,false);b.add(t.P,t.N,[0.30,0.22,0.14],t.I,{R:UPX},()=>[0,1]);};   // (aT.y = 1: the trunk, for a birch's white)
+  {const b=new MB();trunk(b,2.2,0.22,0.15,lite?4:5);
+   for(const [zz,r,hh] of lite?[[1.5,2.1,5.2],[4.0,1.4,3.8]]:[[1.4,2.2,4.4],[3.4,1.75,3.8],[5.5,1.2,3.2]])cone(b,-zz,r*(0.9+0.2*rng()),hh,lite?6:8,pc);T.pine0=up(b);}
+  {const b=new MB();cone(b,-1.4,2.1,8.0,6,pc);T.pine1=up(b);}
+  {const b=new MB();cone(b,-1.4,2.1,8.0,4,pc);T.pine2=up(b);}
+  {const b=new MB();trunk(b,2.6,0.27,0.17,lite?4:6);
+   const cr=gCrown([2.7,2.6,2.4],lite?8:9,5,0.16,rng,bc);b.add(cr.P,cr.N,cr.C,cr.I,{T:[0,0,-4.6]},sway(7));
+   if(!lite){const l=gCrown([2.1,2.0,1.8],6,4,0.18,rng,bc);b.add(l.P,l.N,l.C,l.I,{T:[1.3,0,-3.6]},sway(7));}T.broad0=up(b);}
+  {const b=new MB();trunk(b,2.6,0.27,0.17,3);   // (the trunk as near, so a tree changing its shape at 160 m keeps it)
+   const cr=gCrown([2.8,2.8,2.6],6,3,0,rng,bc);b.add(cr.P,cr.N,cr.C,cr.I,{T:[0,0,-4.8]},sway(7));T.broad1=up(b);}
+  {const b=new MB();const cr=gCrown([2.9,2.9,2.7],4,2,0,rng,bc);b.add(cr.P,cr.N,cr.C,cr.I,{T:[0,0,-4.9]},sway(7));T.broad2=up(b);}
+  {const b=new MB();const cr=gCrown([1.9,1.7,1.3],lite?7:8,4,0.22,rng,[0.23,0.38,0.13]);b.add(cr.P,cr.N,cr.C,cr.I,{T:[0,0,-1.0]},sway(2.4));T.bush0=up(b);}
+  {const b=new MB();const rk=gRock([1,0.78,0.62],lite?5:7,lite?3:4,0.2,rng,[0.53,0.50,0.45]);b.add(rk.P,rk.N,rk.C,rk.I);T.rock0=up(b);}
+  {const b=new MB();const rd=gReeds(1,rng,lite);b.add(rd.P,rd.N,rd.C,rd.I,{},q=>[0.8*Math.pow(clamp(-q[2]/2,0,1),1.5),0]);T.reed0=up(b);}
+  return T;}
+/* Instances in 120 m tiles (each type's in its own buffer, by rank: the single trees first, then a hash of the
+   place, the boulders the largest first; so the first part of a buffer is an even thinning of it), the tiles
+   grouped by 6 x 6 into 720 m ones that hold the trees once more for the far shapes. */
+function buildForest(gl,lite){const V=R3.veg,FT=120,CG=6,fine=new Map(),rng=makeRng(11);
+  const pack=arr=>{const f=new Float32Array(arr.length*12),R=new Float32Array(arr.length);for(let i=0;i<arr.length;i++){const v=arr[i],c=Math.cos(v.rot)*v.kxy,s=Math.sin(v.rot)*v.kxy,rk=Math.floor(v.rank*1000),o=i*12;R[i]=rk/1000;f[o]=v.n;f[o+1]=v.e;f[o+2]=v.z;f[o+3]=v.s;f[o+4]=c;f[o+5]=s;f[o+6]=v.bright;f[o+7]=rk+Math.min(v.ph,0.999);f[o+8]=(v.kz===undefined?1:v.kz)*(v.kind==='reed'?-1:1);f[o+9]=v.hue||0;f[o+10]=v.trunk||0;f[o+11]=v.gr||0;}   // (2.11: aI2.w the ground's gradient; no shadow for the reeds)
+    const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,f,gl.STATIC_DRAW);return {b,n:arr.length,ranks:R};};
+  const order=(arr)=>arr.slice().sort((x,y)=>x.rank-y.rank);   // by rank: the first part of a buffer is what is kept further off
+  const zbox=zs=>{let lo=1e9,hi=-1e9;for(const z of zs){lo=Math.min(lo,z);hi=Math.max(hi,z);}return [(lo+hi)/2,(hi-lo)/2];};
+  for(const v of V){const fi=Math.floor((v.n+3000)/FT),fj=Math.floor((v.e+3000)/FT),k=fi*100+fj;let t=fine.get(k);if(!t){t={fi,fj,items:{},zs:[]};fine.set(k,t);}(t.items[v.kind]=t.items[v.kind]||[]).push(v);t.zs.push(v.z);}
+  const coarse=new Map();
+  for(const t of fine.values()){const n0=t.fi*FT-3000,e0=t.fj*FT-3000,[zm,zr]=zbox(t.zs),o={n0,e0,zlo:zm-zr,zhi:zm+zr,c:[n0+FT/2,e0+FT/2,zm-8],r:Math.hypot(FT/2,FT/2)+zr+25,bufs:{}};
+    for(const k in t.items)o.bufs[k]=pack(order(t.items[k]));
+    const ci=Math.floor(t.fi/CG),cj=Math.floor(t.fj/CG),ck=ci*100+cj;let c=coarse.get(ck);if(!c){c={n0:ci*CG*FT-3000,e0:cj*CG*FT-3000,fine:[],items:{pine:[],broad:[]},zs:[]};coarse.set(ck,c);}
+    c.fine.push(o);for(const k of ['pine','broad'])if(t.items[k])for(const v of t.items[k])c.items[k].push(v);for(const z of t.zs)c.zs.push(z);}
+  const C=[],h=FT*CG/2;for(const c of coarse.values()){const [zm,zr]=zbox(c.zs);c.zlo=zm-zr;c.zhi=zm+zr;c.c=[c.n0+h,c.e0+h,zm-8];c.r=Math.hypot(h,h)+zr+25;c.bufs={};for(const k of ['pine','broad'])if(c.items[k].length)c.bufs[k]=pack(order(c.items[k]));delete c.items;delete c.zs;C.push(c);}
+  return {tpl:vegTemplates(gl,lite),coarse:C,FT,CS:FT*CG};}
+/* Per frame (2.9.3): the 120 m tiles of the 720 m ones within ~750 m, the 720 m ones beyond (their trees once
+   more, for the far shapes), to ~2.2 km. For each tile in view, each shape whose band of distances (trees: near
+   to 160 m, middle to 750 m, far beyond) overlaps the tile's, with as many of its instances (in rank order) as
+   can be kept at the tile's nearest point; the vertex shader sorts out the rest instance by instance. Trees:
+   all kept to 350 m, 55 % at 600 m, 20 % at 1.2 km, none at 2.2 km, the kept ones up to 60 % larger; bushes
+   to 350 m, boulders the largest first to 400 m, reeds to 180 m. The light mode: 55 % of the trees, 15 %
+   larger, the distances three quarters. Near to far, so the depth test turns away what the nearer hide. */
+const VEG_LOD={tree:{kd:[350,600,1200,2200],kv:[0.55,0.2],ce:0.3,bands:[['0',0,160],['1',160,750],['2',750,1e9]]},
+  bush:{kd:[260,300,330,350],kv:[0.6,0.3],ce:0,bands:[['0',0,1e9]]},rock:{kd:[110,180,280,400],kv:[0.6,0.25],ce:0,bands:[['0',0,1e9]]},reed:{kd:[110,140,160,180],kv:[0.6,0.3],ce:0,bands:[['0',0,1e9]]}};
+function vegKeep(L,d,sc,f){const D=L.kd.map(x=>x*sc),ss=(a,b,x)=>{const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t);};
+  const k=d<D[1]?1+(L.kv[0]-1)*ss(D[0],D[1],d):d<D[2]?L.kv[0]+(L.kv[1]-L.kv[0])*ss(D[1],D[2],d):L.kv[1]*(1-ss(D[2],D[3],d));return k*f;}
+function drawForest(P,eye,lite){const gl=R3.gl,ext=R3.ext,pr=R3.pr.inst;if(!ext||!pr)return;
+  const key=lite?'forestLite':'forest';if(!R3.m[key])R3.m[key]=buildForest(gl,lite);const F=R3.m[key];
+  const sc=lite?0.75:1,kf=lite?1.15:1,R1=750*sc,ez=eye[2],BW=15*sc;   // BW: half the width of a cross-fade between two shapes
+  const range=(n0,e0,sz,zlo,zhi)=>{const dx=Math.max(n0-eye[0],0,eye[0]-n0-sz),dy=Math.max(e0-eye[1],0,eye[1]-e0-sz),fx=Math.max(Math.abs(eye[0]-n0),Math.abs(eye[0]-n0-sz)),fy=Math.max(Math.abs(eye[1]-e0),Math.abs(eye[1]-e0-sz));
+    const zn=ez<zlo?zlo-ez:ez>zhi?ez-zhi:0,zf=Math.max(Math.abs(ez-zlo),Math.abs(ez-zhi));return [Math.hypot(dx,dy,zn),Math.hypot(fx,fy,zf)];};
+  const upto=(r,k)=>{let lo=0,hi=r.length;while(lo<hi){const m=(lo+hi)>>1;if(r[m]<k)lo=m+1;else hi=m;}return lo;};   // instances of a rank below k
+  const L={};let nd=0;
+  const tile=(B,types,d0,d1)=>{for(const t of types){const b=B[t];if(!b)continue;const lod=VEG_LOD[t==='pine'||t==='broad'?'tree':t],f=t==='pine'||t==='broad'?(lite?0.55:1):1,dsc=t==='pine'||t==='broad'?sc:1;
+      for(const [lv,lo,hi] of lod.bands){const blo=lo*dsc,bhi=hi*dsc;if(d1<blo-BW||d0>=bhi+BW)continue;const dm=Math.max(d0,blo-BW);if(dm>lod.kd[3]*dsc)continue;   // (the bands overlap by the cross-fade)
+        const n=upto(b.ranks,vegKeep(lod,dm,dsc,f)+0.08);if(n>0)(L[t+lv]=L[t+lv]||[]).push([b.b,n,[blo,bhi],lod,dsc,f,dm]);}}};
+  for(const c of F.coarse){if(!sphereVisible(P,c.c,c.r))continue;const [c0,c1]=range(c.n0,c.e0,F.CS,c.zlo,c.zhi);if(c0>2200*sc)continue;
+    if(c0>R1+BW){tile(c.bufs,['pine','broad'],c0,c1);nd++;continue;}
+    for(const o of c.fine){if(!sphereVisible(P,o.c,o.r))continue;nd++;const [d0,d1]=range(o.n0,o.e0,F.FT,o.zlo,o.zhi);tile(o.bufs,['pine','broad','bush','rock','reed'],d0,d1);}}
+  R3.tilesDrawn=nd;
+  gl.useProgram(pr.p);gl.uniformMatrix4fv(pr.u.uMVP,false,R3.vp);gl.uniform3fv(pr.u.uSun,R3.sun);gl.uniform3fv(pr.u.uCam,R3.cam.pos);gl.uniform1f(pr.u.uAlpha,1);gl.uniform1f(pr.u.uSpec,0);
+  gl.uniform3fv(pr.u.uFog,R3.fog);gl.uniform4fv(pr.u.uWash,R3.wash||[0,0,0,1]);gl.uniform1f(pr.u.uT,R3.time);gl.uniform1f(pr.u.uCloud,cfg.cloud);gl.uniform2fv(pr.u.uWind,R3.windXY||[0,0]);
+  gl.uniform1f(pr.u.uFogK,R3.fogK||0.00026);gl.uniform3fv(pr.u.uSunC,R3.sunC||[1,1,1]);gl.uniform3fv(pr.u.uAmbC,R3.ambC||[1,1,1]);gl.uniform3fv(pr.u.uEye,eye);
+  if(pr.u.uNoise){gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,R3.noiseTex);gl.uniform1i(pr.u.uNoise,1);gl.activeTexture(gl.TEXTURE0);}
+  const a=pr.a;gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);   // (2.12) the fades through the multisample coverage: no blending, no sorting, the depth test as for anything opaque
+  for(const k of ['broad0','pine0','bush0','rock0','reed0','broad1','pine1','broad2','pine2']){if(!L[k])continue;const m=F.tpl[k];L[k].sort((x,y)=>x[6]-y[6]);   // near first
+    gl.bindBuffer(gl.ARRAY_BUFFER,m.vp);gl.enableVertexAttribArray(a.aP);gl.vertexAttribPointer(a.aP,3,gl.FLOAT,false,0,0);
+    gl.bindBuffer(gl.ARRAY_BUFFER,m.vn);gl.enableVertexAttribArray(a.aN);gl.vertexAttribPointer(a.aN,3,gl.BYTE,true,4,0);
+    gl.bindBuffer(gl.ARRAY_BUFFER,m.vc);gl.enableVertexAttribArray(a.aC);gl.vertexAttribPointer(a.aC,3,gl.UNSIGNED_BYTE,true,4,0);
+    if(a.aT>=0){if(m.vt){gl.bindBuffer(gl.ARRAY_BUFFER,m.vt);gl.enableVertexAttribArray(a.aT);gl.vertexAttribPointer(a.aT,2,gl.UNSIGNED_BYTE,true,2,0);}else{gl.disableVertexAttribArray(a.aT);gl.vertexAttrib2f(a.aT,0,0);}}
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,m.ib);
+    for(const [b,n,band,lod,dsc,f] of L[k]){gl.bindBuffer(gl.ARRAY_BUFFER,b);
+      gl.enableVertexAttribArray(a.aI0);gl.vertexAttribPointer(a.aI0,4,gl.FLOAT,false,48,0);ext.vertexAttribDivisorANGLE(a.aI0,1);
+      gl.enableVertexAttribArray(a.aI1);gl.vertexAttribPointer(a.aI1,4,gl.FLOAT,false,48,16);ext.vertexAttribDivisorANGLE(a.aI1,1);
+      gl.enableVertexAttribArray(a.aI2);gl.vertexAttribPointer(a.aI2,4,gl.FLOAT,false,48,32);ext.vertexAttribDivisorANGLE(a.aI2,1);
+      gl.uniform1f(pr.u.uK,k.startsWith('pine')||k.startsWith('broad')?kf:1);gl.uniform2f(pr.u.uBand,band[0],band[1]);gl.uniform1f(pr.u.uBW,BW);gl.uniform4f(pr.u.uKD,lod.kd[0]*dsc,lod.kd[1]*dsc,lod.kd[2]*dsc,lod.kd[3]*dsc);gl.uniform3f(pr.u.uKV,lod.kv[0],lod.kv[1],f);gl.uniform1f(pr.u.uCE,lod.ce);
+      ext.drawElementsInstancedANGLE(gl.TRIANGLES,m.n,gl.UNSIGNED_SHORT,0,n);}}
+  gl.disable(gl.SAMPLE_ALPHA_TO_COVERAGE);for(const i of [a.aI0,a.aI1,a.aI2]){ext.vertexAttribDivisorANGLE(i,0);gl.disableVertexAttribArray(i);}if(a.aT>=0)gl.disableVertexAttribArray(a.aT);}
+/* The trees' shadows (2.11): within R of the eye (fading over the last 60 m), the middle shapes, on the tangent
+   plane at each foot; bushes and boulders too. Called inside the shadow pass (stencil, blending set up). */
+function drawForestShadows(P,eye,lite){const gl=R3.gl,ext=R3.ext,pr=R3.pr.instShd,F=R3.m[lite?'forestLite':'forest'];if(!ext||!pr||!F)return;
+  const R=lite?130:220,a=pr.a,dist=(n0,e0,sz)=>Math.hypot(Math.max(n0-eye[0],0,eye[0]-n0-sz),Math.max(e0-eye[1],0,eye[1]-e0-sz));
+  gl.useProgram(pr.p);gl.uniformMatrix4fv(pr.u.uMVP,false,R3.vp);gl.uniform3fv(pr.u.uSun,R3.shSun);gl.uniform3fv(pr.u.uCam,R3.cam.pos);gl.uniform3fv(pr.u.uEye,eye);gl.uniform2f(pr.u.uBand,R-60,R);gl.uniform1f(pr.u.uAlpha,0.40);gl.uniform1f(pr.u.uK,lite?1.15:1);
+  const L={};
+  for(const c of F.coarse){if(dist(c.n0,c.e0,F.CS)>R)continue;for(const o of c.fine){if(dist(o.n0,o.e0,F.FT)>R||!sphereVisible(P,o.c,o.r+R))continue;
+    for(const [t,k] of [['pine','pine1'],['broad','broad1'],['bush','bush0'],['rock','rock0']])if(o.bufs[t])(L[k]=L[k]||[]).push(o.bufs[t]);}}
+  for(const k in L){const m=F.tpl[k];gl.bindBuffer(gl.ARRAY_BUFFER,m.vp);gl.enableVertexAttribArray(a.aP);gl.vertexAttribPointer(a.aP,3,gl.FLOAT,false,0,0);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,m.ib);
+    for(const bf of L[k]){gl.bindBuffer(gl.ARRAY_BUFFER,bf.b);
+      gl.enableVertexAttribArray(a.aI0);gl.vertexAttribPointer(a.aI0,4,gl.FLOAT,false,48,0);ext.vertexAttribDivisorANGLE(a.aI0,1);
+      gl.enableVertexAttribArray(a.aI1);gl.vertexAttribPointer(a.aI1,4,gl.FLOAT,false,48,16);ext.vertexAttribDivisorANGLE(a.aI1,1);
+      gl.enableVertexAttribArray(a.aI2);gl.vertexAttribPointer(a.aI2,4,gl.FLOAT,false,48,32);ext.vertexAttribDivisorANGLE(a.aI2,1);
+      ext.drawElementsInstancedANGLE(gl.TRIANGLES,m.n,gl.UNSIGNED_SHORT,0,bf.n);}}
+  for(const i of [a.aI0,a.aI1,a.aI2]){ext.vertexAttribDivisorANGLE(i,0);gl.disableVertexAttribArray(i);}}
 /* frustum test against the view-projection matrix (planes from its rows) */
 function frustumPlanes(m){const r=i=>[m[i],m[4+i],m[8+i],m[12+i]],P=[];const w=r(3);
   for(const i of [0,1,2])for(const sg of [1,-1]){const a=r(i),p=[w[0]+sg*a[0],w[1]+sg*a[1],w[2]+sg*a[2],w[3]+sg*a[3]];const l=Math.hypot(p[0],p[1],p[2]);P.push(p.map(v=>v/l));}return P;}
@@ -3946,7 +4528,7 @@ function buildAircraft(gl){
    const cuff=gBox([0.55,0,0],[0.32,0.10,0.06]);bl.add(cuff.P,cuff.N,dark,cuff.I);}
   R3.m.blade=bl.upload(gl)[0];
   const hb=new MB();const hub=gCone(-0.10,0.32,0.10,0.30,12);hb.add(hub.P,hub.N,dark,hub.I,{R:UPX});const cap=gEll([0.20,0.20,0.16],10,6);hb.add(cap.P,cap.N,[0.30,0.30,0.32],cap.I,{T:[0,0,-0.18]});R3.m.hub=hb.upload(gl)[0];
-  const db=new MB();const dd=gDisc(0.4,5.1,40);db.add(dd.P,dd.N,[0.6,0.6,0.62],dd.I);R3.m.disc=db.upload(gl)[0];
+  const db=new MB();const dd=gDisc(0.4,4.5,40);db.add(dd.P,dd.N,[0.6,0.6,0.62],dd.I);R3.m.disc=db.upload(gl)[0];const rmb=new MB(),rd=gDisc(4.5,5.1,40);rmb.add(rd.P,rd.N,[0.6,0.6,0.62],rd.I);R3.m.discRim=rmb.upload(gl)[0];   // (2.9) the tips' part fainter: the blur has no hard edge
   const sb=new MB();const sd=gDisc(0,5.2,32);sb.add(sd.P,sd.N,[0.05,0.05,0.05],sd.I);R3.m.shadow=sb.upload(gl)[0];
   const cb=new MB();const cc=gCone(0,2.2,9,2.2,16,false);cb.add(cc.P,cc.N,[1.0,0.72,0.1],cc.I);R3.m.column=cb.upload(gl)[0];   // tutor target
   {const rb=new MB();const rc=gCone(-0.4,4.5,0.4,4.5,32,false);rb.add(rc.P,rc.N,[1.0,0.72,0.1],rc.I);R3.m.ring=rb.upload(gl)[0];}   // click to fly: the ring at a target's height in the air (92_coach.js)
@@ -4099,7 +4681,8 @@ function ngSurface(n,e){   // what the ground shader paints here: 'paved', 'wate
   const seg=(px,py,ax,ay,bx,by)=>{const pax=px-ax,pay=py-ay,bax=bx-ax,bay=by-ay;const t=clamp((pax*bax+pay*bay)/(bax*bax+bay*bay),0,1);return Math.hypot(pax-bax*t,pay-bay*t);};
   if(seg(n,e,-900,-150,-100,-150)<10.5||seg(n,e,-100,-150,-40,-150)<5.5||seg(n,e,-40,-150,-40,-50)<5.5||(Math.abs(n)<40.5&&Math.abs(e)<60.5)||seg(n,e,-1500,-300,1500,-300)<4||seg(n,e,280,-1500,280,1500)<4)return 'paved';
   for(const b of BUILDINGS)if(Math.abs(n-b.n)<b.w+12&&Math.abs(e-b.e)<b.l+2)return 'paved';
-  if(inLake(n,e))return 'water';
+  if(inWater(n,e))return 'water';
+  {const T=TERRAIN.town;if(n>T.n0&&n<T.n1&&e>T.e0&&e<T.e1)return 'paved';}
   const fd=ngVn(n/260+9.2,e/260+4.4);if(fd>0.58)return 'grass';   // forest floor
   const r1=ngHash(Math.floor(n/45),Math.floor(e/45));return r1<0.55?'grass':r1<0.85?'crop':'plough';}
 function ngVn(x,y){const i=Math.floor(x),j=Math.floor(y);let fx=x-i,fy=y-j;fx=fx*fx*(3-2*fx);fy=fy*fy*(3-2*fy);const a=ngHash(i,j),b=ngHash(i+1,j),c=ngHash(i,j+1),d=ngHash(i+1,j+1);return (a+(b-a)*fx)*(1-fy)+(c+(d-c)*fx)*fy;}
@@ -4136,16 +4719,19 @@ function m4mul(A,B){const C=new Float32Array(16);for(let i=0;i<4;i++)for(let j=0
 function m4view(C,f,u){const r=vnorm(vcross(f,u));const uu=vcross(r,f);return new Float32Array([r[0],uu[0],-f[0],0, r[1],uu[1],-f[1],0, r[2],uu[2],-f[2],0, -vdot(r,C),-vdot(uu,C),vdot(f,C),1]);}
 function m4model(R,T){return new Float32Array([R[0],R[3],R[6],0, R[1],R[4],R[7],0, R[2],R[5],R[8],0, T[0],T[1],T[2],1]);}
 const M4I=m4model([1,0,0,0,1,0,0,0,1],[0,0,0]);
-function drawMesh(pr,m,M,alpha=1){const gl=R3.gl;gl.useProgram(pr.p);
+function drawMesh(pr,m,M,alpha=1,parts){const gl=R3.gl;gl.useProgram(pr.p);
   gl.bindBuffer(gl.ARRAY_BUFFER,m.vp);gl.enableVertexAttribArray(pr.a.aP);gl.vertexAttribPointer(pr.a.aP,3,gl.FLOAT,false,0,0);
-  if(pr.a.aN>=0){gl.bindBuffer(gl.ARRAY_BUFFER,m.vn);gl.enableVertexAttribArray(pr.a.aN);gl.vertexAttribPointer(pr.a.aN,3,gl.FLOAT,false,0,0);}
-  if(pr.a.aC>=0){gl.bindBuffer(gl.ARRAY_BUFFER,m.vc);gl.enableVertexAttribArray(pr.a.aC);gl.vertexAttribPointer(pr.a.aC,3,gl.FLOAT,false,0,0);}
+  const pk=m.packed;
+  if(pr.a.aN>=0){gl.bindBuffer(gl.ARRAY_BUFFER,m.vn);gl.enableVertexAttribArray(pr.a.aN);if(pk)gl.vertexAttribPointer(pr.a.aN,3,gl.BYTE,true,4,0);else gl.vertexAttribPointer(pr.a.aN,3,gl.FLOAT,false,0,0);}
+  if(pr.a.aC>=0){gl.bindBuffer(gl.ARRAY_BUFFER,m.vc);gl.enableVertexAttribArray(pr.a.aC);if(pk)gl.vertexAttribPointer(pr.a.aC,3,gl.UNSIGNED_BYTE,true,4,0);else gl.vertexAttribPointer(pr.a.aC,3,gl.FLOAT,false,0,0);}
+  if(pr.a.aT>=0&&pr.sway){if(m.vt){gl.bindBuffer(gl.ARRAY_BUFFER,m.vt);gl.enableVertexAttribArray(pr.a.aT);if(pk)gl.vertexAttribPointer(pr.a.aT,2,gl.UNSIGNED_BYTE,true,2,0);else gl.vertexAttribPointer(pr.a.aT,2,gl.FLOAT,false,0,0);}else{gl.disableVertexAttribArray(pr.a.aT);const k=pr.aTconst||[0,0];gl.vertexAttrib2f(pr.a.aT,k[0],k[1]);}}
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,m.ib);
   gl.uniformMatrix4fv(pr.u.uMVP,false,m4mul(R3.vp,M));if(pr.u.uM)gl.uniformMatrix4fv(pr.u.uM,false,M);
   gl.uniform3fv(pr.u.uSun,R3.sun);gl.uniform3fv(pr.u.uCam,R3.cam.pos);if(pr.u.uAlpha)gl.uniform1f(pr.u.uAlpha,alpha);
-  gl.uniform3fv(pr.u.uFog,R3.fog);if(pr.u.uSpec)gl.uniform1f(pr.u.uSpec,R3.spec||0);if(pr.u.uWash)gl.uniform4fv(pr.u.uWash,R3.wash||[0,0,0,1]);if(pr.u.uT)gl.uniform1f(pr.u.uT,R3.time);if(pr.u.uCloud)gl.uniform1f(pr.u.uCloud,cfg.cloud);if(pr.u.uWind)gl.uniform2fv(pr.u.uWind,R3.windXY||[0,0]);
+  gl.uniform3fv(pr.u.uFog,R3.fog);if(pr.u.uSpec)gl.uniform1f(pr.u.uSpec,R3.spec||0);if(pr.u.uWash)gl.uniform4fv(pr.u.uWash,R3.wash||[0,0,0,1]);if(pr.u.uT)gl.uniform1f(pr.u.uT,R3.time);if(pr.u.uCloud)gl.uniform1f(pr.u.uCloud,cfg.cloud);if(pr.u.uWind)gl.uniform2fv(pr.u.uWind,R3.windXY||[0,0]);if(pr.u.uFogK)gl.uniform1f(pr.u.uFogK,R3.fogK||0.00026);if(pr.u.uSunC)gl.uniform3fv(pr.u.uSunC,R3.sunC||[1,1,1]);if(pr.u.uAmbC)gl.uniform3fv(pr.u.uAmbC,R3.ambC||[1,1,1]);if(pr.u.uZen)gl.uniform3fv(pr.u.uZen,R3.zen||[0.30,0.48,0.82]);
   if(pr.u.uNoise){gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,R3.noiseTex);gl.uniform1i(pr.u.uNoise,1);gl.activeTexture(gl.TEXTURE0);}
-  gl.drawElements(gl.TRIANGLES,m.n,gl.UNSIGNED_SHORT,0);}
+  if(pr.u.uShore){gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,R3.shoreTex);gl.uniform1i(pr.u.uShore,2);gl.activeTexture(gl.TEXTURE0);}
+  if(parts){for(const b of parts)gl.drawElements(gl.TRIANGLES,b.n,gl.UNSIGNED_SHORT,b.o);}else gl.drawElements(gl.TRIANGLES,m.n,gl.UNSIGNED_SHORT,0);}
 /* ---- cameras ---- */
 function cameraUpdate(dt){
   const c=R3.cam,R=qmat(S.q),[phi,th,psi]=S.eul;
@@ -4194,6 +4780,17 @@ function cockpitFov(asp){const h0=clamp(cfg.fov||72,50,90)*DEG,vMax=62*DEG,vMin=
   return {v,down:clamp(36*DEG-v/2,5*DEG,14*DEG)};}
 function project(w){const v=R3.vp;const x=v[0]*w[0]+v[4]*w[1]+v[8]*w[2]+v[12],y=v[1]*w[0]+v[5]*w[1]+v[9]*w[2]+v[13],z=v[2]*w[0]+v[6]*w[1]+v[10]*w[2]+v[14],ww=v[3]*w[0]+v[7]*w[1]+v[11]*w[2]+v[15];
   if(ww<=0.01)return null;return [(x/ww*0.5+0.5)*R3.w,(0.5-y/ww*0.5)*R3.h];}
+/* The hour and the air (2.9): the sun crosses from the east (06:00) through the south (13:00, 58° up) to the
+   west (20:00), warmer and weaker low down; the sky's zenith, the horizon (the fog colour) and the ambient light
+   follow it; the visibility sets the haze (k = 3 / visibility: 5 % contrast left at that distance), and in mist
+   the sky greys too. The aircraft's planar shadow keeps the sun at 20° or more (lower it would stretch to the
+   horizon). */
+function skyState(){const t=clamp(cfg.tod===undefined?11:cfg.tod,5.5,20.5),x=clamp((t-6)/14,0,1),el=Math.max(2.5*DEG,58*DEG*Math.sin(Math.PI*x)),az=(90+180*x)*DEG;
+  R3.sun=vnorm([Math.cos(el)*Math.cos(az),Math.cos(el)*Math.sin(az),-Math.sin(el)]);const es=Math.max(el,20*DEG);R3.shSun=vnorm([Math.cos(es)*Math.cos(az),Math.cos(es)*Math.sin(az),-Math.sin(es)]);
+  const k=sm(1*DEG,30*DEG,el),L=(a,b)=>[0,1,2].map(i=>a[i]+(b[i]-a[i])*k),vis=clamp(cfg.vis||12,1,25),mist=sm(9,1.5,vis);
+  R3.sunC=L([1.0,0.50,0.26],[1.0,0.97,0.92]).map(v=>v*(0.55+0.45*k)*(1-0.35*mist));R3.ambC=L([0.62,0.60,0.74],[0.97,0.99,1.03]).map(v=>v*(0.72+0.28*k));
+  const fog=L([0.88,0.64,0.50],[0.74,0.80,0.88]);R3.fog=fog.map((v,i)=>lerp(v,[0.78,0.80,0.83][i]*(0.75+0.25*k),mist));
+  R3.zen=L([0.20,0.27,0.52],[0.30,0.48,0.82]).map((v,i)=>lerp(v,R3.fog[i]*0.95,mist*0.85));R3.fogK=3/(vis*1000);}
 function render(dt){
   const gl=R3.gl,cv=R3.canvas;R3.time+=dt;
   drsStep(dt);
@@ -4203,7 +4800,10 @@ function render(dt){
   R3.pr.gnd=lite?R3.pr.gndLite:R3.pr.gndFull;R3.pr.sky=lite?R3.pr.skyLite:R3.pr.skyFull;
   cameraUpdate(dt);
   const c=R3.cam;R3.vp=m4mul(m4persp(c.fov,W/Hh,1.0,R3.far),m4view(c.pos,c.f,c.u));
-  R3.sun=vnorm([0.45,-0.35,-0.82]);R3.fog=[0.74,0.80,0.88];R3.windXY=[S.wind[0],S.wind[1]];
+  skyState();R3.windXY=[S.wind[0],S.wind[1]];
+  /* (2.9.2) in the cockpit the instrument panel covers the bottom of the view: nothing is drawn under it */
+  const cut=cfg.view==='cockpit'&&!cfg.panel3d&&HUD.panelA>0.99&&HUD.panelTop<Hh-40?Math.round((Hh-HUD.panelTop-20)*pxr):0;
+  if(cut>0){gl.enable(gl.SCISSOR_TEST);gl.scissor(0,cut,bw,bh-cut);}else gl.disable(gl.SCISSOR_TEST);
   gl.clearColor(R3.fog[0],R3.fog[1],R3.fog[2],1);gl.clearStencil(0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT|gl.STENCIL_BUFFER_BIT);
   /* Nearest first, so the depth test turns hidden pixels away before they are shaded: the cockpit, the
      aircraft, buildings and trees, then the ground, then the sky into whatever is left. Then the shadow
@@ -4219,41 +4819,53 @@ function render(dt){
   if(!(cfg.view==='cockpit'&&st.Om>15))for(let k=0;k<rt.N;k++){const psi=st.psi+2*Math.PI*k/rt.N;const a=Math.atan2(-rt.s*Math.sin(psi),-Math.cos(psi));   // from the seat a turning rotor is its blur (the disc below), not four blades caught at random
     drawMesh(R3.pr.lit,R3.m.blade,m4model(mmul(Rh,mmul(rotZ(a),rotY(st.beta[k]))),hubW));}
   R3.spec=0;
+  R3.wash=ngWash();   // (2.9: before the trees, which bend in it)
   // scenery: buildings, trees (near tiles in full detail), windsock, wind turbines
   for(const m of R3.m.scene)drawMesh(R3.pr.lit,m,M4I);
-  {const k=lite?'treesLite':'treesFull';if(!R3.m[k])R3.m[k]=buildTrees(gl,lite);const P=frustumPlanes(R3.vp);let nd=0,nn=0;
-   for(const t of R3.m[k])if(sphereVisible(P,t.c,t.r)){const near=Math.hypot(t.c[0]-c.pos[0],t.c[1]-c.pos[1])-283<700;for(const m of near?t.meshes:t.far)drawMesh(R3.pr.lit,m,M4I);nd++;if(near)nn++;}R3.tilesDrawn=nd;R3.tilesNear=nn;}
+  drawForest(frustumPlanes(R3.vp),c.pos,lite);   // (2.9.2) trees, bushes, rocks, reeds
   {const w=S.wind,ws=Math.hypot(w[0],w[1]);const az=ws>0.2?Math.atan2(w[1],w[0]):WIND.dir*DEG+Math.PI;const droop=lerp(65*DEG,3*DEG,clamp(ws/7,0,1));   // windsock: points downwind, droops when calm
-    const Rm=mmul(rotZ(az),rotY(-droop));drawMesh(R3.pr.lit,R3.m.sock,m4model(Rm,[35,-45,-terrainH(35,-45)-7]));}
+    const Rm=mmul(rotZ(az),rotY(-droop));for(const [n,e,hp] of R3.socks)drawMesh(R3.pr.lit,R3.m.sock,m4model(Rm,[n,e,-terrainH(n,e)-hp]));}
   {const w=S.wind,ws=Math.hypot(w[0],w[1]);const az=ws>0.5?Math.atan2(-w[1],-w[0]):WIND.dir*DEG;R3.turb+=dt*clamp(ws/6,0.15,1)*1.3;   // wind turbines: face the wind, turn with it
     for(const [n,e] of R3.turbines){drawMesh(R3.pr.lit,R3.m.turbine,m4model(mmul(rotZ(az),rotX(R3.turb)),[n,e,-terrainH(n,e)-60]));}}
+  lifeDraw(dt);   // cars, the boat, birds (86_life.js)
   // the ground, then the sky dome (centred on the camera, just inside the far plane) where nothing else is
   R3.wash=ngWash();
-  drawMesh(R3.pr.gnd,R3.m.ground,M4I);
+  {const g=R3.m.ground,P=frustumPlanes(R3.vp),R=[[],[]];let cur=null,cls=-1;   // (2.9.2) only the ground's blocks in view; (2.10) those beyond ~900 m with the light shader (a pixel covers over a metre there: none of the fine detail is left to see); consecutive blocks of a kind in one call
+   for(const b of g.blocks){const k=!sphereVisible(P,b.c,b.r)?0:(lite||Math.hypot(b.c[0]-c.pos[0],b.c[1]-c.pos[1],b.c[2]-c.pos[2])-b.r>900)?2:1;
+     if(k&&k===cls&&cur&&cur.o+cur.n*2===b.o)cur.n+=b.n;else if(k){cur={o:b.o,n:b.n};R[k-1].push(cur);}else cur=null;cls=k;}
+   if(R[0].length)drawMesh(R3.pr.gnd,g,M4I,1,R[0]);if(R[1].length)drawMesh(lite?R3.pr.gnd:R3.pr.gndLite,g,M4I,1,R[1]);}
+  if(R3.m.river){gl.disable(gl.CULL_FACE);for(const m of R3.m.river)drawMesh(R3.pr.water,m,M4I);gl.enable(gl.CULL_FACE);}   // the rivers, over the flood plain
   gl.depthMask(false);gl.disable(gl.CULL_FACE);drawMesh(R3.pr.sky,R3.m.sky,m4model([1,0,0,0,1,0,0,0,1],c.pos));gl.depthMask(true);gl.enable(gl.CULL_FACE);
   /* Shadow: every aircraft mesh projected along the sun onto the ground plane under the aircraft.
      The stencil lets each pixel be darkened once, however many shadow triangles cover it (without
      a stencil buffer, depth-equal rejection does the same, less cleanly). */
-  {const sun=R3.sun,zg=-terrainH(S.pos[0],S.pos[1])-0.03,kx=sun[0]/sun[2],ky=sun[1]/sun[2];
+  {const sun=R3.shSun,zg=-terrainH(S.pos[0],S.pos[1])-0.03,kx=sun[0]/sun[2],ky=sun[1]/sun[2];
    const Sh=new Float32Array([1,0,0,0, 0,1,0,0, -kx,-ky,0,0, kx*zg,ky*zg,zg,1]);   // column-major: x' = x - kx (z - zg), y' = y - ky (z - zg), z' = zg
    const hAbove=-S.pos[2]-terrainH(S.pos[0],S.pos[1]),al=clamp(0.42-hAbove*0.0035,0.06,0.42);
    const stc=R3.info&&R3.info.stencil;
    gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(-2,-8);gl.disable(gl.CULL_FACE);
    if(stc){gl.enable(gl.STENCIL_TEST);gl.stencilFunc(gl.EQUAL,0,0xff);gl.stencilOp(gl.KEEP,gl.KEEP,gl.INCR);gl.depthMask(false);}else gl.depthFunc(gl.LESS);
    const shd=(m,Mm,a)=>drawMesh(R3.pr.shadow,m,m4mul(Sh,Mm),a);
+   {const sv=R3.sun;R3.sun=R3.shSun;const P=frustumPlanes(R3.vp);   // (2.11) the scenery's shadows first: the buildings, the turbines' rotors, the cars near by, the trees
+    for(const m of R3.m.scene)drawMesh(R3.pr.shd,m,M4I,0.42);
+    {const w=S.wind,ws=Math.hypot(w[0],w[1]);const az=ws>0.5?Math.atan2(-w[1],-w[0]):WIND.dir*DEG;for(const [n,e] of R3.turbines){if(Math.hypot(n-c.pos[0],e-c.pos[1])>900)continue;R3.pr.shd.aTconst=[-terrainH(n,e),1];drawMesh(R3.pr.shd,R3.m.turbine,m4model(mmul(rotZ(az),rotX(R3.turb)),[n,e,-terrainH(n,e)-60]),0.42);}}
+    if(typeof lifeShadows==='function')lifeShadows((m,M,zg)=>{R3.pr.shd.aTconst=[zg,1];drawMesh(R3.pr.shd,m,M,0.42);},c.pos,400);
+    R3.pr.shd.aTconst=null;drawForestShadows(P,c.pos,lite);R3.sun=sv;}
    shd(R3.m.body,m4model(R,S.pos),al);shd(R3.m.hub,m4model(Rh,hubW),al);
    for(let k=0;k<rt.N;k++){const psi=st.psi+2*Math.PI*k/rt.N;const a=Math.atan2(-rt.s*Math.sin(psi),-Math.cos(psi));shd(R3.m.blade,m4model(mmul(Rh,mmul(rotZ(a),rotY(st.beta[k]))),hubW),al);}
    if(st.Om>15){if(stc)gl.stencilFunc(gl.EQUAL,0,0xff);shd(R3.m.disc,m4model(Rh,hubW),al*0.18*clamp((st.Om-15)/25,0,1));}   // the spinning disc dims the ground a little
    if(stc){gl.disable(gl.STENCIL_TEST);gl.depthMask(true);}
    gl.disable(gl.POLYGON_OFFSET_FILL);gl.depthFunc(gl.LEQUAL);gl.disable(gl.BLEND);gl.enable(gl.CULL_FACE);}
   ngDraw(dt);   // downwash particles (after the sky, which would otherwise paint over them)
+  lifeSmoke(dt);   // the chimneys' smoke (86_life.js)
   // rotor disc blur at the tip-path plane, Fenestron blur, the phantom, the tutor's target, the prediction
   gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);gl.disable(gl.CULL_FACE);
   if(st.Om>15){let b0=0,bc=0,bs=0;for(let k=0;k<rt.N;k++){const psi=st.psi+2*Math.PI*k/rt.N;b0+=st.beta[k];bc+=st.beta[k]*Math.cos(psi);bs+=st.beta[k]*Math.sin(psi);}
     b0/=rt.N;bc*=2/rt.N;bs*=2/rt.N;
     // tip-path plane: up(x,y) = b0 - bc x - s bs y in hub axes -> rotY(-bc) then rotX(s bs)
     const Rt=mmul(rotY(-bc),rotX(rt.s*bs));
-    drawMesh(R3.pr.lit,R3.m.disc,m4model(mmul(Rh,Rt),vadd(hubW,mrot(Rh,[0,0,-2.5*Math.sin(b0)]))),clamp((st.Om-15)/25,0,1)*0.22);
+    const Md=m4model(mmul(Rh,Rt),vadd(hubW,mrot(Rh,[0,0,-2.5*Math.sin(b0)]))),ad=clamp((st.Om-15)/25,0,1)*(cfg.view==='cockpit'?0.13:0.22);   // from the seat, looking up through it, fainter (2.9)
+    drawMesh(R3.pr.lit,R3.m.disc,Md,ad);drawMesh(R3.pr.lit,R3.m.discRim,Md,ad*0.5);
     drawMesh(R3.pr.lit,R3.m.fenBlur,m4model(R,S.pos),clamp((st.Om-15)/25,0,1)*0.35);}
   // (until 1.9 a pale ring stood for the downwash; ground ripples and particles show it now)
   if(UI.phantom&&UI.phantom.S){const P=UI.phantom.S;drawMesh(R3.pr.lit,R3.m.phantom,m4model(qmat(P.q),P.pos),0.45);}
@@ -4263,8 +4875,91 @@ function render(dt){
   gl.depthMask(true);gl.disable(gl.BLEND);gl.enable(gl.CULL_FACE);
   if(early){gl.depthRange(0,0.01);drawCockpitGlass();}
   else if(cockpit){gl.clear(gl.DEPTH_BUFFER_BIT);drawCockpit();drawCockpitGlass();}
-  gl.depthRange(0,1);
+  gl.depthRange(0,1);gl.disable(gl.SCISSOR_TEST);
 }
+
+/* ═══════════════ LIFE (2.9) ═══════════════
+   What moves in the landscape besides the aircraft, all of it drawn, none of it in the physics:
+   - cars on the roads and the town's streets, keeping to the right, turning round at the ends of their
+     routes (main roads 50 to 85 km/h, the town 30 to 45), over the bridge on its deck;
+   - three flocks of large birds circling over the lake, the western forest and the summit, flapping and
+     gliding by turns, scattering from a helicopter that comes within 70 m;
+   - smoke from three chimneys in the village and the factory's stack by the town, rising and drifting
+     with the wind, thinning as it spreads;
+   - a sailing boat crossing the lake, heeling a little and rocking.
+   Time is R3.time, so a still frame (UI.freeze) holds everything where it is. */
+const LIFE={ready:false,cars:[],routes:[],birds:[],smoke:[],rng:null};
+function lifeInit(gl){if(LIFE.ready)return;LIFE.ready=true;const rng=makeRng(77);LIFE.rng=makeRng(78);
+  const cols=[[0.72,0.10,0.08],[0.12,0.24,0.52],[0.86,0.86,0.83],[0.13,0.13,0.14],[0.55,0.56,0.58],[0.20,0.40,0.22],[0.85,0.62,0.12],[0.40,0.42,0.48]];
+  LIFE.carM=cols.map(c=>{const b=new MB();const bd=gBox([0,0,-0.62],[2.15,0.88,0.42]);b.add(bd.P,bd.N,c,bd.I);const cb=gBox([-0.25,0,-1.28],[1.25,0.80,0.34]);b.add(cb.P,cb.N,[0.18,0.22,0.27],cb.I);
+    for(const [x,y] of [[1.4,0.8],[1.4,-0.8],[-1.4,0.8],[-1.4,-0.8]]){const w=gBox([x,y,-0.32],[0.32,0.12,0.32]);b.add(w.P,w.N,[0.08,0.08,0.08],w.I);}return b.upload(gl)[0];});
+  {const b=new MB();const bd=gBox([0,0,-1.5],[5.5,1.25,1.25]);b.add(bd.P,bd.N,[0.85,0.85,0.80],bd.I);const cb=gBox([4.6,0,-1.6],[0.9,1.22,1.1]);b.add(cb.P,cb.N,[0.70,0.15,0.12],cb.I);LIFE.truckM=b.upload(gl)[0];}
+  const T=TERRAIN.town,st=k=>T.n0+64*k,se=k=>T.e0+64*k;
+  const R=[{pts:[[-1500,-300],[1500,-300]],v:[17,24],k:7},{pts:[[280,-1500],[280,1500]],v:[17,24],k:6},
+    {pts:[[-1500,-300],[-2000,-1180],[st(9),-1180],[st(9),T.e0]],v:[14,20],k:3},
+    {pts:[[st(2),T.e0],[st(2),T.e1]],v:[8,12],k:2},{pts:[[st(7),T.e0],[st(7),T.e1]],v:[8,12],k:2},{pts:[[T.n0,se(3)],[T.n1,se(3)]],v:[8,12],k:2},{pts:[[T.n0,se(8)],[T.n1,se(8)]],v:[8,12],k:2}];
+  for(const r of R){const S=[0];for(let i=1;i<r.pts.length;i++)S.push(S[i-1]+Math.hypot(r.pts[i][0]-r.pts[i-1][0],r.pts[i][1]-r.pts[i-1][1]));r.S=S;r.L=S[S.length-1];LIFE.routes.push(r);
+    for(let i=0;i<r.k;i++)LIFE.cars.push({r,v:r.v[0]+(r.v[1]-r.v[0])*rng(),s0:rng()*2*r.L,m:rng()<0.12&&r.v[0]>12?-1:Math.floor(rng()*cols.length)});}
+  // birds: a body and two wings each (six vertices), built anew every frame into one buffer
+  const fl=[{n:-450,e:550,h:55,R:90,k:10},{n:250,e:-760,h:80,R:140,k:12},{n:2300,e:640,h:90,R:180,k:9}];
+  for(const f of fl)for(let i=0;i<f.k;i++)LIFE.birds.push({f,ph:rng()*6.28,dr:(rng()-0.5)*0.35*f.R,dh:(rng()-0.5)*16,fp:rng()*6.28,fl:0});
+  LIFE.birdBuf={vp:gl.createBuffer(),vn:gl.createBuffer(),vc:gl.createBuffer(),ib:gl.createBuffer(),n:LIFE.birds.length*6};
+  {const I=new Uint16Array(LIFE.birds.length*6);for(let i=0;i<I.length;i++)I[i]=i;gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,LIFE.birdBuf.ib);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,I,gl.STATIC_DRAW);
+   const C=new Float32Array(LIFE.birds.length*18);for(let i=0;i<C.length;i+=3){C[i]=0.22;C[i+1]=0.18;C[i+2]=0.14;}gl.bindBuffer(gl.ARRAY_BUFFER,LIFE.birdBuf.vc);gl.bufferData(gl.ARRAY_BUFFER,C,gl.STATIC_DRAW);}
+  // smoke: the village's chimneys (85_render.js R3.chimneys) and the factory stack
+  for(const c of (R3.chimneys||[]))LIFE.smoke.push({p:c,parts:[],next:0,rate:0.35,size:[0.8,5],life:11,col:[0.80,0.80,0.80]});
+  LIFE.smoke.push({p:[-2100,-1150,-(TERRAIN.town.h+41)],parts:[],next:0,rate:0.18,size:[2.0,14],life:16,col:[0.86,0.86,0.85]});
+  LIFE.smokeP=glProg(gl,VS_SMOKE,FS_SMOKE);LIFE.sBuf=gl.createBuffer();LIFE.sCBuf=gl.createBuffer();LIFE.sABuf=gl.createBuffer();
+  // the boat: hull, mast, sail
+  {const b=new MB();const h=gBox([0,0,-0.35],[2.6,0.95,0.35]);b.add(h.P,h.N,[0.92,0.92,0.90],h.I);const bow=gCone(2.6,0.95,4.0,0.05,4);b.add(bow.P,bow.N,[0.92,0.92,0.90],bow.I,{R:rotX(Math.PI/4),T:[0,0,-0.35]});
+   const m=gBox([0.6,0,-4.2],[0.06,0.06,3.9]);b.add(m.P,m.N,[0.75,0.72,0.66],m.I);
+   const P=[0.7,0,-0.9, 0.7,0,-7.8, -2.2,0,-1.0],N=[0,1,0,0,1,0,0,1,0];b.add(P,N,[0.97,0.97,0.95],[0,1,2,0,2,1]);LIFE.boatM=b.upload(gl)[0];}}
+/* where a car is: along its route and back (it turns round at the ends), to the right of the centre line */
+function lifeCar(c,t){const r=c.r,L=r.L;let s=(c.s0+c.v*t)%(2*L),back=false;if(s>L){s=2*L-s;back=true;}
+  let i=1;while(i<r.S.length-1&&r.S[i]<s)i++;const a=r.pts[i-1],b=r.pts[i],f=(s-r.S[i-1])/Math.max(1e-6,r.S[i]-r.S[i-1]);
+  let dn=b[0]-a[0],de=b[1]-a[1];const l=Math.hypot(dn,de)||1;dn/=l;de/=l;if(back){dn=-dn;de=-de;}
+  const n=a[0]+(b[0]-a[0])*f-de*1.8,e=a[1]+(b[1]-a[1])*f+dn*1.8;let h=groundH(n,e);if(Math.abs(n-280)<6&&Math.abs(e-380)<75)h=Math.max(h,0.55);   // on the bridge's deck
+  return {n,e,h,psi:Math.atan2(de,dn)};}
+/* the parked cars (2.11: beside houses, in the farms' yards, at the hospital's car park; 85_render.js lists them) */
+function lifeParked(){if(LIFE.parkedM)return LIFE.parkedM;const rng=makeRng(79),P=[];for(const [n,e,psi,g] of (R3.parked||[]))P.push({n,e,psi,g,m:Math.floor(rng()*LIFE.carM.length)});return LIFE.parkedM=P;}
+/* the cars' shadows (2.11): every car within r of the eye, moving or parked, through the renderer's shadow pass */
+function lifeShadows(shd,cp,r){if(!LIFE.ready)return;const t=R3.time;
+  for(const c of LIFE.cars){const q=lifeCar(c,t);if(Math.hypot(q.n-cp[0],q.e-cp[1])>r)continue;shd(c.m<0?LIFE.truckM:LIFE.carM[c.m],m4model(rotZ(q.psi),[q.n,q.e,-q.h]),-q.h);}
+  for(const p of lifeParked()){if(Math.hypot(p.n-cp[0],p.e-cp[1])>r)continue;shd(LIFE.carM[p.m],m4model(rotZ(p.psi),[p.n,p.e,-p.g]),-p.g);}}
+function lifeDraw(dt){const gl=R3.gl;if(!gl)return;lifeInit(gl);const t=R3.time,cp=R3.cam.pos;
+  for(const p of lifeParked()){if(Math.hypot(p.n-cp[0],p.e-cp[1])>2000)continue;drawMesh(R3.pr.lit,LIFE.carM[p.m],m4model(rotZ(p.psi),[p.n,p.e,-p.g]));}
+  // cars
+  for(const c of LIFE.cars){const q=lifeCar(c,t);if(Math.hypot(q.n-cp[0],q.e-cp[1])>2500)continue;drawMesh(R3.pr.lit,c.m<0?LIFE.truckM:LIFE.carM[c.m],m4model(rotZ(q.psi),[q.n,q.e,-q.h]));}
+  // the boat
+  {const L=TERRAIN.lake,a=t*0.035,n=L.n+70*Math.cos(a),e=L.e+48*Math.sin(a),psi=Math.atan2(48*Math.cos(a),-70*Math.sin(a));
+   if(Math.hypot(n-cp[0],e-cp[1])<3000)drawMesh(R3.pr.lit,LIFE.boatM,m4model(mmul(rotZ(psi),rotX(0.10+0.04*Math.sin(t*1.3))),[n,e,-(L.h+0.4)+0.05*Math.sin(t*1.9)]));}
+  // birds
+  {const B=LIFE.birds,P=new Float32Array(B.length*18),N=new Float32Array(B.length*18),hp=S.pos;let k=0;
+   for(const b of B){const f=b.f,R=f.R+b.dr,w=11/R,a=b.ph+w*t,g=terrainH(f.n,f.e);
+     let p=[f.n+R*Math.cos(a),f.e+R*Math.sin(a),-(g+f.h+b.dh+4*Math.sin(t*0.3+b.ph))];
+     const d=vsub(p,hp),dl=vlen(d);b.fl+=((dl<70?1:0)-b.fl)*Math.min(1,dt*(dl<70?2:0.3));   // a helicopter close by: they scatter and climb, and come back slowly
+     if(b.fl>0.01)p=vadd(p,vadd(vscl(vnorm(d),b.fl*45),[0,0,-b.fl*20]));
+     const hd=[-Math.sin(a),Math.cos(a),0],sd=[Math.cos(a),Math.sin(a),0],flap=Math.sin(t*0.7+b.fp)>0.2||b.fl>0.2?Math.sin(t*9+b.fp):0.15;   // flapping and gliding by turns
+     const span=0.9,tipz=-flap*0.45,nose=vadd(p,vscl(hd,0.45)),tail=vadd(p,vscl(hd,-0.35));
+     for(const sg of [-1,1]){const tip=vadd(vadd(p,vscl(sd,sg*span)),[0,0,tipz]);for(const v of [nose,tail,tip]){P[k]=v[0];P[k+1]=v[1];P[k+2]=v[2];N[k]=0;N[k+1]=0;N[k+2]=-1;k+=3;}}}
+   const bb=LIFE.birdBuf;gl.bindBuffer(gl.ARRAY_BUFFER,bb.vp);gl.bufferData(gl.ARRAY_BUFFER,P,gl.DYNAMIC_DRAW);gl.bindBuffer(gl.ARRAY_BUFFER,bb.vn);gl.bufferData(gl.ARRAY_BUFFER,N,gl.DYNAMIC_DRAW);
+   gl.disable(gl.CULL_FACE);drawMesh(R3.pr.lit,bb,M4I);gl.enable(gl.CULL_FACE);}}
+/* smoke, after everything opaque: points that grow and fade (alpha per particle in aN.x) */
+const VS_SMOKE=`attribute vec3 aP;attribute vec4 aC;attribute vec3 aN;uniform mat4 uMVP;uniform float uScale;varying vec4 vC;varying float vA;
+void main(){vec4 c=uMVP*vec4(aP,1.0);gl_Position=c;gl_PointSize=clamp(aC.a*uScale/max(c.w,0.5),1.0,256.0);vC=aC;vA=aN.x;}`;
+const FS_SMOKE=`${GLSL_PREC}varying vec4 vC;varying float vA;uniform float uAlpha;void main(){vec2 q=gl_PointCoord-0.5;float r=dot(q,q)*4.0;if(r>1.0)discard;gl_FragColor=vec4(vC.rgb,(1.0-r)*(1.0-r)*uAlpha*vA);}`;
+function lifeSmoke(dt){const gl=R3.gl;if(!gl||!LIFE.ready)return;const run=!UI.paused&&!UI.freeze,rng=LIFE.rng,w=R3.windXY||[0,0];const P=[],C=[],A=[];
+  for(const s of LIFE.smoke){if(run){s.next-=dt;if(s.next<=0){s.next=s.rate*(0.7+0.6*rng());s.parts.push({p:s.p.slice(),v:[(rng()-0.5)*0.3,(rng()-0.5)*0.3,-1.1-0.4*rng()],age:0});}
+      for(const q of s.parts){q.age+=dt;q.v[0]+=(w[0]*0.9-q.v[0])*Math.min(1,dt*0.5);q.v[1]+=(w[1]*0.9-q.v[1])*Math.min(1,dt*0.5);q.v[2]*=Math.exp(-dt*0.15);q.p=vadd(q.p,vscl(q.v,dt));}
+      s.parts=s.parts.filter(q=>q.age<s.life);}
+    for(const q of s.parts){const f=q.age/s.life;P.push(q.p[0],q.p[1],q.p[2]);C.push(s.col[0],s.col[1],s.col[2],s.size[0]+(s.size[1]-s.size[0])*Math.sqrt(f));A.push((1-f)*Math.min(1,q.age*2),0,0);}}
+  const n=P.length/3;if(!n)return;const pr=LIFE.smokeP;gl.useProgram(pr.p);
+  gl.bindBuffer(gl.ARRAY_BUFFER,LIFE.sBuf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(P),gl.DYNAMIC_DRAW);gl.enableVertexAttribArray(pr.a.aP);gl.vertexAttribPointer(pr.a.aP,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ARRAY_BUFFER,LIFE.sCBuf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(C),gl.DYNAMIC_DRAW);gl.enableVertexAttribArray(pr.a.aC);gl.vertexAttribPointer(pr.a.aC,4,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ARRAY_BUFFER,LIFE.sABuf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(A),gl.DYNAMIC_DRAW);gl.enableVertexAttribArray(pr.a.aN);gl.vertexAttribPointer(pr.a.aN,3,gl.FLOAT,false,0,0);
+  gl.uniformMatrix4fv(pr.u.uMVP,false,R3.vp);gl.uniform1f(pr.u.uScale,(R3.ph||R3.h)*0.9/Math.tan(R3.cam.fov/2)*0.5);gl.uniform1f(pr.u.uAlpha,0.30);
+  gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);gl.drawArrays(gl.POINTS,0,n);gl.depthMask(true);gl.disable(gl.BLEND);
+  gl.disableVertexAttribArray(pr.a.aN);}
 
 /* ═══════════════ MOTION PREDICTOR: where everything done so far takes the aircraft ═══════════════
    A helicopter answers late: a stick input tilts the rotor, the tilt
@@ -5483,7 +6178,7 @@ function guideGoals(A,hover){
   const G=GUIDE,d=G.d,ux=d>0.5?G.dn/d:0,uy=d>0.5?G.de/d:0,psi=S.eul[2],brg=Math.atan2(G.de,G.dn),vN=mrot(qmat(S.q),S.vb);
   const fw=sm(15*KT,40*KT,S.ias),vsMin=-(2.5+2.5*fw),vsMax=2.5+1.5*fw;
   let gam=G.dh/Math.max(d,1);
-  if(d>40)for(let i=1;i<=16;i++){const f=i/17,s=f*d;if(s<10||d-s<20)continue;const cl=clamp(S.hAGL+(G.h-S.hAGL)*f,3,15);gam=Math.max(gam,(terrainH(S.pos[0]+G.dn*f,S.pos[1]+G.de*f)+1.3+cl-S.alt)/s);}
+  if(d>40)for(let i=1;i<=16;i++){const f=i/17,s=f*d;if(s<10||d-s<20)continue;const cl=clamp(S.hAGL+(G.h-S.hAGL)*f,3,15);{const qn=S.pos[0]+G.dn*f,qe=S.pos[1]+G.de*f;gam=Math.max(gam,(terrainH(qn,qe)+canopyH(qn,qe)+1.3+cl-S.alt)/s);}}   // over the hills and the forests
   let v=Math.min(clamp(4+d/30,4,41),Math.sqrt(2*0.6*Math.max(0,d-1.5)),0.4*d);
   if(Math.abs(gam)>0.01)v=Math.min(v,Math.max(3,(gam<0?-vsMin:vsMax)/Math.abs(gam)));
   const near=d<25;
@@ -5788,6 +6483,10 @@ const EXERCISES={
   auto:{name:'Autorotation',reset:'high',trigger:'engfail',brief:'Both engines fail ten seconds after the reset. Collective down at once, 65-70 kt, NR in the green. Flare at 100 ft, level, cushion with the last of the rotor energy.'},
   vrs:{name:'Vortex ring state',reset:'high',brief:'Slow to below 15 kt and let the sink pass 800 fpm with power on. When the VRS lamp comes on, recover: forward cyclic decisively with the collective up as power allows (the classical technique Airbus advises). With no room ahead, the Vuichard technique for this counterclockwise rotor: take-off power, right cyclic to a 15–20° bank, left pedal for the heading.'},
   approach:{name:'Approach with the phantom',reset:'approach',phantom:'approach',brief:'The phantom flies a 6° approach to the pad and terminates in a hover. Fly formation on it. It knows where the power comes in at translational lift.'},
+  peak:{name:'Mountain top (the Kuppe)',reset:'approach',start:[1250,700,380,0,60],target:[2350,700,3],brief:'The rounded summit 1.1 km ahead, 260 m high, with a pad on its flat top and a windsock. Up there the air is thinner and the wind comes over the crest: approach into the wind, a little steeper than usual, and keep the escape downhill in mind. The flanks fall away on all sides: no ground cushion until the last metres.'},
+  clearing:{name:'Forest clearing',reset:'hover',start:[200,-220,150,270,30],target:[200,-880,3],brief:'A clearing of some 50 m in the forest 660 m west, beyond the power line along the road (the wires sag to about 9 m between the pylons). Cross the line well above the pylons, then a steep approach into the clearing. The trees stand 11 to 17 m and are obstacles: blades in the crowns end the flight. Above their tops there is no ground cushion, and the downwash recirculates.'},
+  hill:{name:'Slope landing on the hill',reset:'approach',start:[1000,-988,120,0,50],target:[1550,-988,0],brief:'The hill 550 m north has a site on its western flank marked by four orange cones, about 8° of slope falling to the west. Land with the nose across the slope (north or south), upslope skid first, then lower the downslope skid as the cyclic goes into the slope.'},
+  highrise:{name:'High-rise pad in the town',reset:'approach',start:[-1250,-650,240,225,70],target:[-2268,-1468,3],brief:'The town 1.3 km south-west: the glass tower with the pad on its roof, 66 m up, the crane beside it (its jib and the hoist cable are obstacles). Approach over the streets, not the crane; the roof gives no ground texture until the last moment, the windsock on its corner shows the wind up there.'},
   oei:{name:'Engine failure in the hover',reset:'hover',trigger:'oei',brief:'One engine quits five seconds after the reset. The remaining engine has a 30-second rating; FLI scale changes to OEI. Lower the nose, keep NR, land or fly away.'},
 };
 function refreshTexts(){
@@ -5815,7 +6514,7 @@ const SETUP=[
     ['padMap','Preset','select',['gamepad','joystick','custom']],['padDead','Stick dead zone','range',0,0.2,0.01,''],['padPanel','','pad'],
   ]],
   ['View',[
-    ['view','Camera  1/2/3','select',['cockpit','chase','tower']],['gfx','Graphics (light for weak GPUs)','select',['auto','full','light']],['fov','Cockpit field of view (across)','range',50,90,2,'°'],['cloud','Cloud cover','range',0,1,0.1,''],['hud','HUD','check'],['rotorDisc','Rotor-state map','check'],['fpm','Flight path marker  F','check'],['predict','Predicted path  P','check'],['predictT','Prediction: seconds ahead (auto: 6 in the hover to 30 at speed)','select',['auto','4','8','15','30']],['sound','Sound','check'],['volume','Volume','range',0,100,5,'%'],
+    ['view','Camera  1/2/3','select',['cockpit','chase','tower']],['gfx','Graphics (light for weak GPUs)','select',['auto','full','light']],['fov','Cockpit field of view (across)','range',50,90,2,'°'],['cloud','Cloud cover','range',0,1,0.1,''],['tod','Time of day','range',6.5,19.5,0.5,'h'],['vis','Visibility','range',1.5,20,0.5,'km'],['hud','HUD','check'],['rotorDisc','Rotor-state map','check'],['fpm','Flight path marker  F','check'],['predict','Predicted path  P','check'],['predictT','Prediction: seconds ahead (auto: 6 in the hover to 30 at speed)','select',['auto','4','8','15','30']],['sound','Sound','check'],['volume','Volume','range',0,100,5,'%'],
   ]],
 ];
 if(cfg.fov===undefined)cfg.fov=72;   // cockpit field of view across, degrees (the vertical angle is kept between 46 and 62, see cockpitFov)
@@ -5868,6 +6567,7 @@ function uiReset(kind){afcsOff();guideReset();AFCS_UI.note=null;AFCS_UI.trail=[]
   Object.assign(IN.raw,{col:DEV.kbd.col,lon:0,lat:0,ped:0});}   // the controls as the next frame will read them (the predictor starts from them before that frame)
 function startExercise(key){
   const ex=EXERCISES[key];UI.ex=key;UI.exT=0;UI.trig=false;cfg.resetKind=ex.reset;if(TUTOR.on)tutorStop();uiReset(ex.reset);
+  if(ex.start){const [n,e,hft,psi,kt]=ex.start;placeAt(n,e,hft*FT,psi*DEG,kt);trimNow(kt>30?2:4);cfg.resetKind='ex:'+key;}   // (2.9) a start of its own, trimmed; R repeats it
   document.getElementById('brief').textContent=ex.brief;
   UI.phantom=null;
   if(ex.phantom){const P={S:null,ap:null,in:{col:0.5,lon:0,lat:0,ped:0},kind:ex.phantom};

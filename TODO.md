@@ -43,8 +43,9 @@ Trainer
   a beep on the collective that moves the ALT target instead of releasing it.
 - Predictor: an option to show the path with the controls returned to the trim, beside the held one.
 - Predictor: a spread around the path (the same prediction with the stick a few per cent either way)
-  to show how much the far end depends on corrections still to come; obstacles (trees, the wind
-  turbines) along the path are not checked, only the ground, the rooftop and blade strikes.
+  to show how much the far end depends on corrections still to come; the wind turbines along the
+  path are not checked (the ground, the roofs, the canopy and the wires are: the model's own crash
+  checks, since 2.9).
 - Cockpit panel: the copilot's side (left) is not drawn; the P2+ panel's lower row (clock, standby
   instruments, switches) is left out for room.
 - HUD at window widths below ~1000 px: the plan view, the rotor-state map and the control
@@ -58,7 +59,9 @@ Scene
   in 3D; a canopy reflection at low sun.
 - Downwash: snow and sand surfaces; rotor-tip vortices in humid air.
 - Runway numbers, PAPI for the approach exercise, night lighting.
-- Wires as a collision hazard (the power line is visual only).
+- The world (2.9): the wind does not follow the terrain (no lee turbulence or downdraught behind the
+  Kuppe, no gusts round the town's towers); no rain, no cloud to fly into; traffic on the roads does
+  not stop for anything.
 - Instancing for the forests (ANGLE_instanced_arrays) to allow denser
   woods on weak GPUs.
 

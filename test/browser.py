@@ -90,5 +90,16 @@ async def main():
         print('sound',snd)
         print('sound FAILED' if not(snd['on'] and snd['graph']) else 'sound ok')
         print('\n'.join(errs[:20]) if errs else 'no console errors after the sound')
+        # the world (2.9): the four exercises start where they should, trimmed, without a crash, and R repeats one; the time of day
+        # and the visibility; the life drawn (cars, birds, smoke)
+        wd=await pg.evaluate("""async()=>{cfg.sound=false;const out={};let p0=null;for(const k of ['peak','clearing','hill','highrise']){startExercise(k);p0=S.pos.slice();await new Promise(r=>setTimeout(r,700));const ex=EXERCISES[k].start;   // (the trim flies 2 s from the start point)
+            out[k]={d:Math.round(Math.hypot(S.pos[0]-ex[0],S.pos[1]-ex[1])),crash:S.crash||'',kind:cfg.resetKind};}
+          keyAction('KeyR');out.repeat=+Math.hypot(S.pos[0]-p0[0],S.pos[1]-p0[1]).toFixed(2);
+          cfg.tod=7;cfg.vis=3;R3.gl.getError();render(1/60);out.morning={sun:+(Math.asin(-R3.sun[2])/DEG).toFixed(1),fogK:+(R3.fogK*1000).toFixed(2),glErr:R3.gl.getError()};cfg.tod=11;cfg.vis=12;
+          out.life={cars:LIFE.cars.length,birds:LIFE.birds.length,smoke:LIFE.smoke.reduce((a,s)=>a+s.parts.length,0)};return out;}""")
+        print('world',wd)
+        bad=any(wd[k]['crash'] or wd[k]['d']>120 or wd[k]['kind']!='ex:'+k for k in ['peak','clearing','hill','highrise']) or wd['repeat']>0.5 or not(5<wd['morning']['sun']<25) or wd['morning']['glErr']!=0 or wd['life']['cars']<20 or wd['life']['birds']<20 or wd['life']['smoke']<1
+        print('world FAILED' if bad else 'world ok')
+        print('\n'.join(errs[:20]) if errs else 'no console errors in the world')
         await b.close()
 asyncio.run(main())

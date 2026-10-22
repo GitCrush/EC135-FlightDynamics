@@ -9,7 +9,7 @@ OUT=ROOT/'docs'/'screenshots';OUT.mkdir(parents=True,exist_ok=True)
 FAKEPAD='''(()=>{const pad={index:0,id:'GameSir G7 Pro (XInput STANDARD GAMEPAD)',mapping:'standard',connected:true,timestamp:0,
   axes:[0.12,-0.02,0.35,-0.18],buttons:Array.from({length:17},(_,i)=>({value:i===0?1:0,pressed:i===0}))};
   navigator.getGamepads=()=>[pad,null,null,null];})();'''
-COMMON='''()=>{const w=document.getElementById('welcome');if(w)w.style.display='none';if(REPLAY.on)replayStop();UI.paused=false;UI.debrief=null;cfg.mass=2500;cfg.view='cockpit';cfg.hud=true;cfg.gfx='full';R3.soft=false;const inc=document.getElementById('inc');inc.textContent='';inc.dataset.t='';HUD.incText='';refreshTexts();cfg.sound=false;
+COMMON='''()=>{const w=document.getElementById('welcome');if(w)w.style.display='none';if(REPLAY.on)replayStop();UI.paused=false;UI.debrief=null;cfg.mass=2500;cfg.view='cockpit';cfg.hud=true;cfg.gfx='full';R3.soft=false;const inc=document.getElementById('inc');inc.textContent='';inc.dataset.t='';HUD.incText='';refreshTexts();cfg.sound=false;cfg.tod=11;cfg.vis=12;cfg.cloud=0.4;
   coachSet('off');COACH.legendT=-1e9;UI.freeze=false;R3.cam.lockPsi=undefined;afcsOffAll();apMenuShow(false);SCOPE.fix=null;guideReset();window.run=(sec,fn)=>{for(let i=0;i<sec/DT;i++){if(fn)fn(i*DT);inputStep(DT);tutorStep(DT);afcsStep(DT);coachStep(DT);step(DT);}};}'''
 SHOTS=[
  ('cockpit-hover','''()=>{startExercise('free');placeAt(0,0,3,205*DEG,0);trimNow(6);cfg.view='cockpit';S.vb[1]+=0.6;run(2);UI.freeze=true;}'''),
@@ -41,6 +41,16 @@ SHOTS=[
     S.incident={id:'hard',t:S.t-3.5,text:'Hard landing'};replayStart();REPLAY.i=Math.max(0,REPLAY.log.length-150);UI.freeze=true;}'''),
  ('hospital-rooftop','''()=>{startExercise('roof');placeAt(-232,-392,32,225*DEG,0);trimNow(6);cfg.view='chase';R3.cam.chasePos=null;R3.cam.lockPsi=225*DEG;R3.cam.chasePsi=R3.cam.lockPsi;run(1);UI.freeze=true;}'''),
  ('scenery-lake','''()=>{startExercise('free');placeAt(-560,330,60,70*DEG,0);trimNow(6);cfg.view='chase';R3.cam.chasePos=null;R3.cam.lockPsi=70*DEG;R3.cam.chasePsi=R3.cam.lockPsi;run(1);UI.freeze=true;}'''),
+ ('world-peak','''()=>{startExercise('peak');cfg.hud=false;cfg.view='chase';R3.cam.chasePos=null;run(1);for(let i=0;i<60;i++)cameraUpdate(1/30);render(1/60);hudDraw(1/60);UI.freeze=true;}'''),
+ ('world-clearing','''()=>{startExercise('free');placeAt(200,-880,4,270*DEG,0);trimNow(4);cfg.hud=false;cfg.view='chase';R3.cam.chasePos=null;run(0.3);for(let i=0;i<60;i++)cameraUpdate(1/30);UI.freeze=true;}'''),
+ ('world-town','''()=>{startExercise('free');placeAt(-1950,-1000,80,225*DEG,0);trimNow(4);cfg.hud=false;cfg.view='cockpit';run(0.3);for(let i=0;i<300;i++){R3.time+=0.05;lifeSmoke(0.05);}render(1/60);hudDraw(1/60);UI.freeze=true;}'''),
+ ('world-valley','''()=>{startExercise('free');placeAt(560,330,12,10*DEG,0);trimNow(4);cfg.hud=false;cfg.view='cockpit';run(0.3);UI.freeze=true;}'''),
+ ('world-lake','''()=>{startExercise('free');placeAt(-600,430,10,40*DEG,0);trimNow(4);cfg.hud=false;cfg.view='chase';R3.cam.chasePos=null;run(0.3);for(let i=0;i<60;i++)cameraUpdate(1/30);R3.time=20;UI.freeze=true;}'''),
+ ('world-evening','''()=>{cfg.tod=19;cfg.vis=14;cfg.cloud=0.5;startExercise('free');placeAt(400,-300,150,300*DEG,0);trimNow(4);cfg.hud=false;cfg.view='cockpit';run(0.5);UI.freeze=true;}'''),
+ ('world-canopy','''()=>{startExercise('free');placeAt(120,-760,60,0,0);trimNow(4);cfg.hud=false;cfg.view='orbit';R3.cam.orbit=[-25,-10,-30];R3.cam.orbitAt=[25,10,40];R3.cam.orbitFov=70;run(0.3);render(1/60);hudDraw(1/60);UI.freeze=true;}'''),
+ ('world-fields','''()=>{startExercise('free');placeAt(-200,410,40,45*DEG,0);trimNow(4);cfg.hud=false;cfg.view='orbit';R3.cam.orbit=[-60,-60,-55];R3.cam.orbitAt=[80,80,25];R3.cam.orbitFov=62;run(0.3);render(1/60);hudDraw(1/60);UI.freeze=true;}'''),
+ ('world-village','''()=>{cfg.tod=16;startExercise('free');placeAt(400,600,60,0,0);trimNow(4);cfg.hud=false;cfg.view='orbit';R3.cam.orbit=[-30,-20,-70];R3.cam.orbitAt=[0,0,60];R3.cam.orbitFov=60;run(0.3);render(1/60);hudDraw(1/60);UI.freeze=true;}'''),
+ ('world-hamlet','''()=>{cfg.tod=15;startExercise('free');placeAt(720,-300,40,0,0);trimNow(4);cfg.hud=false;cfg.view='orbit';R3.cam.orbit=[-60,40,-35];R3.cam.orbitAt=[30,0,25];R3.cam.orbitFov=60;run(0.3);render(1/60);hudDraw(1/60);UI.freeze=true;}'''),
  ('debrief','''()=>{startExercise('free');cfg.view='cockpit';run(8);
     AP.on=true;AP.mode='hover';AP.auto=false;AP.posN=S.pos[0];AP.posE=S.pos[1];AP.hdg=S.eul[2];apBumpless(AP);const g=terrainH(S.pos[0],S.pos[1]);
     for(const [h,sec] of [[g+1.3+0.3,8],[g+0.5,40]]){AP.alt=h;for(let i=0;i<sec/DT;i++){const o=apStep(DT);IN.col=S.onGround?Math.max(0.05,IN.col-0.3*DT):o.col;IN.lon=o.lon;IN.lat=o.lat;IN.ped=o.ped;step(DT);if(S.onGround&&S.ctl.col<0.1)break;}}
@@ -60,7 +70,9 @@ async def main():
         only=set(sys.argv[1:])
         for name,js in SHOTS:
             if only and name not in only: continue
-            await pg.evaluate(COMMON);await pg.evaluate(js);await pg.wait_for_timeout(1200)
+            if name.startswith('world-'):   # a fresh page for the heavy world views (a long session's overlay could lag behind its frame)
+                await pg.reload();await pg.wait_for_timeout(3000);await pg.evaluate("()=>{R3.soft=false;cfg.gfx='full';}");await pg.wait_for_timeout(1000)
+            await pg.evaluate(COMMON);await pg.evaluate(js);await pg.evaluate('()=>{render(1/60);hudDraw(1/60);}');await pg.wait_for_timeout(1500)   # the frame drawn at once: a software renderer's frame can take a second
             await pg.screenshot(path=str(OUT/f'{name}.png'))
             extra=await pg.evaluate('()=>({t:S.t.toFixed(1),agl:S.hAGL.toFixed(1),ias:(S.ias/KT).toFixed(0),stall:window.__stall,hint:COACH.hint,deb:!!UI.debrief})');print(name,extra)
         await b.close()

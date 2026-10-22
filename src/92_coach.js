@@ -206,7 +206,7 @@ function guideGoals(A,hover){
   const G=GUIDE,d=G.d,ux=d>0.5?G.dn/d:0,uy=d>0.5?G.de/d:0,psi=S.eul[2],brg=Math.atan2(G.de,G.dn),vN=mrot(qmat(S.q),S.vb);
   const fw=sm(15*KT,40*KT,S.ias),vsMin=-(2.5+2.5*fw),vsMax=2.5+1.5*fw;
   let gam=G.dh/Math.max(d,1);
-  if(d>40)for(let i=1;i<=16;i++){const f=i/17,s=f*d;if(s<10||d-s<20)continue;const cl=clamp(S.hAGL+(G.h-S.hAGL)*f,3,15);gam=Math.max(gam,(terrainH(S.pos[0]+G.dn*f,S.pos[1]+G.de*f)+1.3+cl-S.alt)/s);}
+  if(d>40)for(let i=1;i<=16;i++){const f=i/17,s=f*d;if(s<10||d-s<20)continue;const cl=clamp(S.hAGL+(G.h-S.hAGL)*f,3,15);{const qn=S.pos[0]+G.dn*f,qe=S.pos[1]+G.de*f;gam=Math.max(gam,(terrainH(qn,qe)+canopyH(qn,qe)+1.3+cl-S.alt)/s);}}   // over the hills and the forests
   let v=Math.min(clamp(4+d/30,4,41),Math.sqrt(2*0.6*Math.max(0,d-1.5)),0.4*d);
   if(Math.abs(gam)>0.01)v=Math.min(v,Math.max(3,(gam<0?-vsMin:vsMax)/Math.abs(gam)));
   const near=d<25;

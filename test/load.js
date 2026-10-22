@@ -9,7 +9,7 @@ function loadEngine(opts={}){
   const phys=files.filter(f=>parseInt(f)<=70);
   let js=phys.map(f=>fs.readFileSync(path.join(dir,f),'utf8')).join('\n');
   js+=`
-globalThis.__sim={get S(){return S},set S(v){S=v},IN,cfg,H,AP,SAS,TRIM,trimHandover,WIND,step,reset,placeAt,apStep,sasApply,AFCS,afcsSet,afcsApply,afcsOff,afcsAny,afcsHandback,afcsChannels,atmo,terrainH,windReset,qtoEuler,qmat,mrot,DT,KT,FT,FPM,DEG,RAD,exportCSV,rotorStep,rotorState,windProfile,airfoil,inertia,INC_RULES,engineFailure:typeof engineFailure!=='undefined'?engineFailure:null};`;
+globalThis.__sim={get S(){return S},set S(v){S=v},IN,cfg,H,AP,SAS,TRIM,trimHandover,WIND,step,reset,placeAt,apStep,sasApply,AFCS,afcsSet,afcsApply,afcsOff,afcsAny,afcsHandback,afcsChannels,atmo,terrainH,groundH,canopyH,inRiver,inLake,TERRAIN,WIRES,TOWN_B,windReset,qtoEuler,qmat,mrot,DT,KT,FT,FPM,DEG,RAD,exportCSV,rotorStep,rotorState,windProfile,airfoil,inertia,INC_RULES,engineFailure:typeof engineFailure!=='undefined'?engineFailure:null};`;
   js=applyPatch(js,opts.patch);
   const sandbox={console,Math,performance:{now:()=>Date.now()},window:{},navigator:{},document:undefined};
   vm.createContext(sandbox);

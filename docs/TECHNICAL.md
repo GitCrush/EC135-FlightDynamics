@@ -228,15 +228,213 @@ pilots.
 ## The scene
 
 Own WebGL, one ground mesh with a procedural shader in world metres:
-fields with crop rows and hedgerows, forest floor, rock on the slopes, the
-airfield (runway 18/36 with markings and edge lights, taxiway, apron with
-TLOF marking, pad with ring and H), two roads, the lake with sun glint. A
-sky dome with a cloud layer projected on a plane at 1500 m that drifts
-with the wind. About 6,700 trees in forests placed from the same density
-function that darkens the ground, a control tower (the tower camera sits
-in its cab), hangars, a fuel station, a village with a church, three wind
-turbines that face the wind and turn with it, a power line along the
-road, a windsock that droops when it is calm.
+fields with crop rows and hedgerows, pasture and alpine meadows, rock on
+the slopes, snow, the airfield (runway 18/36 with markings and edge
+lights, taxiway, apron with TLOF marking, pad with ring and H), the roads,
+the town's streets, the lake with sun glint; the rivers as their own
+ribbon. A sky dome with a cloud layer projected on a plane at 1500 m that
+drifts with the wind. Forests of trees (2.9.2: instanced, some 104,000),
+a control tower (the tower camera sits in its cab), hangars, a fuel
+station, a village with a church, three wind turbines that face the wind
+and turn with it, two power lines, windsocks that droop when it is calm,
+and since 2.9 a world around it: see below.
+
+### The world (2.9)
+
+**The land.** One function still gives the ground to the physics and the
+mesh (`groundH`, 10_atmo.js), so they never disagree; the mesh reaches 7 km
+(250 x 250 vertices, spaced quadratically from the airfield). Around the
+airfield (within 450 m) the ground stays flat; rolling hills of some ±25 m
+come in to 1.4 km; from 1.6 km north the mountains rise, a ridged noise
+(sharp crests, broad valleys) of 250 m at first and 900 m beyond 4 km; a
+ridge on the horizon from 2.6 km and hazy hills all round from 4.3 km. The
+**Kuppe** (2350 N, 700 E) is 260 m high, flat within 14 m of its centre
+(the pad, a windsock), its flanks a Gaussian of 400 m (up to about 30°).
+The **hill** (1550 N, 950 W) is 42 m high with 8 to 12° flanks; the slope
+site on its western flank, inside four cones, has 9°. The **town** stands
+on level ground, blended in over 260 m.
+
+**Rivers.** Two Catmull-Rom lines in 15 m steps: the inflow from 3.9 km in
+the mountains down its valley into the lake, the outflow from the lake to
+the south-east out to 7 km, 24 and 26 m wide. Each carries the level of its
+flood plain, which only falls downstream: from the lake up the inflow it
+rises at most 0.6 % (3.6 % in the mountains) and stays 1.6 m under the
+land beside it. Within 28 m of the water's edge the ground is that plain
+(the water lies 6 cm above it); beyond, the land blends back over 30 m
+plus 2.5 m per metre of height between them, at most 600 m: a valley
+through the hills. A 200 m grid lists the river pieces near each cell, and
+each piece only as far as its valley reaches, so the lookup the physics
+does some thirty times a step stays cheap: a hover step costs as much as
+in 2.8.1 (some 175 μs here), a cruise step some 10 % more. A bridge carries the road over the inflow. Skids in the
+water are a ditching ("Ditched in the river").
+
+**The town** (2620 to 1980 S, 1820 to 1180 W): 10 m streets on a 64 m
+grid, blocks of one, two or four buildings, taller towards the centre (a
+quarter of them glass towers of 32 to 70 m there), some parks. The
+high-rise at (2268 S, 1468 W) is 66 m with a pad on its roof; the crane
+beside it has a 52 m mast, a 38 m jib and a hoist cable. Every roof is
+ground to the physics (`terrainH`: skids, ground effect, blade tips, the
+height above ground): the buildings are `TOWN_B` beside `BUILDINGS`.
+Window bands, a roof slab with a low parapet (none round a pad), plant on
+the roofs; a factory with a 40 m stack west of the town.
+
+**Wires** (`WIRES`): the power line along the north-south road (three wires,
+pylons every 70 m, 10.5 m up, 1.2 m sag), the line across the river valley
+(five lattice pylons of 24 m, 4.5 m sag, orange and white marker balls),
+the crane's jib and its cable; each wire as straight pieces between the
+pylons and the low point of its sag. A wire passing within the rotor
+radius of the hub and within 0.8 m of the disc's plane (the closest point,
+with heights scaled by R / 0.8), or within 1.6 m of the cabin, is a wire
+strike.
+
+**The forest** (2.9.2; 85_render.js `vegList`, `buildForest`, `drawForest`).
+Every tree, bush, boulder and clump of reeds is an instance of one of a few
+shapes at unit size, drawn with `ANGLE_instanced_arrays`: a conifer of three
+tiers, a broadleaf with a lumpy crown and a smaller one beside it, each in
+three levels of detail (68 and 162 triangles near, 12 and 42 in the middle,
+8 and 16 far), a bush, a boulder, a clump of reeds. An instance is 32
+bytes (48 since 2.10): its place, size, turn, horizontal stretch (crowns
+wider or narrower), brightness, rank (which are dropped first with
+distance), phase (sway), and since 2.10 its height to width (0.8 to 1.3),
+its hue (yellow-green to blue-green, by the stand and a little by the tree)
+and whether it is a birch (white trunk: the trunk's vertices carry a flag,
+aT.y; stands of birches on the low ground, half the broadleaves there).
+The forests are placed
+from the density function (`forestD`) on a jittered grid, 9 m apart within
+1.5 km of the field and 12 m further out to 2.7 km: some 104,000 trees as
+tall as the crowns the physics sees (11 to 17 m, a swell over 90 m, lower
+towards the tree line at 480 m), conifers or broadleaves by the stand
+(some 100 m across) and the height (more conifers up the mountains); at
+the edge (density 0.53 to 0.57) bushes and smaller trees; none where no
+tree may stand (`treeBlocked`: the rivers' banks, the town, the roads, the
+wires, the runway, the clearing, the summit, the slope site, the wind
+turbines' feet), in the lake or on the steepest rock, and none round the
+hospital, which has a clearing of its own. Then the single trees in the
+fields, the confined area's ring and the clearing's two rows (which the
+physics sees as a ring of 13 m from 24.5 m). The placement takes about
+0.35 s when the page starts (a 30 m grid of the density and of the cuts
+skips the land without forest), the buffers 0.15 s, some 7 MB in all (2.9.1:
+the trees' meshes 82 MB and a canopy mesh). They lie in 120 m tiles, each
+type in its own buffer by rank (the single trees first, then a hash of the
+place, the boulders the largest first), so that the first part of a buffer
+is an even thinning of it; the tiles in
+groups of 6 x 6 (720 m) which hold the trees once more for the far shapes.
+Since 2.9.3 nothing pops in or changes a whole tile at once: each instance
+decides in the vertex shader, by its own distance, which shape is its own
+(trees: near shapes to 160 m, middle ones to 750 m, far ones beyond) and
+whether it is kept: all trees to 350 m, 55 % at 600 m, 20 % at 1.2 km, none
+at 2.2 km (the instances of a rank below that share; one about to be
+dropped fades out over 8 % of rank, that is over some 45 m of approach
+near and 400 m far, and the kept ones grow up to 60 % to fill the gaps).
+The fades (2.11.1) go through the multisample coverage
+(`SAMPLE_ALPHA_TO_COVERAGE`: the vertex shader's alpha becomes the share of
+a pixel's samples the tree writes), so no blending, no sorting and the
+depth test as for anything opaque; a tree that comes into range fades in
+where it stands, and the two shapes either side of a band's edge (160 m,
+750 m) are cross-faded over 30 m. (2.9.3 to 2.11 scaled a tree about its
+foot instead: flying towards a forest, trees grew out of the ground in a
+second each, and the shapes switched at once.) Without multisampling the
+coverage is all or nothing at half alpha: the switch is then a hard one in
+the band's middle, as before;
+bushes to 350 m, boulders the largest first to 400 m, reeds to 180 m. For
+each tile in view the frame issues, per shape whose band of distances
+overlaps the tile's, as many instances (in rank order) as can be kept at
+the tile's nearest point; beyond ~2 km the ground's shader colours the
+forest (its floor everywhere comes from the density at the ground mesh's
+vertices, so it lies under the trees drawn). (2.9.2 chose shape and
+thinning per 120 m tile, and the 720 m tiles beyond 750 m drew a fifth of
+their trees: flying, whole blocks of forest changed at once.) The light
+mode: 55 % of the trees, 15 % larger, the distances three quarters. The trees sway:
+each vertex of a shape carries how much it may move (none at the foot, all
+at the top, to the power 1.5); the wind moves it 3.5 cm per m/s with two
+sines, the downwash pushes it away from where the wake lands, as strongly as
+the dust is raised. The rotor's blades in the crowns (below `canopyH`,
+under 26 m above the ground) end the flight ("Blade strike: trees"), and
+the click-to-fly way counts them as ground. (2.9 and 2.9.1 drew the
+forests' inside as one canopy mesh over the density with trees round it, a
+closed roof with walls at its edges; from the cockpit it read as a green
+mass ringed by trees, and the hospital stood in it.)
+
+**Shadows** (2.11). The scenery casts its shadows the way the aircraft has
+since 2.0: a planar projection along the sun (the shadow sun, at 20° or
+more), on the stencil, so a pixel is darkened once however many shadows
+cover it, blended at 0.42 (trees 0.40), drawn after the ground and before
+the aircraft's own shadow. The static meshes (buildings, the village, the
+hamlet, the farms, pylons, the churchyard's wall) carry the ground's z
+under each vertex as a second attribute (the mesh builder's `wDefault`,
+filled from `groundH` as the pieces are added; the wires and the lights
+carry a 0 and cast none): the vertex shader sends each vertex down the
+sun's ray to that plane, then up to 2.5 m toward the eye along the line of
+sight, so the coarse ground mesh does not swallow the shadow. Meshes
+without the attribute (the turbines' rotors within 900 m, every car within
+400 m, moving or parked) get the plane as a constant attribute. The trees,
+bushes and boulders within 220 m (light mode 130; fading over the last
+60 m) are the instanced middle shapes projected on the tangent plane at each
+foot, the ground's gradient packed per 30 m cell into the fourth instance
+attribute (two 12-bit numbers in one float). Reeds cast none. Under the
+software renderer a frame costs 0 to 5 % more; 50 more draw calls.
+
+**Settlements** (2.11). The village: a churchyard round the church (a wall
+of 1.2 m with a gap at the gate, rows of gravestones, three trees), a
+fenced garden of 10 m behind each house with a shed in every other and a
+car beside every third (listed as R3.parked; 86_life.js draws them and
+their shadows). A hamlet on the north-south road from 640 to 810 N: eleven
+houses, six east of the road facing it and five west beyond the power
+line, with the same gardens, a chapel at the north end and a barn at the
+south; its site was searched for as the farms' are (flat, open, no forest,
+no water). The hospital has a car park east of the building (asphalt with
+bays in the ground shader, eight cars). Each farm has a car in its yard.
+
+**Fields and farms** (2.10). The fields are no longer 45 m squares: 90 m
+cells, each left whole, halved or quartered by its hash, every piece with a
+crop of its own (meadow 40 %, a green crop in 0.9 m rows, ripe grain,
+stubble, maize in 0.75 m rows, ploughed land with 0.6 m furrows, fallow)
+and its row direction. Hedgerows (~1.1 m) and farm tracks (2.6 m, pale
+earth) run along some of the pieces' edges, decided per 45 m of edge on the
+45 m lattice (a lattice line is an edge at a cell's boundary, or inside a
+cell split along it), so both sides of an edge agree. Eight farmsteads
+stand in the fields (`farmSites`: their own random stream, where the land is
+flat and open, away from the field, the village, the town and the water,
+320 m apart): a house with a tiled roof, a barn, a shed, some a silo, four
+trees round each; drawn only, as the village is, and no forest within 32 m.
+
+**Nature.** Flowers in the shader: in drifts over the pasture and the
+meadows, a dot of 12 to 18 cm in some 45 cm cells (white, yellow, pink;
+blue-violet on the alpine meadows), fading into the tint they give the
+meadow once a pixel covers more than 3 cm; none on steep ground. As
+instances with the trees (near only, the largest boulders to ~350 m):
+boulders in groups of one to four, lumpy and flat-shaded, sunk into
+the slope, on the steep flanks, the high ground and a few on the hill
+pastures, none in the forest; stones along the rivers' banks and in their
+shallows; reeds in patches round the lake's shore where the water is
+shallow and along the rivers' lowland reaches, blades green at the foot and
+straw at the tip, some with a seed head, swaying like the trees. Some 1,050
+boulders and 900 stones, 2,150 clumps of reeds. They are drawn only, not
+obstacles.
+
+**Light and weather** (the setup: time of day 6:30 to 19:30, visibility
+1.5 to 20 km, cloud cover). The sun rises in the east at 6:00, stands 58°
+high at 13:00 in the south and sets in the west at 20:00; below 30° its
+light turns warmer and weaker, and the sky's zenith, the horizon (the
+haze's colour) and the ambient light follow. The haze: a contrast of 5 %
+left at the visibility (k = 3 / visibility); below 9 km the sky greys
+towards the haze. The clouds' shadows: every lit surface (ground, canopy,
+trees, buildings, the aircraft) looks up the sky's own cloud field where
+the sun's ray meets the cloud base (1500 m), up to 60 % darker, drifting
+with the wind. The aircraft's planar shadow keeps the sun at 20° or more
+(lower it would stretch to the horizon).
+
+**Life** (86_life.js; drawn, nothing in the physics; R3.time, so a frozen
+frame holds it). Cars (eight colours) and trucks on the main roads at 50 to
+85 km/h, on the town's road and through four of its streets at 30 to 45,
+keeping to the right of the centre line and turning round at the ends of
+their routes, over the bridge on its deck; drawn within 2.5 km. Three
+flocks of large birds circling over the lake, the western forest and the
+summit, flapping and gliding by turns; a helicopter within 70 m scatters
+them (they flee and climb, and come back slowly). Smoke from three of the
+village's chimneys and the factory's stack: points that rise, drift with
+the wind, grow and fade. A sailing boat crossing the lake, heeling and
+rocking.
 
 The aircraft (2.0) is lofted from superelliptic sections interpolated by a
 spline, each quad coloured from its centre so that the windshield with its
@@ -312,6 +510,11 @@ whole frame is drawn nearest first (cockpit, aircraft, buildings and
 trees, ground, then the sky into whatever is left), then the shadow, the
 downwash particles and the transparent parts.
 
+The sky (2.10): over the cumulus field a layer of cirrus, thin and streaked
+along the wind, from one more fetch of the noise (stretched 3:1), moving
+with the wind at 2.5 times the cumulus' speed; the more cloud cover, the
+more of it. Not in the light mode.
+
 The ground (2.3). Its noise comes from one 256 x 256 texture (R, G and B
 smooth value noise with 16, 32 and 64 cells across, A one value per texel),
 mipmapped and filtered anisotropically (up to 8x), fetched at four scales
@@ -337,7 +540,7 @@ also grew grass tufts and stones in a patch that followed the aircraft;
 from the cockpit they popped up as little cones near the ground and were
 removed.)
 
-Trees (2.3): two levels of detail per 400 m tile; near tiles (within
+Trees (2.3; since 2.9.2 instanced, see *The forest* above): two levels of detail per 400 m tile; near tiles (within
 ~700 m) have lumpy crowns that carry their own light and shade and
 conifers in three tiers (the tiers pointed down until 2.2), far tiles a
 plain ellipsoid or cone. The dark discs under the crowns are gone.
@@ -354,7 +557,7 @@ most 2) within a pixel budget, always multisampled. The setup offers
 | shaders | full | full | ground without the finest octave and the water's ripples, clouds from one fetch |
 | pixel budget | 2.6 MP | 2.6 MP | 1.2 MP |
 | dynamic resolution | yes, down to 60 % | no | yes |
-| forest | ~6,700 trees | ~6,700 trees | ~55 %, 15 % larger, fewer faces |
+| forest | ~104,000 trees, instanced, three levels of detail | the same | ~55 % of the trees, 15 % larger, fewer faces, nearer limits |
 | downwash particles | 500 | 500 | 200 |
 | instrument panel | 30 Hz | 30 Hz | 15 Hz |
 
@@ -378,6 +581,32 @@ every pixel, hidden or not, so a GPU gains more): a cockpit frame takes
 page's own loop the median frame interval falls from 621 to 477 ms
 (cockpit) and from 497 to 336 ms (chase). The side panel's numbers are
 written at 15 Hz and only when they change.
+
+What the 2.9 world costs (2.9.2, measured under SwiftShader at 978 x 800 in
+six views, full graphics; 2.8.1 and 2.9.1 in brackets): 105 to 165 draw
+calls a frame (21 to 52; 76 to 178), 0.16 to 0.33 million triangles (0.10
+to 0.37; 0.29 to 0.60), 1.4 to 2.1 ms of JavaScript to issue a frame (0.7
+to 1.4; 1.2 to 2.3), and in SwiftShader's own time, which counts every
+shaded pixel, 1.2 to 1.7 times as long as 2.8.1 and 13 to 35 % less than
+2.9.1 (light mode 7 to 26 % less). Most of it is the ground's shader (the
+meadows, the rock and snow, the forest floor, the flowers, the clouds'
+shadows: a flat colour in its place halves a frame), then the trees (a
+third of a frame low over the forest, under a fifth at 1000 ft). What 2.9.2
+took away: the canopy and its shader (crowns cellularly shaded per pixel)
+for instanced trees; under the instrument panel nothing is drawn (the
+scissor test, a fifth of the cockpit view); the ground in blocks with
+bounding spheres (10 x 10 since 2.10), those behind the camera not drawn
+and those beyond ~900 m, where a pixel covers over a metre, with the light
+shader (no finest octave, no clumps, no ripples: nothing left to see at that
+distance), consecutive blocks of a kind in one call; the flowers' dots only
+where a pixel covers less than 10 cm; the trees near to far, so the depth
+test turns away what the nearer hide. The vegetation's buffers take some
+7 MB (2.9.1: 82 MB for the trees' meshes, 2.8.1 53 MB); the page is ready
+in about 1.9 s here, the forest's placement 0.4 s of it, its buffers 0.15 s
+at the first frame (2.9.1 built the trees' meshes for 2 s). On a GPU the
+triangles and draw calls are far from any limit; the fill work is what
+*auto* scales the resolution down for, and *light* draws a little over half
+the trees with simpler shaders.
 
 ## Tutor
 
@@ -882,7 +1111,7 @@ test/lib/patch.js               EC135_PATCH hook used by the mutation test
 test/golden.json                golden values for the REG checks
 test/loadfull.js                loads every module (browser code included) with DOM stubs
 test/browser.py                 headless Chromium smoke test (playwright)
-test/uishot.py                  the README screenshots
+test/uishot.py                  the README screenshots (the world's among them)
 test/soundshot.py               the sound rendered offline: WAV files, spectrograms, checks
 ```
 

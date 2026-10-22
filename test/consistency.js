@@ -139,6 +139,25 @@ console.log('\n■ Cold start and shutdown');
  check('time to 100 % NR from a cold start',t100||120,40,90,'s');
  E.S.eng.e.forEach(en=>en.on=false);let tStop=null;for(let t=0;t<200;t+=E.DT){E.step(E.DT);if(!tStop&&E.S.NR<1)tStop=t;}
  check('rotor stop after shutdown',tStop||200,40,150,'s');check('blade droop on the stop',E.S.rot.beta[0]*E.RAD,-6.5,-1,'deg');}
+console.log('\n■ The world (2.9): the terrain, the roofs, the forest, the wires, the river');
+{const E=fresh(),g=E.groundH,K=E.TERRAIN.kuppe,C=E.TERRAIN.clearing,sl=(n,e)=>Math.atan(Math.hypot((g(n+1,e)-g(n-1,e))/2,(g(n,e+1)-g(n,e-1))/2))*E.RAD;
+ check('the airfield: ground at the pad',Math.abs(g(0,0)),0,0.05,'m');
+ check('the Kuppe: summit height',g(K.n,K.e),255,265,'m');check('the Kuppe: slope 10 m from the pad\'s centre',sl(K.n+10,K.e),0,2,'deg');
+ check('the hill: slope at the site in the cones',sl(1550,-988),6,14,'deg');
+ check('the high-rise: its roof to the physics',E.terrainH(-2268,-1468)-g(-2268,-1468),65.9,66.1,'m');
+ check('the river at the bridge is water',E.inRiver(280,380)?1:0,1,1,'');
+ check('the canopy 40 m out of the clearing',E.canopyH(C.n+40,C.e),11,17.5,'m');check('none in the clearing',E.canopyH(C.n,C.e)+E.canopyH(C.n+18,C.e),0,0,'m');
+ check('the ring of trees 27 m out: an obstacle',E.canopyH(C.n,C.e+27),10,14,'m');
+ check('no forest round the hospital (its pad, the wing, 30 m on)',Math.max(E.canopyH(-260,-420),E.canopyH(-215,-420),E.canopyH(-260,-390),E.canopyH(-290,-450)),0,0,'m');
+ const at=(n,e,agl,sec,col)=>{const F=fresh();F.reset('hover');F.placeAt(n,e,agl,0,0);const A=F.AP;A.on=true;A.mode='hover';A.alt=-F.S.pos[2];A.hdg=F.S.eul[2];A.vN=0;A.vE=0;A.auto=false;
+   for(let t=0;t<sec&&!F.S.crash;t+=F.DT){const o=F.apStep(F.DT);F.IN.col=col===undefined?o.col:col;F.IN.lon=o.lon;F.IN.lat=o.lat;F.IN.ped=o.ped;F.step(F.DT);}return F.S;};
+ check('hover 8 m over the forest floor, the crowns at 14 m: "Blade strike: trees"',at(C.n+45,C.e,8,1).crash==='Blade strike: trees'?1:0,1,1,'');
+ check('hover 25 m over the forest floor: clear of the crowns',at(C.n+45,C.e,25,3).crash?0:1,1,1,'');
+ check('hover in the clearing\'s centre at 3 m: clear',at(C.n,C.e,3,3).crash?0:1,1,1,'');
+ check('the rotor in the power line mid-span (wire at 9.3 m): "Wire strike"',at(35,-322,6,1).crash==='Wire strike'?1:0,1,1,'');
+ check('under it at 1.5 m: clear',at(35,-322,1.5,2).crash?0:1,1,1,'');
+ check('settling into the river: "Ditched in the river"',at(700,350,1,6,0.25).crash==='Ditched in the river'?1:0,1,1,'');
+ {const S=at(-2268,-1468,1.5,8,0.30);check('settling onto the high-rise\'s roof pad: on the ground, no crash',S.onGround&&!S.crash?1:0,1,1,'');}}
 console.log('\n■ Determinism and invariants');
 {const a=fresh(),b=fresh();a.WIND.turb=2;b.WIND.turb=2;hover(a,20);hover(b,20);
  check('identical runs with turbulence',a.S.pos[0]===b.S.pos[0]&&a.S.NR===b.S.NR?1:0,1,1,'');

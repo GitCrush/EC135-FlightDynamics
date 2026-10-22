@@ -5,7 +5,7 @@ const cfg={
   sas:true, attHold:true, hdgHold:true, hoverAssist:false, assistK:1,   // stability augmentation (training aids); assistK blends hover assist with the raw stick
   kbdCol:'metered', kbdPed:'heading', pedRate:25,            // keyboard pilot models; yaw rate per pedal key, °/s
   mouse:true, mouseMode:'stick', mouseTravel:1600, mouseButtons:true, padDead:0.06,   // px of mouse movement for full stick (real stick: 80 mm lateral, 108 mm longitudinal per side)
-  view:'cockpit', hud:true, rotorDisc:true, fpm:true, predict:true,predictT:'auto', sound:true,volume:70, cloud:0.4,
+  view:'cockpit', hud:true, rotorDisc:true, fpm:true, predict:true,predictT:'auto', sound:true,volume:70, cloud:0.4,tod:11,vis:12,
   engFail:'none',
 };
 const IN={col:0.45,lon:0,lat:0,ped:0,             // controls after the pilot models, [0..1] / [-1..1]
@@ -173,9 +173,17 @@ function step(dt){
       const ph=[-Math.cos(psi)*rt.R*Math.cos(b),-rt.s*Math.sin(psi)*rt.R*Math.cos(b),-rt.R*Math.sin(b)];
       const pw=vadd(S.pos,mrot(R,vadd(rt.hub,mrot(rt.Rbh,ph))));
       if(pw[2]+terrainH(pw[0],pw[1])>0){S.crash='Blade strike';break;}
+      if(S.hAGL<26&&pw[2]+groundH(pw[0],pw[1])+canopyH(pw[0],pw[1])>0){S.crash='Blade strike: trees';break;}   // (2.9) the forest's canopy
     }
     if(ge.contact&&(Math.abs(S.eul[0])>0.9||Math.abs(S.eul[1])>0.9))S.crash='Rolled over';
     if(ge.contact&&inLake(S.pos[0],S.pos[1]))S.crash='Ditched in the lake';
+    if(ge.contact&&inRiver(S.pos[0],S.pos[1]))S.crash='Ditched in the river';
+    /* wires (2.9): one passing through the disc (within the rotor radius of the hub and 0.8 m of its plane: the
+       closest point with the height scaled by R/0.8) or within 1.6 m of the cabin */
+    {const hb=vadd(S.pos,mrot(R,rt.hub)),kz=rt.R/0.8;
+     for(const w of WIRES){if(hb[0]<Math.min(w[0],w[3])-7||hb[0]>Math.max(w[0],w[3])+7||hb[1]<Math.min(w[1],w[4])-7||hb[1]>Math.max(w[1],w[4])+7)continue;
+       const near=(p,k)=>{const a=[w[0],w[1],-w[2]*k],b=[w[3],w[4],-w[5]*k],q=[p[0],p[1],p[2]*k],ab=vsub(b,a),t=clamp(vdot(vsub(q,a),ab)/vdot(ab,ab),0,1);return vlen(vsub(q,vadd(a,vscl(ab,t))));};
+       if(near(hb,kz)<rt.R||near(S.pos,1)<1.6){S.crash='Wire strike';break;}}}
     if(ge.contact&&ge.maxSink>6)S.crash='Crash landing';
   }
   if(S.crash){st.Om=Math.max(0,st.Om-dt*8);for(const en of S.eng.e)en.fail=true;}

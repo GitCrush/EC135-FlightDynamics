@@ -99,7 +99,7 @@ function inputInit(stage){
 }
 function keyAction(code){
   if(replayKey(code))return;
-  const map={KeyL:()=>replayStart(),KeyV:()=>apDemoToggle(),KeyU:()=>afcsToggle('alt'),KeyI:()=>afcsToggle(S.ias>40*KT?'ias':'hov'),KeyO:()=>afcsToggle('hdg'),KeyJ:()=>apMenuToggle(),Escape:()=>apMenuShow(false),KeyK:()=>coachCycle(),Slash:()=>{UI.showKeys=!UI.showKeys;},F1:()=>{UI.showKeys=!UI.showKeys;},KeyR:()=>uiReset(cfg.resetKind||'pad'),Digit1:()=>setView('cockpit'),Digit2:()=>setView('chase'),Digit3:()=>setView('tower'),
+  const map={KeyL:()=>replayStart(),KeyV:()=>apDemoToggle(),KeyU:()=>afcsToggle('alt'),KeyI:()=>afcsToggle(S.ias>40*KT?'ias':'hov'),KeyO:()=>afcsToggle('hdg'),KeyJ:()=>apMenuToggle(),Escape:()=>apMenuShow(false),KeyK:()=>coachCycle(),Slash:()=>{UI.showKeys=!UI.showKeys;},F1:()=>{UI.showKeys=!UI.showKeys;},KeyR:()=>{const k=cfg.resetKind||'pad';if(k.startsWith('ex:'))startExercise(k.slice(3));else uiReset(k);},Digit1:()=>setView('cockpit'),Digit2:()=>setView('chase'),Digit3:()=>setView('tower'),
     KeyT:()=>trimSet(),
     KeyY:()=>trimClear(),
     KeyH:()=>{cfg.hoverAssist=!cfg.hoverAssist;uiSync();},

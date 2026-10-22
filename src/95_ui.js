@@ -13,6 +13,10 @@ const EXERCISES={
   auto:{name:'Autorotation',reset:'high',trigger:'engfail',brief:'Both engines fail ten seconds after the reset. Collective down at once, 65-70 kt, NR in the green. Flare at 100 ft, level, cushion with the last of the rotor energy.'},
   vrs:{name:'Vortex ring state',reset:'high',brief:'Slow to below 15 kt and let the sink pass 800 fpm with power on. When the VRS lamp comes on, recover: forward cyclic decisively with the collective up as power allows (the classical technique Airbus advises). With no room ahead, the Vuichard technique for this counterclockwise rotor: take-off power, right cyclic to a 15–20° bank, left pedal for the heading.'},
   approach:{name:'Approach with the phantom',reset:'approach',phantom:'approach',brief:'The phantom flies a 6° approach to the pad and terminates in a hover. Fly formation on it. It knows where the power comes in at translational lift.'},
+  peak:{name:'Mountain top (the Kuppe)',reset:'approach',start:[1250,700,380,0,60],target:[2350,700,3],brief:'The rounded summit 1.1 km ahead, 260 m high, with a pad on its flat top and a windsock. Up there the air is thinner and the wind comes over the crest: approach into the wind, a little steeper than usual, and keep the escape downhill in mind. The flanks fall away on all sides: no ground cushion until the last metres.'},
+  clearing:{name:'Forest clearing',reset:'hover',start:[200,-220,150,270,30],target:[200,-880,3],brief:'A clearing of some 50 m in the forest 660 m west, beyond the power line along the road (the wires sag to about 9 m between the pylons). Cross the line well above the pylons, then a steep approach into the clearing. The trees stand 11 to 17 m and are obstacles: blades in the crowns end the flight. Above their tops there is no ground cushion, and the downwash recirculates.'},
+  hill:{name:'Slope landing on the hill',reset:'approach',start:[1000,-988,120,0,50],target:[1550,-988,0],brief:'The hill 550 m north has a site on its western flank marked by four orange cones, about 8° of slope falling to the west. Land with the nose across the slope (north or south), upslope skid first, then lower the downslope skid as the cyclic goes into the slope.'},
+  highrise:{name:'High-rise pad in the town',reset:'approach',start:[-1250,-650,240,225,70],target:[-2268,-1468,3],brief:'The town 1.3 km south-west: the glass tower with the pad on its roof, 66 m up, the crane beside it (its jib and the hoist cable are obstacles). Approach over the streets, not the crane; the roof gives no ground texture until the last moment, the windsock on its corner shows the wind up there.'},
   oei:{name:'Engine failure in the hover',reset:'hover',trigger:'oei',brief:'One engine quits five seconds after the reset. The remaining engine has a 30-second rating; FLI scale changes to OEI. Lower the nose, keep NR, land or fly away.'},
 };
 function refreshTexts(){
@@ -40,7 +44,7 @@ const SETUP=[
     ['padMap','Preset','select',['gamepad','joystick','custom']],['padDead','Stick dead zone','range',0,0.2,0.01,''],['padPanel','','pad'],
   ]],
   ['View',[
-    ['view','Camera  1/2/3','select',['cockpit','chase','tower']],['gfx','Graphics (light for weak GPUs)','select',['auto','full','light']],['fov','Cockpit field of view (across)','range',50,90,2,'°'],['cloud','Cloud cover','range',0,1,0.1,''],['hud','HUD','check'],['rotorDisc','Rotor-state map','check'],['fpm','Flight path marker  F','check'],['predict','Predicted path  P','check'],['predictT','Prediction: seconds ahead (auto: 6 in the hover to 30 at speed)','select',['auto','4','8','15','30']],['sound','Sound','check'],['volume','Volume','range',0,100,5,'%'],
+    ['view','Camera  1/2/3','select',['cockpit','chase','tower']],['gfx','Graphics (light for weak GPUs)','select',['auto','full','light']],['fov','Cockpit field of view (across)','range',50,90,2,'°'],['cloud','Cloud cover','range',0,1,0.1,''],['tod','Time of day','range',6.5,19.5,0.5,'h'],['vis','Visibility','range',1.5,20,0.5,'km'],['hud','HUD','check'],['rotorDisc','Rotor-state map','check'],['fpm','Flight path marker  F','check'],['predict','Predicted path  P','check'],['predictT','Prediction: seconds ahead (auto: 6 in the hover to 30 at speed)','select',['auto','4','8','15','30']],['sound','Sound','check'],['volume','Volume','range',0,100,5,'%'],
   ]],
 ];
 if(cfg.fov===undefined)cfg.fov=72;   // cockpit field of view across, degrees (the vertical angle is kept between 46 and 62, see cockpitFov)
@@ -93,6 +97,7 @@ function uiReset(kind){afcsOff();guideReset();AFCS_UI.note=null;AFCS_UI.trail=[]
   Object.assign(IN.raw,{col:DEV.kbd.col,lon:0,lat:0,ped:0});}   // the controls as the next frame will read them (the predictor starts from them before that frame)
 function startExercise(key){
   const ex=EXERCISES[key];UI.ex=key;UI.exT=0;UI.trig=false;cfg.resetKind=ex.reset;if(TUTOR.on)tutorStop();uiReset(ex.reset);
+  if(ex.start){const [n,e,hft,psi,kt]=ex.start;placeAt(n,e,hft*FT,psi*DEG,kt);trimNow(kt>30?2:4);cfg.resetKind='ex:'+key;}   // (2.9) a start of its own, trimmed; R repeats it
   document.getElementById('brief').textContent=ex.brief;
   UI.phantom=null;
   if(ex.phantom){const P={S:null,ap:null,in:{col:0.5,lon:0,lat:0,ped:0},kind:ex.phantom};

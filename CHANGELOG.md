@@ -1,5 +1,75 @@
 # Changelog
 
+## 2.11.1 — 2026-10-22 · Trees that fade, not sprout
+
+- Trees coming into range no longer grow out of the ground, and a tree's shape no longer switches at once at 160 and 750 m: both fade through the multisample coverage (alpha to coverage: no blending, no sorting, the depth test as for anything opaque), the thinning over some 45 m of approach near and 400 m far, the shapes cross-faded over 30 m. Since 2.9.3 the trees had been scaled about their feet, which from a cockpit at speed looked like a forest sprouting.
+- Cost: a few per cent of a frame under the software renderer (the cross-fade bands draw both shapes).
+
+## 2.11 — 2026-10-22 · Shadows and settlements
+
+- **Everything casts its shadow**: buildings, the village and the hamlet, the farms, pylons, the churchyard's wall, the turbines' turning rotors, the cars, and the trees, bushes and boulders within 220 m, all along the sun as the aircraft's shadow is, on the stencil so overlapping shadows darken once. Long in the morning and the evening, short at noon. The trees' shadows lie on the slope at each foot (the ground's gradient travels with every tree).
+- **The village** has a churchyard (wall, gate, gravestones), gardens with fences and sheds behind the houses, cars at the doors. **A hamlet** with eleven houses, a chapel and a barn stands on the north-south road 700 m north of the field. The hospital has a car park, each farm a car in the yard.
+- Cost: 0 to 5 % of a frame under the software renderer, 50 draw calls more.
+
+## 2.10 — 2026-10-22 · More to see, no more to pay
+
+- **Fields of many sizes and crops.** The 45 m checkerboard is gone: 90 m cells left whole, halved or quartered, each piece with a crop of its own (meadow, a green crop, ripe grain, stubble, maize, ploughed land, fallow) and its row direction; hedgerows and farm tracks along some of the edges.
+- **Eight farms** in the fields: house, barn, shed, some a silo, trees round them.
+- **Trees of their own**: each tree its own height to width and shade of green (yellow-green to blue-green, by the stand), stands of birches with white trunks on the low ground.
+- **Cirrus** above the cumulus, streaked along the wind.
+- **No more to pay** (the same views under the software renderer, 2.9.3 to 2.10: within the noise of the measurement): the ground beyond ~900 m, where a pixel covers over a metre, is drawn with the light shader (10 x 10 blocks, consecutive ones in one call), which pays for the fields' extra hashes and the cirrus' fetch.
+
+## 2.9.3 — 2026-10-22 · No popping
+
+- **Nothing pops in any more.** 2.9.2 chose the trees' shape and how many to draw per tile of 120 m, and beyond 750 m whole 720 m blocks switched to a fifth of their trees: flying, groups of trees changed or appeared at once. Now every tree decides for itself in the vertex shader, by its own distance: which shape is its own (near to 160 m, middle to 750 m, far beyond) and whether it is kept (all to 350 m, 55 % at 600 m, 20 % at 1.2 km, none at 2.2 km). A tree about to be dropped shrinks away over some 30 m of approach near and 250 m far, the kept ones grow a little to fill the gaps; bushes, boulders (the largest kept furthest) and reeds fade the same way. The broadleaves keep their trunk at middle distance, so the change of shape at 160 m is a small one.
+- The cost stays as in 2.9.2.
+
+## 2.9.2 — 2026-10-22 · Real trees, less work
+
+- **The forests are trees.** 2.9 and 2.9.1 drew the inside of a forest as one canopy mesh with trees round its edges: from the cockpit a strange green mass ringed by trees. Now every tree is drawn: some 104,000 of them, 9 m apart within 1.5 km of the field and 12 m further out to 2.7 km, as tall as the crowns the physics sees (11 to 17 m), conifers or broadleaves by the stand and the height, bushes and smaller trees at the edges. They are instances of a few shapes (a conifer, a broadleaf, a bush, a boulder, a clump of reeds) drawn with instanced rendering in three levels of detail, near to far, thinned with distance; beyond ~2 km the ground's shader colours the forest. The forest floor under them now comes from the same density as the trees (the ground's shader had its own noise, which did not match).
+- **The hospital stands in a clearing** of its own (lawn and car park round it) instead of in the forest; the wind turbines' feet are clear too.
+- **Less to draw.** Against 2.9.1, measured under the software renderer at the same views: a frame 13 to 35 % cheaper (light mode 7 to 26 %), the triangles a frame down from 0.29–0.60 to 0.16–0.33 million, the vegetation's buffers about 7 MB instead of 82, the page ready sooner (the trees' meshes took 2 s to build). The canopy's shader with its crowns is gone. In the cockpit nothing is drawn under the instrument panel any more (a fifth of the view), the ground is drawn in 25 blocks of which only those in view, and the flowers' dots are only computed within reach of a pixel.
+
+## 2.9.1 — 2026-10-22 · Crowns
+
+- **The canopy shows its crowns.** 2.9 shaded the forests' roof with a mottle of noise that from close looked like camouflage cloth. Now each crown is drawn while it is more than a few pixels across: broadleaves as domes of leafy clumps with a ragged outline, conifers as cones with whorls of branches, each its own green, in stands of mostly one or the other; lit on their sun side, and every point looks 1.6 m towards the sun for a higher crown, so the gaps and the far sides lie in their neighbours' shade. Further off it fades into the crowns' average. The light mode draws them too, more simply (four crowns looked at instead of nine, no shadows, no clumps).
+- **Forest edges**: the canopy rises from a low mantle to its full height over some 10 m instead of standing up as a wall (the physics' canopy too); where a road, a river or the wires cut the forest, the canopy's edge comes down to under half its height, and the row of trees in front of it is as tall as the canopy (pines 12 to 17 m, broadleaves 11 to 15 m) with bushes at their feet: no more green cliff behind short trees. Where the wall still shows it is a curtain of leafy clumps, not streaks.
+- **Half the forest's memory**: the trees' normals, colours and sway are stored as bytes, 22 bytes a vertex instead of 44: 82 MB of vertex buffers for the full forest instead of 144 (light mode 16 instead of 28; 2.8.1: 53 and 14).
+- What the world costs to draw is measured and written down in the technical notes (draw calls, triangles, the time per frame against 2.8.1, memory).
+
+## 2.9 — 2026-10-21 · A world to fly in
+
+The world (some 14 km across instead of 3):
+
+- **Mountains to the north**: foothills from 1.6 km, ridges of 700 to 900 m beyond 4 km with rock on the steep flanks and snow where it can lie; hazy hills all round out to 7 km.
+- **The Kuppe**, a rounded summit 2.5 km north-north-east, 260 m high, with a pad and a windsock on its flat top.
+- **A river** from the mountains down its valley into the lake and out of it to the south-east, on a flood plain cut into the land, with a bridge where the road crosses it. Setting down in it is a ditching.
+- **A town** 2.7 km south-west: blocks between streets, glass towers in the centre, a high-rise with a pad on its roof 66 m up and a crane beside it, a factory with its stack. Every roof is ground to the physics (skids, ground effect, blade tips).
+- **A hill** in the north-west with a slope landing site marked by cones (9°), a **clearing** in the western forest.
+- **Wires**: the power line along the road and a second one across the river valley (lattice pylons, marker balls), the crane's jib and hoist cable. A wire through the disc or the cabin is a wire strike.
+- **Four exercises out there**, each with its own trimmed start (`R` repeats it): *Mountain top*, *Forest clearing*, *Slope landing on the hill*, *High-rise pad in the town*.
+
+The forest and the land:
+
+- **A closed canopy**, 11 to 17 m high, over the forests (groups of crowns, conifers and broadleaves, more conifers up the mountains to the tree line at 480 m), instead of trees scattered over a dark floor; its edge abrupt, as a forest's is, with a row of tall trees and bushes in front; where a road, a river, the wires or the summit cut through it, a row of trees stands at the cut; the clearing ringed by two rows. Some 11,600 trees and 1,600 bushes out to 2.7 km (2.8.1: 6,700 trees within 1.3 km).
+- **The trees are obstacles**: blades in the crowns end the flight ("Blade strike: trees"); the click-to-fly way climbs over them, and the motion predictor's red cross marks a strike in the trees or the wires ahead, as it does the ground.
+- **Trees sway** in the wind and bend away from the rotor's downwash.
+- **Flowers** in the meadows (white, yellow, pink; blue-violet on the alpine meadows), **boulders** in groups on the steep flanks, **stones** along the rivers' banks and in their shallows, **reeds** round the lake's shore and on the rivers' lowland banks.
+
+Light and weather (setup):
+
+- **Time of day**, 6:30 to 19:30: the sun's position and colour (warm and low morning and evening), the sky, the haze and the light follow it.
+- **Visibility**, 1.5 to 20 km: the haze; in mist the sky greys.
+- **Cloud shadows** drift over the land with the wind (the cloud layer's own field, met along the sun's ray).
+
+Life, drawn (not in the physics):
+
+- Cars and trucks on the roads, over the bridge and through the town's streets, keeping right; three flocks of large birds that scatter when the helicopter comes close; smoke from the village's chimneys and the factory's stack, drifting with the wind; a sailing boat on the lake.
+
+Also: from the cockpit the rotor's blur is fainter and has no hard edge. The terrain the physics asks some thirty times a step stays cheap (each river piece looked up only where its valley reaches; the land near the airfield computed without the far terrain): a hover step costs as much as in 2.8.1 (some 175 μs here), a cruise step some 10 % more.
+
+Tests: the world's terrain, the high-rise's roof, the canopy and the clearing's ring, a blade strike in the trees, a wire strike, the ditching in the river and a landing on the roof pad (consistency); in the browser the four exercises' starts, `R`, the time of day and the visibility, the traffic, the birds and the smoke.
+
 ## 2.8.1 — 2026-10-21 · No more metal
 
 - **2.8 rang like metal.** The Fenestron and the gearbox were pure tones, steady to the hertz, the gearbox's rung by every blade passage, and the whole mix was 6 to 12 dB(A) louder than 2.7. Now the Fenestron's whine is mostly noise in narrow bands at its blade passage and the double (the blades' wakes smear the tones), its pure tone quieter and darker; the gearbox is a quiet whine of narrow noise bands, in the cabin only; the turbines have four partials instead of eight; the rotor's thump is softer, with a whoosh under it; nothing is quite steady (the rotor's and the Fenestron's level and the Fenestron's pitch wander a little); the mix is back at the loudness of 2.7.
