@@ -29,7 +29,7 @@
 const AFC_COL={alt:'#46d2ff',vs:'#46d2ff',hdg:'#ff6ad5',hov:'#8cf06e',ias:'#8cf06e'};
 const AFC_NAME={alt:'ALT',vs:'V/S',hdg:'HDG',hov:'HOV',ias:'IAS'};
 const AFCS_UI={msg:'',note:null,trail:[],base:null,act:{},ovAcc:{lon:0,lat:0}};
-function afcsBlocked(){return TUTOR.on?'The tutor lesson flies the controls it needs. Stop the lesson (Q) to use the autopilot.':
+function afcsBlocked(){return TUTOR.on?'The tutor lesson flies the controls it needs. Stop the lesson (Shift+Q) to use the autopilot.':
   UI.apDemo?'The V demonstration flies everything; V hands it back.':REPLAY.on?'Replay is running.':S.crash?'Reset first.':'';}
 function afcsUnavailable(m){const f=S.ias>40*KT;if(m==='ias'&&!f)return 'IAS holds an airspeed above 40 kt.';
   if(m==='hov'){if(f)return 'HOV holds a hover position below 40 kt.';const vN=mrot(qmat(S.q),S.vb);if(Math.hypot(vN[0],vN[1])>20*KT)return 'HOV: slow down below 20 kt over the ground first.';}return '';}
@@ -112,7 +112,7 @@ function afcsDraw(x){
    for(const m of modes){const on=!!AFCS[m],label=AFC_NAME[m]+(on?' '+afcsTargetText(m):''),w=Math.ceil(x.measureText(label).width)+16;
      x.fillStyle=on?'rgba(13,12,10,0.85)':'rgba(13,12,10,0.70)';x.fillRect(px,py,w,22);x.strokeStyle=on?AFC_COL[m]:'rgba(160,152,138,0.7)';x.lineWidth=on?2:1;x.strokeRect(px+0.5,py+0.5,w-1,21);
      x.fillStyle=on?AFC_COL[m]:'rgba(200,192,178,0.9)';x.textAlign='left';x.fillText(label,px+8,py+11.5);px+=w+4;}
-   if(!any){x.font='12px "Arial Narrow",sans-serif';const hint='U ALT · I '+(f?'IAS':'HOV')+' · O HDG · J menu',hw=x.measureText(hint).width;x.fillStyle='rgba(13,12,10,0.70)';x.fillRect(px,py,hw+12,22);x.fillStyle='rgba(200,192,178,0.95)';x.fillText(hint,px+6,py+11.5);}
+   if(!any){x.font='12px "Arial Narrow",sans-serif';const hint='U ALT · I '+(f?'IAS':'HOV')+' · O HDG · J menu',hw=x.measureText(hint).width;if(px+hw+12<W/2-176){x.fillStyle='rgba(13,12,10,0.70)';x.fillRect(px,py,hw+12,22);x.fillStyle='rgba(200,192,178,0.95)';x.fillText(hint,px+6,py+11.5);}}   // (2.14) not under the heading tape in a narrow window
    const n=AFCS_UI.note;if(n&&S.t-n.t<4&&S.t>=n.t){x.globalAlpha=Math.min(1,(4-(S.t-n.t))/1);x.font='bold 13px "Arial Narrow",sans-serif';const w=x.measureText(n.text).width;x.fillStyle='rgba(13,12,10,0.75)';x.fillRect(8,py+26,w+16,20);x.fillStyle=n.col;x.textAlign='left';x.fillText(n.text,16,py+36);x.globalAlpha=1;}}
   if(!any){x.restore();return;}
   const glow=(m,ch)=>AFCS_UI.act[ch]&&AFCS[m];
@@ -178,7 +178,8 @@ function afcsDrawLanes(x){
     let g=null;if(p5){const gn=p5.n-AFCS.spotN,ge=p5.e-AFCS.spotE;g=[(gn*c+ge*s)/sc,(-gn*s+ge*c)/sc];}
     lanes.push({m:'hov',dev:{k:'2',v:[al/sc,ac/sc],g,txt:dist.toFixed(1)+' m',sc:'±'+sc+' m'},ctl:[{ch:'stick',k:'2',span:0.1,name:'stick'}]});}
   if(!lanes.length)return;
-  const W=R3.w,Hh=R3.h,LH=74,x0=8,y0=Math.max(118,Hh/2-16),pw=250,pulse=0.55+0.45*Math.sin(S.t*7);
+  const W=R3.w,Hh=R3.h,LH=74,x0=8,pw=250,pulse=0.55+0.45*Math.sin(S.t*7);
+  let y0=Math.max(118,Hh/2-16);if(cfg.view==='cockpit'&&HUD.panelA>0.5&&HUD.panelUp>0)y0=Math.max(72,Math.min(y0,Math.min(Hh/2-90,HUD.panelTop-84)-lanes.length*LH-4));   // (2.12) the approach view lifts the panel: the lanes go above the IAS box
   if(y0+lanes.length*LH>Hh-160&&Hh<560)return;   // no room in a very small window
   x.save();x.textBaseline='middle';
   lanes.forEach((L,i)=>{const y=y0+i*LH,col=AFC_COL[L.m],act=L.ctl.some(c=>c.ch==='stick'?(AFCS_UI.act.lon||AFCS_UI.act.lat):AFCS_UI.act[c.ch]);

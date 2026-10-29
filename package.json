@@ -1,6 +1,6 @@
 {
   "name": "ec135-flight-dynamics",
-  "version": "2.11.1",
+  "version": "2.16.3",
   "description": "EC135 flight dynamics trainer in a single HTML file",
   "license": "Apache-2.0",
   "scripts": {

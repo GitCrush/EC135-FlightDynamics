@@ -39,6 +39,12 @@ for(const key of ['KeyW','KeyS']){const F=fresh('high');const a=trace(F),c0=F.IN
   const mix=Math.abs(F.H.mix.roll)*Math.abs(F.IN.col-c0);   // the collective-roll mixing tilts the aircraft on purpose
   check(`${key}: heading excursion`,dpsi,0,5,'deg');check(`${key}: roll beyond what the mixing commands`,Math.max(0,dphi-mix),0,2,'deg');check(`${key}: ground speed after 6 s (what the mixing is for)`,gs(F),0,0.8,'m/s');}
 
+console.log('\n■ Collective metering by the length of a press, and the 6-s mark on the vertical speed (2.13.2)');
+{for(const [hold,lo,hi] of [[0.1,0.15,0.4],[0.5,1.0,1.6],[1.0,2.5,4.0],[1.5,8,13]]){const F=fresh('high');run(F,1);const c0=F.IN.col;run(F,hold,()=>{F.DEV.keys.KeyW=true;});F.DEV.keys.KeyW=false;run(F,0.05);
+   check(`W held ${hold} s: lever change`,(F.IN.col-c0)*100,lo,hi,'%');}
+ for(const [kind,dc] of [['high',0.02],['high',-0.03],['cruise',0.03]]){const F=fresh(kind);F.cfg.predict=true;run(F,3);F.DEV.kbd.col+=dc;run(F,0.05);F.predStep(true);const p=F.predVS();const t=Math.min(6,F.predEnd()-0.3);run(F,t-0.05);
+   check(`${kind}, lever ${dc>0?'+':''}${dc*100} %: the 6-s mark against the flown vertical speed`,Math.abs((p-F.S.vs)/F.FPM),0,25,'fpm');}}
+
 console.log('\n■ Lift-off from the pad with W (transient when the attitude command takes over)');
 for(const [name,stop,lim] of [['gentle (W until the skids are free)',0.3,1.0],['firm (W until 2.5 m, climbs 2000 fpm)',2.5,1.5]]){const F=fresh('pad');let pk={p:0,q:0},air=null,dpsi=0,held=true;const psi0=trace(F).psi;
  run(F,10,t=>{if(F.S.hAGL>stop)held=false;F.DEV.keys.KeyW=held&&t<8;},t=>{const x=trace(F);if(!F.S.onGround&&air===null)air=t;if(air!==null&&t-air<3){pk.p=Math.max(pk.p,Math.abs(x.p));pk.q=Math.max(pk.q,Math.abs(x.q));}dpsi=Math.max(dpsi,Math.abs(wrap(x.psi-psi0)));});
@@ -160,8 +166,9 @@ for(const [li,name] of [[3,'calm hover'],[5,'one axis: fore and aft'],[6,'one ax
  check(`lesson ${li+1} (${name}): ground speed after 10 s hands-off`,gs(F),0,0.8,'m/s');check(`lesson ${li+1} (${name}): peak rate`,pk,0,6,'°/s');F.tutorStop();}
 
 console.log('\n■ Saturation: full forward key for 8 s, release (wind-up)');
-{const F=fresh('high');const a=trace(F);const qs=[];run(F,16,t=>{F.DEV.keys.ArrowUp=t<8;},t=>{if(t>8)qs.push(trace(F).q);});const b=trace(F);
- check('after 8 s of full stick: pitch back near trim 8 s later',Math.abs(b.th-a.th),0,3,'deg',2);check('pitch-rate reversals after release',signChanges(qs,1.5),0,2,'');}
+{const F=fresh('high');const a=trace(F);const qs=[];let th1=null;run(F,16,t=>{F.DEV.keys.ArrowUp=t<8;},t=>{if(t>8)qs.push(trace(F).q);if(t>9&&th1===null)th1=trace(F).th;});const b=trace(F);
+ if(F.SAS.rc)check('after 8 s of full stick (above 45 kt now, rate command): pitch held from 1 s to 8 s after',Math.abs(b.th-th1),0,3,'deg',2);   // (2.13.1) the attitude stays where the release left it
+ else check('after 8 s of full stick: pitch back near trim 8 s later',Math.abs(b.th-a.th),0,3,'deg',2);check('pitch-rate reversals after release',signChanges(qs,1.5),0,2,'');}
 
 console.log('\n■ Gamepad: left stick as pedal 15 % for 1.5 s, centre (analog path)');
 {const F=fresh('hover');const pad={connected:true,axes:[0,0,0,0],buttons:Array.from({length:16},()=>({value:0,pressed:false}))};F.pads[0]=pad;F.DEV.pad=0;const psi0=trace(F).psi;let rel=null,ext=0;
@@ -222,5 +229,28 @@ function guided(kind,dn,de,h,sec,setup){const F=fresh(kind);if(setup)setup(F);ru
  F.aimClick(2);check('… right-click while aiming clears it',F.GUIDE.on?1:0,0,0,'');F.guideSet(F.S.pos[0]+50,F.S.pos[1],3);F.uiReset('hover');check('… a reset clears it',F.GUIDE.on?1:0,0,0,'');
  F.AIM.hi=0;F.aimWheel(-100);check('wheel up one notch: 25 ft',F.aimH()/0.3048,24.9,25.1,'ft');F.aimWheel(300);check('… down past the ground: the ground (hover 10 ft = 3 m)',F.aimH(),3,3,'m');
  const T=fresh('hover');T.tutorStart&&T.tutorStart(3);T.TUTOR.on=true;check('refused in a tutor lesson',T.guideSet(T.S.pos[0]+50,T.S.pos[1],3)?1:0,0,0,'');}
+
+console.log('\n■ Cyclic in forward flight: rate command, attitude hold (2.13.1); the mouse stick');
+{/* a turn: a push of 15 % for 2 s and back to the centre; the bank stays, the heading turns; a reversal is one push the other way */
+ const F=fresh('cruise');const m=F.DEV.mouse;m.armed=true;run(F,1);check('cruise: the rate command is on',F.SAS.rc?1:0,1,1,'');
+ let pk=0;run(F,2,t=>{m.vx=0.15;},()=>{pk=Math.max(pk,Math.abs(trace(F).p));});m.vx=0;run(F,1);const b1=trace(F).phi;run(F,10);const b2=trace(F);
+ check('15 % right for 2 s: roll rate',pk,7,16,'°/s');check('… bank when the stick is back',b1,15,30,'deg');check('… bank 10 s later (held, hands off)',Math.abs(b2.phi-b1),0,2,'deg');
+ run(F,2,t=>{m.vx=-0.25;});m.vx=0;run(F,6);const b3=trace(F);check('reversal: 25 % left for 2 s, then centre: bank',b3.phi,-30,-10,'deg');
+ run(F,3);check('… held (3 s later)',Math.abs(trace(F).phi-b3.phi),0,2,'deg');}
+{/* the centre: a mouse left 3 % off holds; a small bank left by a small push levels and the heading is held */
+ const F=fresh('cruise');const m=F.DEV.mouse;m.armed=true;run(F,1);const a=trace(F);m.vx=0.03;m.vy=-0.03;run(F,10);const b=trace(F);
+ check('stick 3 % off the centre for 10 s: bank change',Math.abs(b.phi-a.phi),0,1.5,'deg');check('… pitch change',Math.abs(b.th-a.th),0,1,'deg');
+ m.vx=0.08;run(F,0.6);m.vx=0;run(F,12);const c=trace(F);check('a nudge to ~3° of bank: wings back at the trim after 12 s',Math.abs(c.phi-F.TRIM.phi*F.RAD),0,1,'deg');
+ run(F,10);check('… heading held 10 s later',Math.abs(wrap(trace(F).psi-c.psi)),0,1.5,'deg');}
+{/* a flare: a pull of 20 % for 1.5 s, then hands off; slowing through 35 kt the attitude command takes over without a bump */
+ const F=fresh('cruise');const m=F.DEV.mouse;m.armed=true;run(F,1);const a=trace(F);run(F,1.5,t=>{m.vy=0.2;});m.vy=0;run(F,1);const b=trace(F);
+ check('flare: 20 % aft for 1.5 s: nose up by',b.th-a.th,6,15,'deg');run(F,5);check('… held 5 s later, hands off',Math.abs(trace(F).th-b.th),0,1.5,'deg');
+ let sw=null,pk=0;run(F,40,null,t=>{if(sw===null&&!F.SAS.rc)sw=t;if(sw!==null&&t-sw<3){const x=trace(F);pk=Math.max(pk,Math.abs(x.q));}});
+ check('… slows through 35 kt: the attitude command takes over',sw===null?0:1,1,1,'');check('… pitch rate in 3 s after the switch',pk,0,4,'°/s');}
+{/* accelerating out of the hover with the stick held forward: through 45 kt the rate command must not pitch the nose on */
+ const F=fresh('high');const m=F.DEV.mouse;m.armed=true;run(F,1);let sw=null,th0=0,pk=0,mx=0;
+ run(F,40,t=>{m.vy=-0.35;},t=>{const x=trace(F);if(sw===null&&F.SAS.rc){sw=t;th0=x.th;}if(sw!==null&&t-sw<4){pk=Math.max(pk,Math.abs(x.q));mx=Math.max(mx,Math.abs(x.th-th0));}});
+ check('accelerating, 35 % forward held: rate command on',sw===null?0:1,1,1,'');check('… pitch rate in 4 s after the switch',pk,0,3,'°/s');check('… pitch change in 4 s after the switch',mx,0,2,'deg');
+ m.vy=-0.2;run(F,3);const c=trace(F);check('… easing the stick back toward the centre: attitude held',Math.abs(c.th-th0),0,2.5,'deg');}
 
 console.log(`\n${errors?errors+' ERROR(s)':'all handling checks within range'}${warns?', '+warns+' WARN':''}\n`);process.exit(errors?1:0);

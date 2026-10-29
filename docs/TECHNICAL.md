@@ -60,7 +60,7 @@ ranges.
 | Autorotation 65 kt, collective full down | 1990 fpm, NR 100 %; energy balance 1.05 | 1700–2200 fpm |
 | Double engine failure at 40 kt, collective raised to the top | NR 69.9 % at 2 s, 60.8 % at 3 s | **CAL** Airbus simulation in AAIB AAR 3/2015, 1.16.4: 69–71 % at 2 s, ~61 % at 3 s (rotor inertia fitted) |
 | Roll bandwidth / phase delay, 75 kt | 3.66 rad/s / 58 ms | **CAL** 3.7 rad/s / 55 ms (ERF 1997, Table 4): the servo lag is fitted to the phase delay, Ixx comes from the same paper |
-| Pitch bandwidth / phase delay, 75 kt | 3.01 rad/s / 70 ms (collective fixed during the sweeps; 2.94 / 67 with the height held, as until 2.2) | **KNOWN** 1.84 rad/s / 92 ms published: the model's short period is quicker and has less delay (see *The two open physics items*) |
+| Pitch bandwidth / phase delay, 75 kt | 2.85 rad/s / 93 ms (2.16, with the 25 ms equivalent delay in pitch; 3.01 / 70 before, collective fixed during the sweeps) | **KNOWN** bandwidth 1.84 rad/s published: the short period is quicker (see *The two open physics items*); **CAL** phase delay 92 ms published, the delay fitted to it (see *The engine start and the pitch channel's delay*) |
 | Hover oscillation (linearised, controls fixed) | period 12.4 s, doubles in 5.3 s | slowly unstable, as every helicopter in the hover |
 | Hover yaw damping N_r | −0.557 1/s | **CAL** DLR identification, about −0.5 1/s |
 | Dutch roll, 60 kt | 1.61 rad/s, ζ 0.23 | DLR identification 1.80–1.86 rad/s (**CAL**, Izz chosen with it), ζ 0.24–0.28 (**VAL**) |
@@ -475,6 +475,135 @@ blades caught at random. 2.6 had a plain band with the old panel's flight
 display cut in, under a 3D frame of posts; `cfg.panel3d` brings the 3D
 cockpit of 2.0-2.5 back (without its glareshield).
 
+**The approach view (2.12).** Over the glareshield the cockpit view reaches
+36° below the nose line; below that is the panel. On short final and in the
+hover what the pilot needs is lower: the landing spot under the nose, the
+ground right in front of and under the skids, the drift over it. A pilot
+lowers the gaze for that, over the panel and through the two chin windows in
+the floor of the nose; in the simulator that took looking around (`C`), which
+takes a hand off the controls. So the view does it by itself: below ~60 m
+above the ground and ~40 kt of ground speed (a blend `APR.k` of the two,
+smoothstep 90-45 m and 55-30 kt, following with a 1.5 s lag so that it slides
+once per approach and not with every gust; a new flight starts in its own
+view) the line of sight goes down to 25° and the view grows from 62° to 75°
+tall, its top keeping 10° of sky above the horizon. The panel stays where it
+hangs in the airframe: its top edge at the angle under the nose line where the
+normal view shows it (about 20°), so as the gaze lowers it climbs the screen
+(89_panel.js, `panelLift`), and the band it leaves at the bottom is the floor
+of the nose with the chin windows, 2.0-2.75 m ahead of the CG and 0.24-0.80 m
+either side of the centre line, 0.95 m under the eye (36° to 60° down). They
+are not a second picture: the scene is drawn with one projection, the floor
+over it with the two windows' outlines cut out (their corners projected
+through the same camera, so they bank and pitch with the airframe), and the
+panel over that. Click to fly picks through the chin
+windows too. `cfg.apr` (key `4`, the setup): on, off (2.12-2.12.3 also automatic, see below).
+
+Only on the approach (2.12.1). On the take-off the lowered gaze takes the
+horizon's picture away just when the attitude is being set: 2.12 lowered it
+after every lift-off too, and in the hover. Now the view is armed when the
+aircraft has been away from the ground (above ~90 m or faster than ~55 kt:
+outside the blend's envelope; the next time it is low and slow it is
+arriving), or when a flight starts in the air above 30 m or faster than 20
+kt (the approach exercises); a flight that starts in the hover or on the pad
+starts disarmed. It is disarmed after 2 s on the skids (a bounce keeps it)
+and by a departure from the hover or a go-around: 2.5 s of climbing above
+300 fpm while the ground speed grows (smoothed over 0.6 s), or above 600
+fpm. A flare climbs while it slows down, and a correction in the hover is
+short; neither disarms it. The browser test flies it with the autopilot:
+lift-off and climb in the hover to 40 m without it, departure to 150 m,
+approach to a hover with it, a correction climb that keeps it, a departure
+from the hover that ends it, a landing after which it goes, a lift-off
+without it.
+
+A picture-in-picture "belly camera" (a second, small view straight down in a
+corner) was built first and dropped: it costs a second pass of the scene, and
+a second picture with its own scale and orientation is one more instrument to
+read, not a view out of the aircraft.
+
+What it costs (2.12.2). 2.12 drew the scene over the whole view and cleared
+the depth behind the panel and the floor to the near plane, so that the depth
+test would turn the fragments there away. It does not for the downwash's
+particles: their shader discards the corners of each sprite, which takes the
+early depth test away, and right under the eye, in the hover, the sprites are
+up to 256 pixels across, hundreds of them, all shaded behind the panel. On a
+GPU the frame rate fell as soon as the view came in. Since 2.12.2 the main
+pass stops under the panel's top (the scissor test, as in the normal cockpit
+view), and each chin window is a pass of its own, after the main one: the
+window's screen rectangle (its viewport and scissor), drawn with the full
+view's projection cut down to that rectangle (a scale and shift in clip
+space: the same pixels, a frustum only as wide as the window). Only what is
+in it is drawn: the aircraft, the scene's chunks, the trees (culled by box,
+not only by sphere: a sphere round a flat 120 m tile reaches far under the
+ground, where a view looking down goes on), the cars within 2h + 40 m of the
+eye, the ground, the shadows (the trees' only from their sun side, 50 m out),
+the target's column and the predicted path; no sky, no particles. The pixels
+drawn are then about those of the normal cockpit view (the windscreen above
+the panel, half the view, and the two windows' rectangles, a quarter).
+Measured under SwiftShader (978 x 800), the approach view against the normal
+cockpit view at the same place: hovering in dust +5 % (2.12.1: +19 %), in
+spray -8 % (+17 %), at 3 m over the pad +5 % (+25 %), at 40 m over the forest
++29 % (+33 %; SwiftShader pays for the trees' vertices under the windows, a
+GPU hardly). The same culling (boxes for the tiles, cars out of view not
+drawn) takes a fifth to a quarter of the draw calls off the normal views.
+
+(2.12.3) Still too slow on an integrated GPU. Three more steps. The main pass draws with the projection cut down to
+the part of the view above the panel (viewport and scissor alike: the same
+pixels, a frustum that ends at the panel's top), so what lies under the panel
+is not even sent, in the normal cockpit view too. The chin windows are one pass
+for both: the rectangle round the two, its depth cleared to the near plane and
+the two windows punched back to the far plane (a draw with the depth test set
+to always), so only the windows' own pixels are shaded and the scene is
+traversed once. The windows show the ground within a few metres, where the
+ground's shader does the most (the flowers' dots, the finest octave): under
+*auto* graphics they switch to the light ground shader when the approach
+view's frames come late (the interval's average above 1/52 s for a second, or
+the resolution already lowered), and stay so until the view goes. And the
+setup has a **performance test**: at the present place, the simulation held,
+the view is drawn for 2.5 s in each of eight ways (normal and approach view;
+the approach view without its windows and with their ground light; both in
+light graphics and with half the pixels), with the frame interval in the
+page's own loop, the JavaScript's time to issue a frame, the time until the
+GPU has drawn it (a one-pixel read waits for it) and the overlay's, as a block
+of text to copy. It tells where the time goes on any machine.
+
+(2.12.4) By key only, and through glass. The automatic view is gone: on the
+integrated GPU its frames were still late, and a view that changes by itself
+is one thing more to be surprised by. The view comes and goes only with `4`.
+What decided it (the arming above: away from the ground, then low and slow;
+disarmed on the skids, on a departure) now decides a hint above the panel, for
+8 s from the moment the situation arises: on an approach with the view off,
+'4 approach view', and on a departure with the view still on, '4 back to the
+normal view'. Pressing the key settles the present situation's hint. And the
+chin windows are drawn at half the resolution (a quarter of the pixels) into
+a framebuffer of their own (colour texture, depth and stencil, no
+multisampling) with the light ground shader, then laid into the view through
+a glass: a faint green-grey tint, a little less contrast, darker towards the
+frame, a faint sheen of the sky at the forward edge. Through a real chin
+window the ground looks different from the windscreen too, and the softer
+picture reads as the glass's. Under *full* graphics the framebuffer is at full
+resolution and the shader the full one; the glass stays. The performance test
+measures the windows at full quality as one of its eight variants.
+
+(2.12.6) The windows' framebuffer is drawn before the view, not after it:
+2.12.4 switched from the view's (multisampled) framebuffer to the windows' and
+back in the middle of the frame, which on tiled and Vulkan drivers stores the
+view's samples to memory and loads them again (at 1920 x 1080 with 4 samples
+some 130 MB a frame on an integrated GPU's shared memory). Now the windows'
+picture is ready when the view begins, the view is drawn in one go and the
+picture is laid in at its end.
+
+(2.12.8) Measured pass by pass under SwiftShader, the approach view costs what
+the normal cockpit view costs (pad 816 against 832 ms, over the forest 1430
+against 1389; the windows' pass 3 to 5 % of the frame). What made it slow on
+an integrated GPU is therefore something the software renderer does cheaply.
+Two suspects are removed: the floor round the windows was cut open with
+'destination-out' on the overlay canvas, a compositing mode a canvas drawn by
+the GPU may run on the processor (reading the overlay back each frame); it is
+now one path with the openings as holes (even-odd). And when the approach
+view runs under 50 frames per second for 2 s, the windows' picture is redrawn
+every other frame. The GL line shows the frame rate, and switching the view
+shows the rate before and 3 s after, so the cost can be read on any machine.
+
 The cockpit (2.0) is drawn in its own pass with the depth buffer cleared and
 a 2 cm near plane, so the frame half a metre from the eye stays sharp while
 the scenery keeps its depth precision. Right seat of the EC135: the
@@ -607,6 +736,54 @@ at the first frame (2.9.1 built the trees' meshes for 2 s). On a GPU the
 triangles and draw calls are far from any limit; the fill work is what
 *auto* scales the resolution down for, and *light* draws a little over half
 the trees with simpler shaders.
+
+(2.12) The scene's static mesh (buildings, the village, the hospital, the
+bridge, the town, the pylons, the factory, the farms, the hamlet) is cut into
+chunks by place, each with a bounding sphere; chunks out of view are not
+drawn, and their shadows not either. Against 2.11.1 in the same four views:
+within the noise to 7 % less a frame.
+
+## Seeing out (2.13)
+
+A pilot hovering looks out, not down: a point some 15 m ahead and a little
+above the nose, the attitude read from the horizon against the frame, the
+drift from the ground in the corner of the eye, and now and then a glance out
+of the door window with the hands on the controls. A flat screen takes three
+of these away: the frame (since 2.6 only the glareshield was left), the
+corner of the eye and the free head. The large simulators give the head back
+with TrackIR or a webcam (opentrack with its neural network, AITrack), VR or
+several monitors, and without them with glance views on a hat switch.
+
+- **The frame** (89_panel.js `frameDraw2D`): the windscreen's centre post, the
+  pillars, the roof bow, the posts behind the doors, the roof rails and the
+  doors' lower window edges, the points of the 3D cockpit of 2.0-2.5 in body
+  axes, projected through the camera and drawn as thin lines in the overlay,
+  each as wide as a post of about 3 cm at its distance (1 to 7 px), dark at
+  62 % with a faint light edge. They bank and pitch with the airframe and
+  stay put when the head turns. The 3D frame of 2.0-2.5 had read as black
+  bars; these are thinner and drawn over the scene, not in it.
+- **Glances**: `Q` / `E` held set the head's target 70° to the side and 25°
+  down; the head follows with its 120 ms lag, the panel fades as it does when
+  looking around, and the mouse stays the stick (`C` takes it for the head).
+  `Shift`+`E` and `Shift`+`Q` are the engines and the tutor's quit.
+- **Head tracking** (88_headtrack.js): MediaPipe Tasks Vision's face detector
+  (BlazeFace, short range) on the processor, in the page's loop at most every
+  45 ms, on the camera's 320 x 240 picture; six key points. The turn from the
+  nose's place between the ears, t = (nose - ear1)/(ear2 - ear1), which with
+  the ears ~8 cm either side and the nose ~10 cm ahead is 0.5 + 0.625 tan(turn);
+  the nod from the nose between the eyes and the mouth, u = (nose - eyes) /
+  (mouth - eyes), about 0.0055 per degree. A synthetic face turned and nodded
+  by known angles comes back within 0.1°. Both against the mean of the first
+  twelve detections (and again on `Z`), One Euro filtered (min cutoff 0.8 Hz,
+  beta 0.6), a dead zone of 2°, gains 3.5 and 2.5 (setup), at most ±150° and
+  +40/-60°. The panel stays for small turns and when looking down. Tested
+  end to end in headless Chromium with a fake camera playing a face and its
+  mirror image: detected, calibrated, the view turning one way and the other.
+  The picture never leaves the browser; the library comes from jsDelivr (about
+  10 MB, once), the model (230 kB) is part of the file. A page embedded in
+  another site's frame is not given the camera; the page opened directly is.
+- **The approach view** (2.12) by default without its chin windows: the gaze
+  15° lower and nothing else, no second pass; the windows are a setup option.
 
 ## Tutor
 
@@ -1012,7 +1189,37 @@ tower: the pitch going away 0.767 × the pitch coming, 0.77 expected).
 
 A click into the view captures the mouse (Pointer Lock); from then on it
 is a virtual stick driven by its movement, starting at neutral, full
-deflection after 1200 px of travel (setup) with expo 1.5. A small cross in
+deflection after 1600 px of travel (setup), linear by default (2.12.5; the
+setup also has mild, expo 1.25, and strong, the expo 1.5 it always had
+before). Why: the attitude command shapes the stick itself (20° + 20° x
+stick³ of bank, 15° + 13° x stick³ of pitch), and expo 1.5 on the mouse on top
+of it made the bank per 100 px of mouse grow from 0.2° around the centre to
+7.4° at the stop, 35-fold: around the centre nothing seemed to happen, the
+hand went further, then it bit and overshot, and a reversal from 10° of bank
+one way to 10° the other took 1,800 px. Linear: 1.25° to 5° per 100 px
+(4-fold, the attitude command's shaping alone), the same reversal 1,360 px.
+(2.12.7) The collective's inputs, checked against the rotor. From the hover
+out of ground effect at 2500 kg, 1 % of lever (0.145° of blade pitch: the
+range is 1.5° to 16°) gives 135 fpm of steady climb, momentum theory 140 fpm
+(Vc = 4/3 ΩR Δθ0, about 1000 fpm per degree), reached with a time constant of
+3.5 s (ADS-33 Level 1 asks for at most 5 s) and 0.025 g at once; in ground
+effect at 3 m the climb dies away a few metres up, where the cushion ends.
+What made the lever nervous were the steps: a wheel notch was 4 % in Chrome
+on Windows (deltaY 100 x 0.0004: about 500 fpm and 0.1 g), 2 % in Chrome on
+Linux, 0.1 % in Firefox (lines), a tap on W or S 3 to 4 %. Now a notch is
+0.4 % in every browser (normalised to notches of 100 px; up to four times that
+when the wheel spins fast), and the keys ramp: a quarter second at 11 % of
+the rate, then to the full rate within 0.75 s (a 0.1 s tap 0.3 %, a held key
+still reaches the top in about 4 s; the throw down with the engines out or
+the rotor drooping stays immediate). (2.13.2: the even part is longer, see
+"The collective: set it, then wait".) The cyclic, for comparison: without the
+aids full lateral stick gives about 80°/s of roll rate in the hover and 100°/s
+at 75 kt, 10 % about 8 to 10°/s; with the attitude command 10 % of stick holds
+1.8° of bank and the aircraft drifts at about 1 m/s after 4 s. With the mouse
+the pitch per pixel is about 1.45 times the roll (the stick's travel is 108 mm
+fore and aft, 80 mm sideways, the mouse's the same for both).
+
+A small cross in
 the view shows the stick, Esc releases the mouse. Mouse buttons are the
 pedals. Holding C or the middle button steers the head instead (smoothed;
 orbits the camera in the chase view) while the stick is frozen. The mouse wheel or W/S is the
@@ -1069,9 +1276,13 @@ judged by the power the rotor asks for (referred to 100 % NR), not by the
 lagging gauge. Above 45 kt the yaw axis turns
 from heading hold into turn coordination, and the heading is held through
 a small bank instead. The attitude command is cubic: fine around the
-centre, 28° pitch and 40° bank at the stops. Trim: `T` makes the attitude the stick commands now
+centre, 28° pitch and 40° bank at the stops. Above 45 kt (back below 35 kt)
+the cyclic is rate command with attitude hold instead (2.13.1, see "The
+cyclic in forward flight"). Trim: `T` makes the attitude the stick commands now
 the new centre, `Shift` + arrows move the trim at 3 °/s like the four-way
-switch on a cyclic, `Y` returns to the hover trim. SAS, attitude command,
+switch on a cyclic (under the rate command they move the held attitude), `Y`
+returns to the hover trim (under the rate command the held attitude eases there
+until the stick moves). SAS, attitude command,
 heading hold and hover assist (stick = velocity) are training aids;
 switch them off one by one.
 
@@ -1092,6 +1303,275 @@ rotor widens and fades with height: the eye's own ground-effect gauge.
 Exercises: cold start, hover with a phantom reference, the rooftop pad, pedal turns, quick stop, slope
 landing, confined area, autorotation (engines quit after 10 s), vortex ring
 recovery, an approach flown by the phantom, engine failure in the hover.
+
+## The cyclic in forward flight (2.13.1)
+
+The question: turning, reversing and flaring with the mouse took a lot of
+travel; is that how the aircraft is? Flown in the model (cruise at 100 kt,
+mouse stick 1600 px for full deflection, linear; a pilot model, PID on the
+attitude error with a hand lag of 0.15 s, gains searched per law for the
+least travel at the same tracking error, the target attitude moved smoothly
+over 2 s): a 30° turn held for 10 s and rolled out, a reversal from 30° left
+to 30° right, a flare to 10° nose up held for 7 s.
+
+| mouse, px | attitude command (until 2.13) | rate command (2.13.1) | bare aircraft (aids off) |
+|---|---|---|---|
+| 30° turn and out: travel | 2,655 | 1,567 | 1,703 |
+| … held during the turn | 1,344 | 44 | 338 |
+| … furthest from the centre | 1,347 | 378 | 596 |
+| reversal: travel | 5,452 | 2,635 | 2,868 |
+| … held | 1,340 | 50 | 141 |
+| … furthest | 1,404 | 634 | 314 |
+| flare 10°: travel | 1,714 | 1,141 | 767 |
+| … held | 951 | 55 | 124 |
+| … furthest | 1,029 | 308 | 245 |
+
+The bare aircraft is a rate device: stick deflection rolls it (80 to
+100°/s at the stop, about linear), and once at the bank the stick goes
+back toward the centre (140 to 340 px held in the turns above). The attitude
+command maps stick position to attitude (20° + 20° x stick³ of bank), so
+30° of bank meant 85 % of the stick held for the whole turn, a reversal
+the full way from 85 % one side to 85 % the other, and a flare 60 % aft
+held while the speed bleeds off: twice the travel of the aircraft and four
+to ten times the hand's excursion, enough to run off the mouse pad. That
+is the "cranking". The attitude command is the right law for the hover
+(ADS-33: a centred stick that means "stand still" in a degraded visual
+environment), not for manoeuvring at speed, where ADS-33 and modern AFCS
+(and fly-by-wire types) use rate command with attitude hold.
+
+Since 2.13.1, above 45 kt (back below 35 kt, the hysteresis the yaw axis
+already uses): the stick commands a rate, linear beyond a dead centre of
+3 % (90°/s of roll and 40°/s of pitch at the stop: 10 % of stick about
+6°/s of roll, 20 % about 16°/s), the integral of it is the attitude
+reference, the attitude loop flies it with the commanded rate fed forward,
+and the centred stick holds the attitude it has. The bank in a turn stays
+with the stick centred; with the wings within 4° of the trim bank and the
+stick centred they level at 2°/s and the roll-axis heading hold takes
+over. Bumpless both ways: entering (accelerating), the attitude held is
+kept and a stick still deflected is the new centre until the hand brings
+it back toward the centre (it folds back with the hand, so the nose does
+not run on); leaving (slowing through 35 kt), the attitude reference takes
+the stick offset of the attitude command, and the trim it eases to is the
+hover trim, where a deceleration is heading. The coach's stick cue under the rate
+command is the way to a deflection that closes the attitude error in about
+1 s. The mouse box shows a small ring at the centre and "rate command ·
+centre holds". The setup's *Cyclic in forward flight* brings back the
+attitude command at speed.
+
+With the mouse, the way the pointer moves also depends on the system's
+pointer acceleration: Pointer Lock gives the accelerated movement in most
+browsers (Chrome's raw movement, `unadjustedMovement`, exists on Windows,
+macOS and ChromeOS only), so a quick move out and a slow move back do not
+return to the same place. With the rate command a stick left a little off
+the centre within 3 % holds; switching the pointer acceleration off in the
+system makes the mouse a ruler again.
+
+## The collective: set it, then wait (2.13.2)
+
+The question: holding a height or a steady descent took the lever back and
+forth all the time; is it like that in the aircraft? Measured in the model
+(2500 kg, aids on, no wind):
+
+- Lever left alone, the aircraft holds: in the hover at 3 m the height
+  stays within 0.2 m over 2 min (ground effect is a cushion), out of
+  ground effect at 300 m it drifts 5 m in 2 min (14 fpm), at 100 kt the
+  vertical speed settles within ±15 fpm after half a minute.
+- The lever sets a vertical speed, which settles with a time constant of
+  about 4 s in the hover: +1 % of lever gives 100 fpm after 5 s and 125 to
+  130 fpm from 10 s on (momentum theory 140; ADS-33 Level 1 asks for at
+  most 5 s); the FLI moves at once and the seat feels 0.025 g.
+- At speed the lever sets the vertical speed as long as the speed is held:
+  +3 % at 100 kt with IAS on the stick gives about +180 fpm, steady for a
+  minute. With the attitude held instead and the speed left free, part of
+  it goes into speed over half a minute (+3 % at 100 kt: 274 fpm after
+  5 s, 94 fpm and 5 kt faster after 60 s), so a descent at a fixed
+  attitude asks for the lever again every so often: the speed belongs to
+  the stick. Slowing down on an approach with the lever fixed, the sink
+  grows (power required rises below about 60 kt): the lever comes up
+  progressively, in the aircraft too (FAA Helicopter Flying Handbook,
+  ch. 9: "increase the collective to maintain the approach angle").
+
+So the aircraft does not need the lever all the time; it needs small
+corrections and patience, and in the hover and on the approach a hand that
+moves often but little. What makes it back and forth here is the loop
+through the eyes alone. The handbook says of the hover: "Small deviations
+can be felt and seen, so you can make the corrections before the helicopter
+actually moves", and names the common error "failure to allow for lag in
+cyclic and collective pitch, which leads to overcontrolling". The seat
+feels the vertical acceleration at once; a screen shows a vertical speed
+that is 22 % there after 1 s, 70 % after 4 s and 85 % after 6 s, so the hand keeps adding
+until it shows, then it is too much. The keys made it worse: 2.12.7's ramp
+gave 2 % of lever for 0.5 s of `W`, 6 % for 0.75 s and 12 % for 1 s (270,
+730 and 1,400 fpm), too steep to dose a correction by the length of a
+press.
+
+Since 2.13.2:
+- A mark where the vertical speed will be in 6 s with the controls held,
+  taken from the motion predictor (the model flown ahead, renewed up to 20
+  times a second): a blue triangle on the VSI's rim and beside the HUD's
+  vertical speed bar, and "→ +240" beside the vertical speed in the ALT
+  box. With a touchdown predicted before then, it shows the sink just before
+  it (from the low hover, 4 % of lever down: 245 fpm predicted, 237 flown).
+  It moves with the lever at once, as the seat would: set the lever
+  until the mark sits where the vertical speed should be, then leave it.
+  Against the flown result after a lever step it is within 2 fpm (2 % in
+  the hover, 3 % at 100 kt, 5 % at 70 kt). It needs the predictor (`P`).
+- The HUD's vertical speed bar on a square-root scale (100 fpm 17 px
+  instead of 4, 500 fpm 39, 2000 fpm the end, ticks at 100, 500 and 1000),
+  hung below the ALT box (it ran into it).
+- The keys: for 0.6 s the lever moves evenly at 9 % of the rate (2.5 %/s up,
+  about 320 fpm in the hover per second of holding), then the rate rises
+  to the full one by 2 s: 0.1 s 0.25 %, 0.5 s 1.3 %, 1 s 3.2 %, 1.5 s 10 %
+  (30, 160, 400, 1,200 fpm). The full lever takes about 5 s instead of 4;
+  the emergency throw is untouched.
+- The tutor's hover lesson points at the mark.
+
+(2.16.2) Two green displays calmed. The HUD's bar is linear up to 100 fpm
+(17 px) and on the square root above, smoothed over 0.25 s and grey within
+±20 fpm: the pure root gave 10 fpm 5.5 px and flipped between green and
+amber with the small ups and downs of a hover. The coach's collective cue
+compares the wanted vertical speed with the predicted one at 6 s
+(`PRED.vsTr`) instead of the present one, so it no longer asks for lever
+the aircraft is already answering, and its arrow has hysteresis (on above
+0.06, off below 0.035 of lever, a reversal only after 0.6 s).
+
+(2.16.3) The bar became a scale under the altitude box, read like a glass
+cockpit's VSI: labelled 0, ±500, ±1000, ±2000 fpm, the first 500 fpm on
+half its height (piecewise linear: 500 fpm at half, 1000 at three
+quarters, 2000 at the end), a white pointer with the value in a box, the
+6-s value as a cyan bug with its number and a dotted arrow from the
+pointer to it, and a legend (white now, cyan in 6 s). The altitude box
+carries the barometric altitude under the radar altitude again.
+
+## Boards and hints (2.13.3)
+
+Everything the overlay says in a box or a line has one of three places and
+takes its room in turn, so nothing lies on anything else (`hudSlotT`,
+`hudSlotB` in 90_hud.js): at the top centre downwards from under the
+heading tape (the tutor, the keys' hint at the start, the incident banner,
+the coach's word and sentence, click to fly), on the hints' line upwards
+from the panel (sound, head tracking, the mouse, looking around or the
+demonstration, the approach view, the coach's legend), and in the middle
+around the centre (paused, crash, debrief). Before, each had a fixed
+height: the incident banner (80 px) lay on the coach's box (68 to 120 px),
+the coach's legend at 86 % of the height lay on the panel in the cockpit,
+the debrief on the crash box. A board that comes or goes moves the ones
+after it; the order is chosen so that the lasting ones sit nearest their
+edge.
+
+At the start a hint pulses for 12 s under the heading tape: `?` or `F1`
+for all keys (gone once the list has been opened). `?` is taken from the
+character as well as from the key's place (German layout: Shift+ß, where
+the US key is a minus).
+
+The mouse stick integrates the pointer's movement, so the system's pointer
+acceleration bends it: a quick move out counts more pixels than the same
+slow move back, and the stick creeps away from where the hand thinks it
+is. Chrome passes the raw movement on Windows, macOS and ChromeOS
+(`requestPointerLock({unadjustedMovement:true})`, asked only there and
+falling back to the plain lock if refused); elsewhere (Linux, Firefox,
+Safari) on the first capture a hint says where to switch it off on this
+system: GNOME Settings › Mouse & Touchpad › Mouse Acceleration, KDE
+Mouse › Pointer acceleration: None, Windows Pointer Options › Enhance
+pointer precision, macOS Mouse › Advanced › Pointer acceleration.
+
+## Settings, levels and the mouse pad (2.14)
+
+The settings are kept in the browser's local storage (`ec135fd.settings`,
+95_ui.js: `PERSIST` lists them): saved once a second of real time when the
+snapshot differs from the last one, and on `pagehide`; not during a lesson,
+the performance test or the replay, which set their own. They are read
+before the setup is built. The tutor keeps the pilot's aids, key models
+and wind when a lesson starts (a lesson flies in calm air with its own
+aids) and gives them back when it stops.
+
+A profile is a bundle (`PROFILES`): the aids, the coach, the predictor,
+the flight path marker and the rotor map. Once any of them differs from
+the bundle, by the setup or by a key (`P`, `F`, `H`, `K`), the profile
+reads *Custom*. The weather presets are separate (`WEATHER`: calm; 8 kt,
+turbulence 0.5 m/s, gusts 3 kt; 14 kt, 1.0, 8 kt; 22 kt, 1.75, 12 kt) and
+the air is calm unless one is chosen (2.16.1; in 2.14 to 2.16 the levels
+set a wind, and a level picked on the welcome card switched it at once
+into the trimmed hover waiting behind the card: 14 kt into an aircraft
+trimmed for calm air drifted at 7 m/s within 5 s). Now the simulation
+holds while the card is shown, *Fly free* trims anew, the trim is flown in
+the mean wind with turbulence and gusts held off (they start from nothing
+at the hand-over), and a weather chosen in flight eases in at 2 kt a
+second. Settings saved by 2.14 to 2.16 lose their wind once (format 2).
+Without saved settings the first start is *Beginner* (2.16.1: the welcome
+card's level buttons are gone; the setup's *Level* changes it). *Realistic* keeps the rate damping, the least of the
+aids; switching the SAS off as well leaves the bare airframe.
+
+The mouse stick integrates the pointer's movement over `cfg.mouseTravel`
+pixels for full deflection. Pixels are not millimetres: 1600 px are 2 cm
+of mouse at 2000 dpi and 5 cm at 800 dpi. On the first capture
+(`cfg.mouseCal` not yet set) the simulation pauses and the movement is
+summed while the hand sweeps from the pad's left edge to its right edge;
+a click sets full stick to 45 % of the swept width (rounded to 50 px,
+300 to 2500), so the stops lie just inside the edges and a reversal never
+needs the mouse lifted. The pace of the sweep matters only with pointer
+acceleration on, which the card names.
+
+Outside the cockpit the bottom group of the overlay is laid out for
+1000 px and scaled by `hudSB` below that; its tutor highlights, the
+coach's arrows on it and the plan view's click-to-fly pick use the same
+scale.
+
+## Motion cues and the HAPI (2.15)
+
+The seat tells a pilot about an acceleration at once; a screen does not,
+and the vertical speed that the eye watches instead is a fifth there after
+a second (2.13.2). The cockpit camera now moves as a head does: the
+specific force in body axes (`S.ax`, `S.ay`, `S.nz`) is high-passed with a
+0.8 s washout, as a motion platform's onset cue, and the eye point is
+offset against it (0.25 m per g subtle, 0.5 m full, limited to 6 and
+12 cm, through an 80 ms neck lag) and nodded down with more g and in a
+deceleration (3° and 6° per g). Measured: 6 % of lever in the high hover,
++0.09 g, the line of sight 0.23° lower at once and the eye 1.6 cm lower
+after 0.3 s, both back by 2 s. The specific force includes the gravity component of
+the attitude, so a pitch change is felt as a lean as it is in the seat.
+A vibration of the picture (translational lift, vortex ring, stall, touchdown)
+was written and taken out again before release: a shaking view made the
+picture harder to read.
+
+HAPI (ICAO Annex 14 Vol. II): one light at the field pad (14 m west of the
+H, 0.45 m up), aimed along the approach from the south, visible within 15°
+of the 360° course and beyond 30 m: above 6.375° flashing green (2 Hz),
+5.625 to 6.375° green (the 45-minute on-slope sector), 5.375 to 5.625° red
+(15 minutes), below flashing red. 6° is the phantom's approach. Drawn as a
+point light in the overlay, sized with the distance; its housing stands in
+the scene. Checked: 300 m out at 6.49°, 5.93° and 5.28° it shows above,
+on and below.
+
+## The engine start and the pitch channel's delay (2.16)
+
+The start as flown, per engine (35_fenestron.js `engSwitch`, `engBrake`;
+keys in 80_input.js): a main switch OFF – IDLE – FLIGHT. IDLE from OFF
+starts the engine with the starter (N1 0 to 62 % in 25 s, light-off at
+12 %); the TOT follows a first-order lag (1 s up, 2.5 s down, 40 s cooling
+when off) towards a curve that rises at light-off, peaks near 740 °C at
+about 32 % N1 and settles at 480 °C at idle; running, it rises with power
+to about 820 °C at take-off power. With no engine in FLIGHT the governor
+holds a ground-idle 70 % NR; an idle engine beside one in FLIGHT gives
+idle power only. The run-up keeps the torque cap below 60 % NR. The rotor
+brake takes 5 % NR a second down to standstill, is refused with an engine
+running or above 50 % NR, and comes off by itself when code starts an engine
+directly (the old `engStart`, which tests use). These figures are the
+typical shape of a small turboshaft's start, not the type's flight-manual
+figures: a hot or hung start, the TOT limits and the idle
+speeds of the P2+ are open (TODO). Measured from a cold reset with
+`Shift`+`E`: engine 1 at idle after 25 s (TOT peak 728 °C at 15 s), engine 2
+at idle at 50 s, 100 % NR at about 80 s.
+
+Pitch: `H.lonDelay` 25 ms, a ring of the last commands in the longitudinal
+channel only, before the servo lag. DLR's identified models of the EC135
+(Seher-Weiss and von Grünhagen, CEAS 2007) need the lead-lag dynamics in
+pitch: the regressive lag mode at about 11.7 rad/s shows as a dipole in
+q/δx; with flapping and inflow alone their models miss the phase at high
+frequency. This model's lag is rigid. The delay stands in for that and is
+fitted to the published phase delay: 93 ms against 92 (70 without; 40 ms
+gave 107). The bandwidth moves only from 3.01 to 2.85 rad/s against 1.84:
+the open deviation stays where 2.3 traced it, in the short period.
 
 ## Project layout
 
@@ -1517,7 +1997,9 @@ takes to reach the tail, and the pitch inertia (an estimate). DLR has
 identified the type's derivatives against speed (Seher-Weiss, JAHS 2019,
 Fig. 13) but publishes them only as plots. Fitting a pitch lag or the
 stabiliser to the bandwidth without such a source would make a CAL row out
-of a guess, so the row stays KNOWN (bound 3.3 rad/s).
+of a guess, so the row stays KNOWN (bound 3.3 rad/s). (2.16: the phase delay
+is now fitted with a 25 ms equivalent delay, on the strength of DLR's
+identified lead-lag dynamics in pitch; the bandwidth row stays KNOWN.)
 
 ## Validation (1.8)
 

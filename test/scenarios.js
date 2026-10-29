@@ -124,9 +124,9 @@ console.log('\n■ C3 collective changes in cruise (100 kt, aids on): unwanted r
     100 kt; there the fin's force needs more reverse fan thrust than the right stop gives (Airbus IN 3540: more
     negative thrust at full pedal in autorotation; at 65 kt it fits inside the stop), so the pedal saturates and
     the ball cannot stay centred: a looser bound, and the stop is checked to be the reason. */
- for(const k of ['KeyW','KeyS']){const F=mk('cruise');const a=st(F),b0=beta(F);let phi=0,b=0,dpsi=0,pmax=-1;pipe(F,8,t=>{key(F,k,t<1.5);},(t,s)=>{phi=Math.max(phi,Math.abs(s.phi-a.phi));b=Math.max(b,Math.abs(beta(F)-b0));dpsi=Math.max(dpsi,Math.abs(((s.psi-a.psi+540)%360)-180));pmax=Math.max(pmax,F.S.ctl.ped);});
+ for(const k of ['KeyW','KeyS']){const F=mk('cruise');const a=st(F),b0=beta(F);let phi=0,b=0,dpsi=0,pmax=-1;pipe(F,8,t=>{key(F,k,t<2.0);},(t,s)=>{phi=Math.max(phi,Math.abs(s.phi-a.phi));b=Math.max(b,Math.abs(beta(F)-b0));dpsi=Math.max(dpsi,Math.abs(((s.psi-a.psi+540)%360)-180));pmax=Math.max(pmax,F.S.ctl.ped);});
   const dump=k==='KeyS',lab=dump?'(cruise → lever down, autorotation entry)':'(cruise → take-off power)';
-  row(`${k} 1.5 s at 100 kt ${lab}: sideslip change`,b.toFixed(1)+'°',b<(dump?5:3),dump?'the pedal anticipation follows the torque; the ball goes once the pedal is at the stop':'pedal anticipation keeps the ball');
+  row(`${k} 2 s at 100 kt ${lab}: sideslip change`,b.toFixed(1)+'°',b<(dump?5:3),dump?'the pedal anticipation follows the torque; the ball goes once the pedal is at the stop':'pedal anticipation keeps the ball');
   if(dump)row('… right pedal reached','' +pmax.toFixed(2),pmax>0.97,'the stop: at 100 kt the fin needs more reverse thrust than the stop gives');
   row(`${k} … heading change`,dpsi.toFixed(1)+'°',dpsi<6,'cruise heading hold through the roll axis');row(`${k} … bank used for it`,phi.toFixed(1)+'°',phi<7,'small');}}
 console.log('\n■ C4 one engine fails in the hover: can the keys reach the 30-second OEI power?');

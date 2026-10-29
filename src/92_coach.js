@@ -70,7 +70,17 @@ function coachStep(dt){
   A.pOnly=true;const o=apStep(dt,A);
   const lk={lon:axisHeld('lon'),lat:axisHeld('lat'),ped:axisHeld('ped'),col:axisHeld('col')};
   const raw={lon:sat(o.lon,1),lat:sat(o.lat,1),ped:COACH.yawFree?0:sat(o.ped,1),col:sat(o.col-0.50,0.5)};
+  /* (2.13.1) Under the rate command (forward flight) the stick that brings the attitude is a deflection that
+     dies away as it arrives, not a held offset: where the stick should be is the correction scaled to a
+     rate (about 1 s to close an attitude error), and the cue is the way from the stick to there. */
+  if(SAS.mode==='att'&&SAS.rc){raw.lon=sat(0.65*o.lon,1)-(IN.raw.lon-(SAS.rcL||0));raw.lat=sat(0.27*o.lat,1)-(IN.raw.lat-(SAS.rcR||0));}
+  /* (2.16.2) The collective against where the vertical speed is going, not where it is. The lever sets a vertical
+     speed that arrives over 3 to 4 s; a cue on the present one kept asking for more lever while the aircraft was
+     already about to stop sinking, and turned round with every swing. With the predictor's 6-s vertical speed
+     (PRED.vsTr) it asks only for what the lever still lacks. */
+  if(PRED.vsTr!=null&&!onGround){const vsC=A.alt!==null&&A.alt!==undefined?clamp((A.alt-S.alt)*0.25,-5,5):(A.vs||0);raw.col=sat(0.03*(vsC-PRED.vsTr),0.5);}
   for(const k in raw){const v=lk[k]?0:raw[k];c[k]+=(v-c[k])*Math.min(1,dt*6);}   // smoothed: an instructor does not twitch
+  coachColDir();
   COACH.alive=true;
   /* hint, by priority, with hold time: a short word for the screen, a sentence for the voice */
   let hint='',long='',lvl=0;
@@ -99,11 +109,18 @@ function coachStep(dt){
    the control this way (gold on the way to a click-to-fly target), red =
    rotor limit, white = where you are. */
 const COACH_GREEN='#49e36b';
+/* (2.16.2) the collective arrow's direction with hysteresis: shown above 0.06, gone below 0.035, and turned round
+   only after it has been shown for 0.6 s (it could flip within a fifth of a second) */
+function coachColDir(){const v=COACH.cue.col||0,d=COACH.colDir||0,now=S?S.t:0;
+  if(!d){if(Math.abs(v)>0.06){COACH.colDir=Math.sign(v);COACH.colT=now;}}
+  else if(Math.abs(v)<0.035||(Math.sign(v)!==d&&Math.abs(v)>0.06&&now-(COACH.colT||0)>0.6)){COACH.colDir=Math.abs(v)<0.035?0:Math.sign(v);COACH.colT=now;}
+  return COACH.colDir||0;}
+/* the legend for the first 20 s after switching on; on the hints' line (2.13.3: it lay at a fixed height, in the cockpit on the panel) */
+function coachLegend(x,W){if(!COACH.on||GUIDE.on||REPLAY.on||!S||S.t-COACH.legendT>=20)return;const y=hudSlotB(22);
+  x.font='12px "Arial Narrow",sans-serif';x.textAlign='center';x.fillStyle='rgba(13,12,10,0.7)';x.fillRect(W/2-250,y,500,22);x.fillStyle=COACH_GREEN;x.fillText('Coach: green arrow = move the stick this way · ring = target · red = rotor limit · K cycles',W/2,y+15);}
 function coachDraw(x,W,Hh){
   if((!COACH.on&&!GUIDE.on)||REPLAY.on)return;
   const CC=GUIDE.on?GUIDE_COL:COACH_GREEN;
-  // legend for the first 20 s after switching on
-  if(COACH.on&&!GUIDE.on&&S.t-COACH.legendT<20){x.font='12px "Arial Narrow",sans-serif';x.textAlign='center';x.fillStyle='rgba(13,12,10,0.7)';x.fillRect(W/2-250,Hh*0.86-50,500,22);x.fillStyle=COACH_GREEN;x.fillText('Coach: green arrow = move the stick this way · ring = target · red = rotor limit · K cycles',W/2,Hh*0.86-35);}
   if(!COACH.alive)return;
   const c=COACH.cue;
   const cx0=W/2,cy0=Hh/2-40;const sx=cx0+(DEV.mouse.armed?DEV.mouse.vx*110:0),sy=cy0+(DEV.mouse.armed?DEV.mouse.vy*110:0);
@@ -117,7 +134,7 @@ function coachDraw(x,W,Hh){
     x.font='bold 14px "Arial Narrow",sans-serif';x.textAlign='center';x.fillStyle='#0d0c0a';x.fillText(lab,ex+1,ey-19);x.fillStyle=CC;x.fillText(lab,ex,ey-20);}
   // collective and pedal arrows beside the controls box, with words
   const CF=hudCtlFrame(W,Hh),bx=CF.cx,by=CF.cy;x.save();x.scale(CF.s,CF.s);x.font='bold 12px "Arial Narrow",sans-serif';x.textAlign='center';   // on the control indicator: in the cockpit inside the panel's scale
-  if(Math.abs(c.col)>0.06&&!axisHeld('col')){const up=c.col>0,ax=bx+45,ay=up?by-44:by+40;x.fillStyle=CC;x.beginPath();x.moveTo(ax,ay+(up?-12:12));x.lineTo(ax-8,ay);x.lineTo(ax+8,ay);x.closePath();x.fill();x.fillText(up?('collective in'):('collective out'),ax,up?ay-18:ay+26);}
+  if(COACH.colDir&&!axisHeld('col')){const up=COACH.colDir>0,ax=bx+45,ay=up?by-44:by+40;x.fillStyle=CC;x.beginPath();x.moveTo(ax,ay+(up?-12:12));x.lineTo(ax-8,ay);x.lineTo(ax+8,ay);x.closePath();x.fill();x.fillText(up?('collective in'):('collective out'),ax,up?ay-18:ay+26);}
   if(Math.abs(c.ped)>0.1&&!axisHeld('ped')){const d=c.ped>0?1:-1,ax=bx+100+d*56,ay=by+26;x.fillStyle=CC;x.beginPath();x.moveTo(ax+d*14,ay);x.lineTo(ax,ay-8);x.lineTo(ax,ay+8);x.closePath();x.fill();x.fillText(d>0?('right pedal'):('left pedal'),bx+100+d*60,ay+24);}
   // ghost stick in the controls box: a ring where the stick belongs
   if(!(axisHeld('lon')&&axisHeld('lat'))){const gx=bx+(S.ctl.lat+c.lat)*28,gy=by-(S.ctl.lon+c.lon)*28;x.strokeStyle=CC;x.lineWidth=2;x.beginPath();x.arc(gx,gy,5,0,7);x.stroke();}
@@ -125,7 +142,7 @@ function coachDraw(x,W,Hh){
   // the word and the sentence
   if(COACH.hint){const lvl=COACH.hintLevel,flash=S.t-(COACH.flash||0)<0.4;x.textAlign='center';
     x.font='bold 20px "Arial Narrow",sans-serif';const tw=Math.max(x.measureText(COACH.hint).width,0)+40;x.font='13px "Arial Narrow",sans-serif';const lw=x.measureText(COACH.long).width+40;
-    const bw=Math.min(W-40,Math.max(tw,lw)),ty=TUTOR.on?Hh*0.86-110:86;
+    const bw=Math.min(W-40,Math.max(tw,lw)),ty=hudSlotT(52)+18;   // (2.13.3) in the top stack (90_hud.js), under the tutor and an incident
     x.fillStyle=lvl>=2?(flash?'rgba(255,59,31,0.95)':'rgba(255,59,31,0.85)'):(flash?(GUIDE.on?'rgba(255,184,26,0.95)':'rgba(73,227,107,0.95)'):'rgba(13,12,10,0.8)');x.fillRect(W/2-bw/2,ty-18,bw,52);
     x.font='bold 20px "Arial Narrow",sans-serif';x.fillStyle=lvl>=2||flash?'#0d0c0a':CC;x.fillText(COACH.hint,W/2,ty);
     x.font='13px "Arial Narrow",sans-serif';x.fillStyle=lvl>=2||flash?'#0d0c0a':HUD_COL.ink;x.fillText(COACH.long,W/2,ty+22);}
@@ -158,9 +175,11 @@ function aimMove(dx,dy,sx,sy){if(AIM.locked){AIM.x=clamp(AIM.x+dx,0,R3.w);AIM.y=
 function aimWheel(dy){AIM.wacc+=dy;while(Math.abs(AIM.wacc)>=80){const s=Math.sign(AIM.wacc);AIM.hi=clamp(AIM.hi-s,0,AIM_FT.length-1);AIM.wacc-=s*80;}}
 /* the spot under a point of the view: in the plan view, or where the line of sight meets the ground */
 function aimPick(sx,sy){
-  if(cfg.hud&&cfg.predict&&typeof SCOPE!=='undefined'&&SCOPE.cur){const L=PANEL.lay,[cx,cy,R]=L?[L.nav.plan.cx*L.s,L.nav.plan.cy*L.s,L.nav.plan.R*L.s]:cfg.view==='cockpit'?[-1e4,-1e4,0]:hudPlanPos(R3.w,R3.h);
+  if(cfg.hud&&cfg.predict&&typeof SCOPE!=='undefined'&&SCOPE.cur){const L=PANEL.lay,[cx,cy,R]=L?[L.nav.plan.cx*L.s,L.nav.plan.cy*L.s,L.nav.plan.R*L.s]:cfg.view==='cockpit'?[-1e4,-1e4,0]:(()=>{const sB=hudSB(R3.w),p=hudPlanPos(R3.w/sB,R3.h/sB);return [p[0]*sB,p[1]*sB,p[2]*sB];})();   // (2.14) the plan view in its scale
     if(Math.abs(sx-cx)<=R+8&&Math.abs(sy-cy)<=R+8){const k=R/SCOPE.cur.sc,al=-(sy-cy)/k,ac=(sx-cx)/k,c=Math.cos(S.eul[2]),s=Math.sin(S.eul[2]);return {n:S.pos[0]+al*c-ac*s,e:S.pos[1]+al*s+ac*c,src:'plan'};}}
-  if(cfg.view==='cockpit'&&HUD.panelA>0.5&&sy>HUD.panelTop)return null;   // the instrument panel
+  if(cfg.view==='cockpit'&&HUD.panelA>0.5&&sy>HUD.panelTop){   // the instrument panel; (2.12) under a lifted panel the floor, but the chin windows
+    const L=PANEL.lay,inQ=q=>{let sg=0;for(let i=0;i<4;i++){const a=q[i],b=q[(i+1)%4],c=(b[0]-a[0])*(sy-a[1])-(b[1]-a[1])*(sx-a[0]);if(c){if(sg&&Math.sign(c)!==sg)return false;sg=Math.sign(c);}}return true;};
+    if(!(HUD.panelUp>0&&L&&sy>(L.t+PNL_H)*L.s&&chinQuads(0).some(inQ)))return null;}
   const c=R3.cam;if(!c.f)return null;const r=vnorm(vcross(c.f,c.u)),uu=vcross(r,c.f),ty=Math.tan(c.fov/2),tx=ty*R3.w/R3.h,xn=sx/R3.w*2-1,yn=1-sy/R3.h*2;
   const d=vnorm(vadd(c.f,vadd(vscl(r,xn*tx),vscl(uu,yn*ty)))),under=t=>{const p=vadd(c.pos,vscl(d,t));return p[2]>=-terrainH(p[0],p[1]);};
   let t0=0.3,t=0.3;if(under(t0))return null;
@@ -173,7 +192,7 @@ function aimClick(btn){
   const p=aimPick(AIM.x,AIM.y);if(!p){afcsNote('Click to fly: point at the ground or into the plan view');return false;}
   return guideSet(p.n,p.e,aimH());}
 /* why click to fly would not lead now ('' when it would) */
-function guideCheck(){return TUTOR.on?'stop the tutor lesson first (Q)':UI.apDemo?'end the V demonstration first':REPLAY.on?'not during the replay':S.crash?'reset first (R)':'';}
+function guideCheck(){return TUTOR.on?'stop the tutor lesson first (Shift+Q)':UI.apDemo?'end the V demonstration first':REPLAY.on?'not during the replay':S.crash?'reset first (R)':'';}
 function guideSet(n,e,h){
   const why=guideCheck();if(why){afcsNote('Click to fly: '+why);return false;}
   const ap=afcsAny();if(ap)afcsOffAll();   // the pilot flies: the autopilot lets go of every control, without a bump
@@ -274,5 +293,5 @@ function aimDraw(x){
   const why=p?guideCheck():'',txt=p?(why?why:`fly here · ${guideDist(Math.hypot(p.n-S.pos[0],p.e-S.pos[1]))} · ${guideHText(aimH())}`):'no ground here';x.font='bold 12px "Arial Narrow",sans-serif';const tw=x.measureText(txt).width;
   x.fillStyle='rgba(13,12,10,0.75)';x.fillRect(X+14,Y+12,tw+12,20);x.fillStyle=p&&!why?col:why?HUD_COL.amber:'rgba(232,226,214,0.8)';x.textAlign='left';x.fillText(txt,X+20,Y+22);
   const hint='CLICK TO FLY · click a spot on the ground or in the plan view · wheel: height'+(GUIDE.on?' · right-click: clear the target':'')+' · release M to cancel';x.font='13px "Arial Narrow",sans-serif';const hw=x.measureText(hint).width;
-  x.fillStyle='rgba(13,12,10,0.75)';x.fillRect(W/2-hw/2-10,70,hw+20,22);x.fillStyle=col;x.textAlign='center';x.fillText(hint,W/2,81);
+  const ay=hudSlotT(22);x.fillStyle='rgba(13,12,10,0.75)';x.fillRect(W/2-hw/2-10,ay,hw+20,22);x.fillStyle=col;x.textAlign='center';x.fillText(hint,W/2,ay+11);   // (2.13.3) in the top stack
   x.restore();}

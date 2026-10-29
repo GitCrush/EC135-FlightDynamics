@@ -96,18 +96,36 @@ function fenStep(f,st,dt,vb,om,wb,rho,aSound,OmMain,ped,wake,s){
    the transmission clamps the sum. Power reaches the rotor through a
    freewheel: torque flows only in the driving direction, so with the
    engines at idle or dead the rotor is free to autorotate. */
-function engState(e){const a=[];for(let i=0;i<e.n;i++)a.push({P:0,cmd:0,on:true,fail:false,N1:0,startT:0});return {e:a,int:0,mode:'twin',fli:0,limit:'',Qdrive:0,Qmast:0,Pavail:0,Pdemand:0,Pmcp:1,P2:1,Ptop:1,tAbove:0,tAbove30:0,oeiT:0};}
+function engState(e){const a=[];for(let i=0;i<e.n;i++)a.push({P:0,cmd:0,on:true,fail:false,N1:0,startT:0,sw:'flight',TOT:500,dir:-1});return {e:a,brake:false,oat:15,int:0,mode:'twin',fli:0,limit:'',Qdrive:0,Qmast:0,Pavail:0,Pdemand:0,Pmcp:1,P2:1,Ptop:1,tAbove:0,tAbove30:0,oeiT:0};}
 /* Start: the starter brings N1 to idle in about 25 s, the FADEC then
    governs NR up; the drive torque at low rotor speed is capped by what
    the turbine can deliver through the freewheel, which is what makes a
    rotor run-up take the better part of a minute. */
-function engStart(st){for(const en of st.e){if(!en.on&&!en.fail){en.on=true;en.startT=25;en.N1=0;}}}
-function engStop(st){for(const en of st.e){en.on=false;en.startT=0;}}
+function engStart(st){st.brake=false;for(const en of st.e){if(!en.on&&!en.fail){en.on=true;en.startT=25;en.N1=0;en.sw='flight';en.dir=-1;}}}
+function engStop(st){for(const en of st.e){en.on=false;en.startT=0;en.sw='off';en.dir=1;}}
+/* (2.16) The start as flown. Each engine has its main switch, OFF - IDLE - FLIGHT. IDLE from OFF starts it:
+   the starter turns it up, it lights at about 12 % N1, the turbine outlet temperature (TOT) peaks during the
+   acceleration and settles at ground idle (N1 62 % here) after about 25 s. With no engine in FLIGHT the
+   FADEC holds the rotor at a ground-idle speed (70 % NR here); FLIGHT runs it up to 100 %. One engine
+   after the other: the second is started once the first is at idle. The rotor brake holds the rotor
+   stopped after a cold reset; no start with it on, and it is applied only with the engines off and the
+   rotor below 50 % NR. The figures (idle N1 and NR, the TOT curve: about 480 °C at idle, a peak near
+   740 °C in the start, about 820 °C at take-off power) are the typical shape of a small turboshaft's
+   start, not the type's flight-manual values. Returns '' or why not. */
+function engSwitch(st,i,to){const en=st.e[i];if(!en)return 'no engine';
+  if(to==='idle'&&!en.on){if(en.fail)return 'failed';if(st.brake)return 'brake';en.on=true;en.startT=25;en.N1=0;en.sw='idle';return '';}
+  if(to==='idle'){en.sw='idle';return '';}
+  if(to==='flight'){if(!en.on)return 'off';en.sw='flight';return '';}
+  if(to==='off'){en.on=false;en.startT=0;en.sw='off';return '';}
+  return '?';}
+function engBrake(st,on,NRpct){if(!on){st.brake=false;return '';}if(st.e.some(x=>x.on&&!x.fail))return 'engines';if(NRpct>50)return 'nr';st.brake=true;return '';}
 function engStep(e,st,dt,NRpct,Pload,dCol,colRate,Pcap,lapse){
   const kL=lapse===undefined?1:lapse;st.lapse=kL;   // above 1 (cold, low) the transmission limits
-  const err=100-NRpct;
   for(const en of st.e)if(en.startT>0)en.startT-=dt;
+  if(st.brake&&st.e.some(x=>x.on&&!x.fail))st.brake=false;   // an engine turning: the brake is off (a start sets the switch only with it off)
   const nRun=st.e.filter(x=>x.on&&!x.fail&&x.startT<=0).length;
+  const nFlight=st.e.filter(x=>x.on&&!x.fail&&x.startT<=0&&x.sw!=='idle').length;   // (2.16) IDLE: the FADEC holds ground idle
+  const err=(nFlight||!nRun?100:70)-NRpct;st.nrTgt=nFlight||!nRun?100:70;
   const nStart=st.e.filter(x=>x.on&&!x.fail&&x.startT>0).length;
   st.mode=nRun===2?'twin':nRun===1?'oei':nStart?'start':'off';
   /* Available power per rating: the smaller of the turbines' thermodynamic
@@ -134,14 +152,16 @@ function engStep(e,st,dt,NRpct,Pload,dCol,colRate,Pcap,lapse){
   if(Pcap!==undefined&&cmd>Pcap){st.int-=err*dt*e.ki;cmd=Pcap;}   // run-up schedule
   if(cmd<e.idle*nRun)cmd=e.idle*nRun;
   st.Pdemand=cmd;
-  let Ptot=0;
+  let Ptot=0;const nIdle=nRun-nFlight,share=nFlight?Math.max(cmd-nIdle*e.idle,0)/nFlight:cmd/Math.max(nRun,1);
+  const oat=st.oat===undefined?15:st.oat,totT=(en,tgt)=>{en.TOT=(en.TOT===undefined?oat:en.TOT)+(tgt-(en.TOT===undefined?oat:en.TOT))*Math.min(1,dt/(tgt>en.TOT?1.0:en.on?2.5:40));};
   for(const en of st.e){
-    if(!en.on||en.fail){en.cmd=0;en.P=approach(en.P,0,dt*(en.fail?600e3:200e3));en.N1=Math.max(0,en.N1-dt*8);continue;}
-    if(en.startT>0){en.cmd=0;en.P=approach(en.P,0,dt*100e3);en.N1=lerp(0,62,1-en.startT/25);continue;}
-    en.cmd=clamp(cmd/Math.max(nRun,1),e.idle,perMax);
+    if(!en.on||en.fail){en.cmd=0;en.P=approach(en.P,0,dt*(en.fail?600e3:200e3));en.N1=Math.max(0,en.N1-dt*8);totT(en,en.N1>12?480*en.N1/62:oat);continue;}
+    if(en.startT>0){en.cmd=0;en.P=approach(en.P,0,dt*100e3);en.N1=lerp(0,62,1-en.startT/25);totT(en,en.N1<12?oat:480+260*Math.exp(-(((en.N1-32)/14)**2)));continue;}   // light-off at 12 %, the peak in the acceleration
+    en.cmd=clamp(nFlight&&en.sw==='idle'?e.idle:share,e.idle,perMax);
     const dP=clamp((en.cmd-en.P)/e.tau,-e.rate*3,e.rate);
     en.P+=dP*dt;
     en.N1=lerp(62,101,clamp(en.P/e.top,0,1.05));
+    totT(en,480+340*clamp(en.P/e.top,0,1.1));
     Ptot+=en.P;
   }
   /* First limit indicator, one scale for whichever limit is closer:

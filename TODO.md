@@ -34,7 +34,7 @@ Calibration (rotor, controls, stabiliser now from ERF 1997; still open)
 Physics
 - Blade pitch-flap coupling and swashplate phase as measured values.
 - Fenestron: interference with the fin in left sideward flight.
-- Start-up: N1/TOT indication, rotor brake, one engine at a time.
+- Start-up (2.16 has the switches, N1/TOT and the rotor brake): the type's own idle speeds and TOT limits from the flight manual; a hot or hung start.
 - Turbulence intensity scaled with the wind profile near the ground.
 
 Trainer
@@ -48,8 +48,6 @@ Trainer
   checks, since 2.9).
 - Cockpit panel: the copilot's side (left) is not drawn; the P2+ panel's lower row (clock, standby
   instruments, switches) is left out for room.
-- HUD at window widths below ~1000 px: the plan view, the rotor-state map and the control
-  indicator overlap (the height profile is left out there).
 - Phantom for more exercises (quick stop, pedal turns), scoring against it.
 - Slope-landing critical angle displayed.
 
@@ -58,11 +56,17 @@ Scene
 - Cockpit: the instrument panel is a flat texture; bezels, knobs and the overhead console
   in 3D; a canopy reflection at low sun.
 - Downwash: snow and sand surfaces; rotor-tip vortices in humid air.
-- Runway numbers, PAPI for the approach exercise, night lighting.
+- Runway numbers, night lighting (a HAPI at the field pad since 2.15).
 - The world (2.9): the wind does not follow the terrain (no lee turbulence or downdraught behind the
   Kuppe, no gusts round the town's towers); no rain, no cloud to fly into; traffic on the roads does
   not stop for anything.
-- Instancing for the forests (ANGLE_instanced_arrays) to allow denser
-  woods on weak GPUs.
+- Approach view (2.12): the chin windows' outline is an estimate from photographs; on integrated
+  GPUs it dropped frames in 2.12.2; 2.12.4 draws the chin windows at half resolution, and the
+  setup's performance test measures it: numbers from an integrated GPU are still missing.
+  After a departure from the hover that stays low and slow, the next stop has no hint until the
+  aircraft has been away.
 
 - Tail drive failure as a guided exercise (the failure and its panel button exist).
+- Head tracking (2.13): the turn and nod from six key points; a face mesh would give the head's pose
+  directly (MediaPipe's landmarker, 3.7 MB) and the lean too. Tested only with a fake camera playing
+  a face, not with a live one.

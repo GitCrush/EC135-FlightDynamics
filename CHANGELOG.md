@@ -1,5 +1,128 @@
 # Changelog
 
+## 2.16.3 — 2026-10-29 · A vertical speed scale you can read
+
+- **The vertical speed bar becomes a scale**, under the altitude box, as on a glass cockpit's VSI: labelled in fpm (0, 500, 1000, 2000 up and down; the first 500 fpm take half of it, so a hover's small changes are readable and a descent is still on it), a white pointer with the value in a box, and the 6-s mark as a cyan bug with its value ("in 6 s +330") and an arrow from the pointer to it, which shows which way the vertical speed is going and how far with the controls held. A legend under it: white now, cyan in 6 s. Within ±20 fpm it reads 0 in grey; a sink beyond 800 fpm below 100 ft turns it amber. The bar of 2.13.2 to 2.16.2 had no numbers and filled green or amber from the middle.
+- The altitude box shows the barometric altitude under the radar altitude again; the vertical speed has moved to the scale.
+
+## 2.16.2 — 2026-10-29 · Calmer green displays
+
+- **The vertical speed bar at the right edge** (green up = climbing, amber down = sinking) is linear up to 100 fpm and only above that on the square-root scale of 2.13.2, smoothed over a quarter second, and grey within ±20 fpm. The pure square root made 10 fpm 5.5 px, so the small ups and downs of a hover flipped it between green and amber all the time.
+- **The coach's green arrow at the collective** ("collective in" up, "collective out" down) now judges the lever by where the vertical speed is going (the 6-s mark), not by where it is: it asked for more lever while the aircraft was already about to stop sinking, and turned round with every swing. It comes at 0.06 and goes below 0.035 of lever, and turns round only after 0.6 s.
+
+## 2.16.1 — 2026-10-29 · No wind unless chosen, no drift behind the welcome card
+
+- **The welcome card no longer asks for a level**: the first start is *Beginner*, as before 2.14; the setup's *Level* changes it.
+- **The levels no longer set a wind.** The air is calm unless a wind is chosen in the setup's wind block; settings saved by 2.14 to 2.16 lose the wind a level had set.
+- **Nothing moves behind the welcome card.** A level picked there used to switch the wind at once into the trimmed hover waiting behind the card (14 kt into an aircraft trimmed for calm air: 7 m/s of drift within 5 s), and *Fly free* handed over a drifting aircraft. Now the simulation holds while the card is shown and *Fly free* trims anew.
+- **Trimmed in the mean wind**: turbulence and gusts are held off while the autopilot trims and start from nothing at the hand-over, so an aircraft is not handed over in a gust (14 kt gusty, aids on: 0.2 m/s after 2 s hands off).
+- A weather chosen in flight eases in at 2 kt a second instead of switching.
+
+## 2.16.0 — 2026-10-29 · The start as flown, and the pitch channel's delay
+
+- **Engine start by hand.** Each engine has its main switch, OFF – IDLE – FLIGHT (`Shift`+`1`, `Shift`+`2` move it a step, and back down from FLIGHT), and the rotor has its brake (`Shift`+`B`; on after a cold reset, no start with it on, applied only with the engines off and below 50 % NR). IDLE from OFF starts the engine: the starter turns it, it lights at about 12 % N1, the TOT peaks during the acceleration and settles at ground idle after 25 s; with no engine in FLIGHT the rotor turns at a ground-idle 70 %; FLIGHT runs it up to 100 %. One after the other, as flown. `Shift`+`E` does the whole sequence (brake off, engine 1, engine 2 once the first is at idle, both FLIGHT; running: both IDLE, again: OFF). The VEMD shows each engine's switch (START, IDLE, FLT), N1 and TOT, and BRAKE. The idle speeds and the TOT curve are a small turboshaft's typical shape, not the type's flight-manual figures.
+- **Pitch: an equivalent delay of 25 ms in the longitudinal channel.** DLR's identified EC135 models need the lead-lag dynamics in pitch (the regressive lag mode near 11.7 rad/s, CEAS 2007), which this model does not have. With it the pitch phase delay at 75 kt is 93 ms (published 92; 70 before) and the row is calibrated; the pitch bandwidth stays quicker than published (2.85 against 1.84 rad/s), an open deviation.
+- Browser test: the start by hand.
+
+## 2.15.0 — 2026-10-29 · The seat and the glide slope
+
+- **Motion cues: the head moves with the accelerations.** A pilot feels the lever before any instrument shows it: 0.025 g in the seat per 1 % in the hover. The view now does what a head does in the seat, smoothly and briefly (washed out over 0.8 s, so a steady turn or climb leaves it centred): a little lower and a nod down when the lever comes up (6 % of lever: 1.6 cm and 0.23°), forward in a deceleration, sideways in a skid. No shaking of the picture: a rotor vibration in the view was tried and left out. Setup › View: *Motion cues* off / subtle (default) / full; the *Realistic* level uses full.
+- **HAPI at the field pad**: the helicopter approach path indicator of the ICAO Annex 14 heliports, a light 14 m west of the H, seen within 15° of the approach course from the south: flashing green above the 6° slope, steady green on it (45 minutes of arc), red slightly below (15 minutes), flashing red below. From the approach exercises' start (900 m south, 500 ft) it flashes green.
+
+## 2.14.0 — 2026-10-29 · Settings that stay, levels, a stick fitted to the pad
+
+- **The settings stay in the browser.** Until now only the graphics and the gamepad's mapping survived a reload; the mouse travel, the aids, the view, the wind, the coach and the displays started over every time. Saved once a second when something changed (and when the page is left), never during a lesson or the performance test. *Reset all settings* in the setup starts over.
+- **Levels (profiles)** on the welcome card and at the top of the setup: *Beginner* (every aid, the coach's cues, the predicted path, calm air), *Intermediate* (the aids without the coach, a light breeze), *Realistic* (rate damping only: no attitude command, no heading hold, no coach, no predictor or rotor map, a gusty 14 kt). A setting changed by hand makes it *Custom*.
+- **Weather presets** in the wind block: calm, breeze 8 kt, gusty 14 kt, strong 22 kt (turbulence and gusts with them; the direction stays).
+- **The stick fitted to the mouse pad.** On the first capture of the mouse the aircraft waits while the hand sweeps the mouse once from the pad's left edge to its right edge; full stick is then 45 % of that width, just inside the edges. The fixed 1600 px were 2 cm of mouse at 2000 dpi and 5 cm at 800. The card also names where the system's pointer acceleration is switched off. Enter skips; the setup has it again.
+- **A lesson keeps your settings**: it sets its own aids, key models and calm air, and gives yours back when the tutor stops (until now the lesson's settings stayed).
+- **Narrow windows** (chase and tower view below 1000 px): the bottom group (rotor speed and FLI, the controls, plan view and profile, the rotor map) is scaled down instead of overlapping, the hints' line sits above it, and the autopilot's key hint gives way to the heading tape.
+- README: the joystick with a throttle lever as the best upgrade.
+
+## 2.13.3 — 2026-10-29 · Boards that do not overlap
+
+- **The boards stack instead of lying on one another.** At the top centre, downwards from under the heading tape: the tutor, the keys' hint at the start, the incident banner, the coach's word and sentence, click to fly. On the hints' line, upwards from the panel: sound, head tracking, the mouse, looking around or the demonstration, the approach view, the coach's legend. In the middle around the centre: paused, crash, debrief. Before, the incident banner lay on the coach's box at the top (both at a fixed height), the coach's legend in the cockpit on the panel, the debrief on the crash box.
+- **At the start, for 12 s:** a pulsing hint "? or F1 – all keys and shortcuts" (gone once the list was opened). `?` now works on every keyboard layout (German: Shift+ß); F1 as before.
+- **The mouse and the pointer acceleration:** with the system's acceleration a quick move out and a slow one back do not meet, and the stick creeps. On the first capture of the mouse a hint says where to switch it off on this system (GNOME, KDE, Windows, macOS, ChromeOS). Chrome on Windows, macOS and ChromeOS gets the raw movement itself (Pointer Lock's unadjustedMovement) and the hint confirms it instead.
+- The paused screen named P to continue; it is Space (P is the predictor).
+
+## 2.13.2 — 2026-10-28 · The collective: set it, then wait
+
+The question: holding a height or a steady descent took the lever back and forth all the time. Measured in the model: left alone, the lever holds (the hover at 3 m within 0.2 m over 2 min, at 100 kt within ±15 fpm after half a minute); it sets a vertical speed that settles with a time constant of about 4 s (1 % ≈ 130 fpm in the hover). The aircraft needs small corrections and patience; the pilot feels the vertical acceleration in the seat at once, the screen shows only a vertical speed that is 22 % there after 1 s. That is the loop that chases.
+
+- **A mark where the vertical speed will be in 6 s**, controls held, from the motion predictor: a blue triangle on the VSI's rim and beside the HUD's vertical speed bar, and "→ +240" in the ALT box (before a predicted touchdown, the sink just before it). It moves with the lever at once: set the lever by the mark, then leave it. Within 2 fpm of the flown result after a lever step.
+- **The HUD's vertical speed bar on a square-root scale** (100 fpm is 17 px instead of 4), below the ALT box.
+- **`W` / `S` dose evenly**: for 0.6 s the lever moves at 2.5 %/s (about 320 fpm a second in the hover), then faster up to the full rate by 2 s. 0.5 s of `W` is 1.3 % (was 2 %), 1 s 3.2 % (was 12 %).
+- The tutor's hover lesson points at the mark.
+
+## 2.13.1 — 2026-10-28 · The cyclic at speed
+
+The question: a turn, a reversal or a flare took far more mouse than it should. Measured in the model at 100 kt (a pilot model, the same manoeuvres flown smoothly, gains searched per law): with the attitude command a 30° turn held 1,340 px of mouse (85 % of the stick) for the whole turn, a reversal went 2,700 px from one side to the other, a 10° flare held 950 px aft. The bare aircraft needs 140 to 340 px held: it is a rate device, the stick goes out and comes back. The attitude command is right for the hover, not for manoeuvring at speed.
+
+- **Rate command, attitude hold above 45 kt** (back below 35 kt): the stick rolls or pitches the aircraft at about the bare aircraft's rates (linear beyond a 3 % dead centre; 20 % of stick about 16°/s of roll, 90°/s at the stop; 40°/s of pitch at the stop), the centred stick holds the attitude it has. A turn is a push and back to the centre, a reversal one push the other way, a flare a pull. Measured: the hand stays within 380 px in the turn (1,350 before), 630 in the reversal (1,400), 310 in the flare (1,030); the travel halves and matches the bare aircraft. In the hover the attitude command stays.
+- Bumpless both ways: accelerating through 45 kt with the stick still forward, the nose stays where it is and the stick's position is the new centre until the hand brings it back; slowing through 35 kt, the attitude command takes over the attitude you have and eases to the hover trim.
+- With the wings within 4° of the trim bank and the stick centred, the wings level and the heading hold takes over. `Shift` + arrows move the held attitude, `Y` eases it to the hover trim. The coach's stick arrow at speed shows the push, not a held offset. The mouse box shows "rate command · centre holds" with a ring at the centre.
+- Setup: *Cyclic in forward flight* (rate command, or the attitude command as until 2.13).
+
+## 2.13 — 2026-10-28 · Seeing out
+
+How pilots hover: eyes out, a point some 15 m ahead; the attitude from the horizon against the frame; the drift from the ground in the corner of the eye; a glance out of the door window, hands on the controls. A flat screen takes the frame, the corner of the eye and the free head away; the large simulators give the head back with TrackIR or a webcam (opentrack, AITrack), VR or several monitors, and without them with glance views on a hat switch.
+
+- **The cockpit frame as the attitude reference**: thin lines of the windscreen's centre post, the pillars, the roof bow and the doors, projected from the airframe; the horizon against them shows bank and pitch as in the aircraft. Setup: *Cockpit frame*.
+- **Glances**: `Q` and `E` held look out of the left and right door window at the ground beside the skid (70° to the side, 25° down); the mouse keeps flying (unlike `C`). The engines move to `Shift`+`E`, the tutor's quit to `Shift`+`Q`.
+- **Head tracking by webcam** (`Shift`+`Z`, setup: start, centre, gains): MediaPipe's face detector finds six points of the face 20 times a second on the processor; the nose between the ears gives the turn, between the eyes and the mouth the nod; One Euro filtered, 2° dead zone, gains 3.5 (turn) and 2.5 (nod). The camera picture stays in the browser; the library (about 10 MB) comes from jsDelivr on the first start, the model (230 kB) is in the file. It needs the HTML file opened directly in the browser: an embedded page gets no camera.
+- **The approach view without chin windows** by default: the gaze 15° lower, the panel where it is, nothing more to draw. The chin windows are a setup option.
+
+## 2.12.8 — 2026-10-27 · The approach view on weaker graphics
+
+- **The floor round the chin windows without a special compositing mode.** It was drawn and then cut open with 'destination-out' on the overlay canvas; a canvas drawn by the GPU may do that one mode on the processor and read the whole overlay back every frame for it. Now the floor is one path with the two openings as holes (even-odd fill).
+- **The windows' picture every other frame when frames come late**: if the approach view runs under 50 frames per second for 2 s, the chin windows are redrawn every second frame and the last picture is shown in between.
+- Windsocks and wind turbines out of view are no longer drawn (also in the normal view).
+- **Frames per second in the side panel's GL line**, and when the approach view is switched, the rate before and 3 s after ("approach view on: 58 → 52 fps") in the key line and the GL line.
+
+## 2.12.7 — 2026-10-27 · A finer collective
+
+- **The collective no longer jumps.** Checked against the physics first: from the hover out of ground effect (2500 kg) 1 % of lever (0.145° of blade pitch) gives 135 fpm of steady climb (momentum theory: 140 fpm, about 1000 fpm per degree), reached with a time constant of 3.5 s (ADS-33 Level 1: at most 5 s), and 0.025 g at once. The rotor's response was right; the inputs were coarse: one wheel notch moved the lever 4 % in Chrome on Windows (about 500 fpm and a 0.1 g jolt), 2 % in Chrome on Linux, 0.1 % in Firefox; a tap on W or S 3 to 4 %. A hover held to ±50 fpm needs about 0.3 %.
+- **Wheel**: one notch is 0.4 % of the lever (about 55 fpm) in every browser (the delta normalised to notches); spun fast the steps grow up to four-fold.
+- **W / S**: a tap moves the lever 0.3 to 0.4 % (about 40 fpm); held, the rate rises to the full one within a second (full lever still in about 4 s). The throw down with the engines out or the rotor drooping stays immediate.
+
+## 2.12.6 — 2026-10-25 · Chin windows before the view
+
+- The chin windows are drawn before the view now, into their own picture, and laid in at the end. 2.12.4 drew them after the view, which switched away from the view's framebuffer and back in the middle of the frame: on many GPUs (Vulkan drivers, integrated graphics) that writes the whole multisampled picture out to memory and reads it back in, a cost that a software renderer does not show.
+- The version is shown in the setup's header and in the performance test's result, together with the browser and the system.
+
+## 2.12.5 — 2026-10-25 · A linear mouse
+
+- **The mouse stick is linear now.** Two curves were stacked: expo 1.5 on the mouse's virtual stick and the attitude command's own shaping (20° + 20° x stick³ of bank). Together the bank per 100 px of mouse movement grew from 0.2° around the centre to 7.4° at the stop, 35-fold: around the centre little happened, the hand went further, then it bit and overshot; a reversal from 10° of bank to 10° the other way took 1,800 px of mouse. Linear leaves the shaping to the attitude command alone: 1.25° to 5° per 100 px, the same reversal 1,360 px.
+- Setup, Input models: **Mouse curve** linear (default), mild (expo 1.25) or strong (the old expo 1.5), next to the mouse travel for full stick.
+
+## 2.12.4 — 2026-10-25 · Approach view by key, chin windows through glass
+
+- **No more automatic approach view.** It comes and goes only with `4`. The situation now gives a hint above the panel instead: on an approach, low and slow after the aircraft has been away, "4 Approach view: look down through the chin windows"; on a departure (after a landing, from the hover) with the view still on, "4 Back to the normal view for the take-off". Each hint shows for 8 s; pressing the key settles it. The setting is on/off.
+- **The chin windows through glass, at a quarter of the cost.** They are drawn at half the resolution with the light ground shader into a picture of their own and laid into the view through a glass: faintly tinted, a little less contrast, darker towards the frame, a sheen of the sky at the front edge. Through a real chin window the picture differs from the windscreen too. Under *full* graphics at full resolution and in the full shader.
+- The performance test's variant "approach, chin full" measures the windows at full quality.
+
+## 2.12.3 — 2026-10-24 · Lighter approach view, and a performance test
+
+- The approach view does less again, aimed at integrated graphics: the windscreen's pass now uses a projection that ends at the panel's top (nothing under the panel is even sent, in the normal cockpit view too); both chin windows are drawn in one pass, and only their own pixels are shaded (the floor round them is masked in the depth buffer); under *auto* graphics the windows' ground switches to the light shader when the approach view's frames come late.
+- **Performance test** in the setup (View): at the present place it draws the view eight ways for 2.5 s each (normal and approach view, the approach view without its windows and with light windows, light graphics, half the pixels) and gives frame interval, JavaScript time, GPU-finished time and overlay time as text to copy.
+
+## 2.12.2 — 2026-10-24 · The approach view without the frame-rate drop
+
+- **Massive frame-rate drops as soon as the approach view came in.** 2.12 drew the scene over the whole view, also behind the panel, and relied on the depth test to skip what the panel hides. The downwash's particles (dust, spray) slip past that test (their shader discards the sprites' corners), and in the hover, right under the eye, they are sprites of up to 256 pixels, hundreds of them, all shaded behind the panel. Now the view stops under the panel as the normal cockpit view does, and each chin window is drawn as a small pass of its own, only as large as the window, with only what is in it (ground, shadows, trees, nearby cars, the path; no sky, no particles). The pixels drawn are about those of the normal cockpit view.
+- Under the software renderer the approach view now costs +5 % in a dusty hover (2.12.1: +19 %), −8 % in spray (+17 %), +5 % over the pad (+25 %) against the normal cockpit view.
+- Tighter culling everywhere: the forest's tiles are tested as boxes (not only spheres), cars out of view are not drawn, trees throw shadows into the view only from its sun side. A fifth to a quarter fewer draw calls in the normal views too.
+
+## 2.12.1 — 2026-10-24 · Approach view on the approach only
+
+- The approach view now comes only on the approach, never on the take-off: there the lowered gaze took the horizon's picture away while the attitude is being set. It is armed once the aircraft has been above ~90 m or faster than ~55 kt (or a flight starts in the air, as the approach exercises do), and it goes back 2 s after touchdown, on a departure from the hover and on a go-around (climbing while speeding up). A flare or a correction climb in the hover keeps it. Hover exercises and the pad start in the normal view; `4` still holds it on or off.
+
+## 2.12 — 2026-10-24 · Approach view
+
+- **The approach view.** Low and slow (below ~60 m above the ground and ~40 kt) the gaze lowers by itself, as a pilot's does on short final and in the hover: the line of sight goes down to 25°, the view grows taller (75° instead of 62°), the instrument panel rises to where it hangs in the airframe, and under it the two **chin windows** in the floor of the nose come into view: the ground right in front of and under the skids, the pad's markings, the aircraft's shadow. The horizon stays at the top of the view. One picture with one projection, no head movement and no hand off the controls (looking around, `C`, needs one). It slides in and out over 1.5 s, once per approach. Key `4` and the setup: automatic, held, off. Click to fly picks through the chin windows too; the IAS and radar altitude boxes sit above the lifted panel.
+- A picture-in-picture view of the ground below (a small second camera in a corner) was tried first and dropped: a second pass of the scene to pay for, and a second picture to read instead of a view out of the aircraft.
+- **Cheaper scenery.** The static scene is cut into chunks by place (village, hospital, bridge, town, pylons, factory, each farm, the hamlet), each with a bounding sphere; those out of view are not drawn, nor their shadows. Within the noise to 7 % less a frame in the normal views. The approach view costs 20-25 % more than the normal cockpit view under the software renderer while it is on (more ground in view, less sky); behind the panel and the floor the depth is cleared to the near plane, so a GPU shades nothing there.
+
 ## 2.11.1 — 2026-10-22 · Trees that fade, not sprout
 
 - Trees coming into range no longer grow out of the ground, and a tree's shape no longer switches at once at 160 and 750 m: both fade through the multisample coverage (alpha to coverage: no blending, no sorting, the depth test as for anything opaque), the thinning over some 45 m of approach near and 400 m far, the shapes cross-faded over 30 m. Since 2.9.3 the trees had been scaled about their feet, which from a cockpit at speed looked like a forest sprouting.

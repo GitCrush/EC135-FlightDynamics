@@ -3,7 +3,7 @@ const UI={paused:false,phantom:null,ex:null,exT:0,acc:0,last:0,fps:0,briefing:''
 const EXERCISES={
   free:{name:'Free flight (trimmed hover)',reset:'hover',brief:'You take over a trimmed hover at 3 m: stick, pedal and collective are right, the attitude hold keeps the attitude. Watch first, then small nudges. The coach tells you what is missing.'},
   pad:{name:'Lift off from the pad',reset:'pad',brief:'Rotor at 100 %, skids on the pad. Raise the collective slowly (W or wheel); the attitude hold takes the trim attitude as you lift. Keep the drift arrow in the circle.'},
-  cold:{name:'Cold start',reset:'cold',brief:'Rotor stopped, blades drooped on the stops. E starts both engines: the starter needs 25 s, then the FADEC runs the rotor up over about 40 s. E again shuts down. Collective stays flat until NR is in the green.'},
+  cold:{name:'Cold start',reset:'cold',brief:'Rotor stopped, rotor brake on, both engine switches OFF. By hand: Shift+B releases the brake; Shift+1 puts engine 1 to IDLE: the starter turns it, it lights at about 12 % N1 and the TOT peaks on the VEMD, then it settles at ground idle (25 s) and the rotor turns at 70 %. Then Shift+2 for engine 2, and once both idle, Shift+1 and Shift+2 again to FLIGHT: the FADEC runs the rotor up to 100 %. Shift+E does the whole sequence. Collective fully down throughout.'},
   hover:{name:'Hover over the pad',reset:'hover',phantom:'hover',target:[0,0,3],brief:'Hold 3 m over the H, heading north. The phantom hovers 20 m to your right as a reference. Watch the drift vector, not the horizon.'},
   pedal:{name:'Pedal turns',reset:'hover',brief:'From the hover, a full turn left and a full turn right at 15 °/s. The collective moves with the pedal: left pedal takes power, right pedal gives it back (the EC135 rotor turns counterclockwise).'},
   quick:{name:'Quick stop',reset:'approach',brief:'From 70 kt at 500 ft, decelerate to a hover without climbing: aft cyclic and collective down together, then collective back in as the airspeed bleeds off. Watch the tail.'},
@@ -26,31 +26,82 @@ function refreshTexts(){
   const k=document.getElementById('keys');if(k)k.innerHTML='Keys and devices: see <b>Setup</b> (bottom right of the view)';
 }
 const SETUP=[
+  ['Profile',[
+    ['profile','Level','select',['beginner','intermediate','realistic','custom'],{beginner:'Beginner',intermediate:'Intermediate',realistic:'Realistic',custom:'Custom'}],
+    ['profNote','','profnote'],['resetAll','','reset'],
+  ]],
   ['Aircraft',[
     ['mass','Mass','range',1800,2910,10,'kg'],['cgx','CG offset','range',-0.15,0.15,0.01,'m'],['dT','ISA deviation','range',-20,35,1,'°C'],
   ]],
   ['Wind',[
+    ['weather','Weather','select',['calm','breeze','gusty','strong','custom'],{calm:'Calm',breeze:'Breeze 8 kt',gusty:'Gusty 14 kt',strong:'Strong 22 kt',custom:'Custom'}],
     ['wdir','From','range',0,359,5,'°'],['wspd','Speed','range',0,35,1,'kt'],['wturb','Turbulence','range',0,3,0.25,''],['wgust','Gusts','range',0,20,1,'kt'],
   ]],
   ['Stability aids',[
-    ['coach','Coach: correction cues  K','check'],['coachVoice','Coach voice (speech)','check'],['sas','SAS rate damping + trim feedforward','check'],['attHold','Attitude command around trim (centred stick = calm)','check'],['hdgHold','Heading hold (pedals centred)','check'],['hoverAssist','Hover assist (stick = velocity)  H','check'],
+    ['coach','Coach: correction cues  K','check'],['coachVoice','Coach voice (speech)','check'],['sas','SAS rate damping + trim feedforward','check'],['attHold','Attitude command around trim (centred stick = calm)','check'],['cycLaw','Cyclic in forward flight (attitude aid)','select',['rcah','acah'],{rcah:'rate (RCAH)',acah:'attitude (ACAH)'}],['hdgHold','Heading hold (pedals centred)','check'],['hoverAssist','Hover assist (stick = velocity)  H','check'],
   ]],
   ['Input models',[
     ['kbdCol','Collective keys W/S','select',['metered','rate']],['kbdPed','Pedal keys A/D','select',['heading','rate']],['pedRate','Yaw rate per pedal key','range',10,45,5,'°/s'],
-    ['mouse','Mouse cyclic','check'],['mouseButtons','Mouse buttons = pedals','check'],['mouseTravel','Mouse travel (px for full stick)','range',300,2500,100,'px'],
+    ['mouse','Mouse cyclic','check'],['mouseButtons','Mouse buttons = pedals','check'],['mouseTravel','Mouse travel (px for full stick)','range',300,2500,50,'px'],['mouseCalBtn','','cal'],['mouseCurve','Mouse curve (stick per movement)','select',['linear','mild','strong']],
   ]],
-  ['Keys',[['keys','Mouse: click into the view to capture it as the stick, Esc releases · mouse buttons = pedals · hold C or the middle button to look around · wheel or W S collective · A D pedals · arrows stick · T trim to the present attitude · Shift + arrows beep trim · Y back to the hover trim · H hover assist · V autopilot demo · U I O autopilot: ALT, HOV/IAS, HDG · hold M: click to fly · J autopilot menu · K coach · L replay · X CSV · E engines · G engine failure · R reset · 1 2 3 views · F flight path marker · P predicted path · Space pause · N B Q tutor · ? key list','note']]],
+  ['Keys',[['keys','Mouse: click into the view to capture it as the stick, Esc releases · mouse buttons = pedals · hold C or the middle button to look around · hold Q / E to glance out of the left / right door window · Shift+Z head tracking by webcam, Z centres it · wheel or W S collective · A D pedals · arrows stick · T trim to the present attitude · Shift + arrows beep trim · Y back to the hover trim · H hover assist · V autopilot demo · U I O autopilot: ALT, HOV/IAS, HDG · hold M: click to fly · J autopilot menu · K coach · L replay · X CSV · Shift+E engines · G engine failure · R reset · 1 2 3 views · F flight path marker · P predicted path · Space pause · N B Shift+Q tutor · ? key list','note']]],
   ['Gamepad / joystick',[
     ['padMap','Preset','select',['gamepad','joystick','custom']],['padDead','Stick dead zone','range',0,0.2,0.01,''],['padPanel','','pad'],
   ]],
   ['View',[
-    ['view','Camera  1/2/3','select',['cockpit','chase','tower']],['gfx','Graphics (light for weak GPUs)','select',['auto','full','light']],['fov','Cockpit field of view (across)','range',50,90,2,'°'],['cloud','Cloud cover','range',0,1,0.1,''],['tod','Time of day','range',6.5,19.5,0.5,'h'],['vis','Visibility','range',1.5,20,0.5,'km'],['hud','HUD','check'],['rotorDisc','Rotor-state map','check'],['fpm','Flight path marker  F','check'],['predict','Predicted path  P','check'],['predictT','Prediction: seconds ahead (auto: 6 in the hover to 30 at speed)','select',['auto','4','8','15','30']],['sound','Sound','check'],['volume','Volume','range',0,100,5,'%'],
+    ['view','Camera  1/2/3','select',['cockpit','chase','tower']],['gfx','Graphics (light for weak GPUs)','select',['auto','full','light']],['fov','Cockpit field of view (across)','range',50,90,2,'°'],['cloud','Cloud cover','range',0,1,0.1,''],['tod','Time of day','range',6.5,19.5,0.5,'h'],['vis','Visibility','range',1.5,20,0.5,'km'],['frame','Cockpit frame (attitude reference)','check'],['motion','Motion cues (the head moves with the accelerations)','select',['off','subtle','full']],['htPanel','','ht'],['htYaw','Head tracking: turn gain','range',1.5,6,0.25,'x'],['htPitch','Head tracking: nod gain','range',1,5,0.25,'x'],['apr','Approach view (gaze down)  4','select',['off','on']],['aprChin','… with chin windows (costs frame rate)','check'],['perfTest','','perf'],['hud','HUD','check'],['rotorDisc','Rotor-state map','check'],['fpm','Flight path marker  F','check'],['predict','Predicted path  P','check'],['predictT','Prediction: seconds ahead (auto: 6 in the hover to 30 at speed)','select',['auto','4','8','15','30']],['sound','Sound','check'],['volume','Volume','range',0,100,5,'%'],
   ]],
 ];
+if(cfg.apr!=='on')cfg.apr='off';
+if(cfg.frame===undefined)cfg.frame=true;
+if(cfg.aprChin===undefined)cfg.aprChin=false;
+if(cfg.htYaw===undefined)cfg.htYaw=3.5;if(cfg.htPitch===undefined)cfg.htPitch=2.5;   // (2.13) head tracking gains   // (2.13) the approach view's chin windows: off by default (a second pass the integrated GPUs pay for)   // (2.13) the cockpit frame's lines   // (2.12.4) on or off by key, no 'auto' any more
 if(cfg.fov===undefined)cfg.fov=72;   // cockpit field of view across, degrees (the vertical angle is kept between 46 and 62, see cockpitFov)
 if(cfg.gfx===undefined){let g=null;try{g=localStorage.getItem('ec135fd.gfx');}catch(e){}cfg.gfx=['auto','full','light'].includes(g)?g:'auto';}   // graphics mode, see GFX in the renderer
+/* (2.14) Profiles: one choice for the aids, the coach and the displays (2.16.1: not the weather any more; no wind unless chosen). Changing any of them by
+   hand (in the setup or by key) makes it 'custom'. Realistic: rate damping only, no attitude
+   command or heading hold, no coach, no predictor or trainer displays, no wind of its own. */
+const PROFILES={
+  beginner:{cfg:{sas:true,attHold:true,hdgHold:true,hoverAssist:false,cycLaw:'rcah',predict:true,fpm:true,rotorDisc:true,motion:'subtle'},coach:'cues'},
+  intermediate:{cfg:{sas:true,attHold:true,hdgHold:true,hoverAssist:false,cycLaw:'rcah',predict:true,fpm:true,rotorDisc:true,motion:'subtle'},coach:'off'},
+  realistic:{cfg:{sas:true,attHold:false,hdgHold:false,hoverAssist:false,cycLaw:'rcah',predict:false,fpm:false,rotorDisc:false,motion:'full'},coach:'off'}};
+const PROFILE_NOTE={beginner:'Sets the aids, the coach and the displays (the wind is set in the Wind block). Beginner: all aids on, the coach shows the corrections, the predicted path.',intermediate:'All aids on, no coach, the predicted path.',
+  realistic:'Rate damping only: no attitude command, no heading hold, no coach, no predictor or rotor map.',custom:'Changed by hand; pick a profile to start from one again.'};
+/* (2.14) Weather presets for the wind block (the direction stays) */
+const WEATHER={calm:{spd:0,turb:0,gust:0},breeze:{spd:8,turb:0.5,gust:3},gusty:{spd:14,turb:1.0,gust:8},strong:{spd:22,turb:1.75,gust:12}};
+function coachMode(){return !COACH.on?'off':COACH.voice?'voice':'cues';}
+function coachWant(m){UI.coachMode=m;if(UI.started)coachSet(m);}   // before the start the welcome card's buttons switch it on (the legend's 20 s begin there)
+/* (2.16.1) A level or a weather preset chosen on the welcome card used to switch the wind at once while the
+   trimmed hover waited behind the card: 14 kt into an aircraft trimmed for calm air drifts at 7 m/s within 5 s.
+   Now the simulation holds while the card is open and the start trims anew in the chosen air; chosen in flight,
+   the wind eases to the new values (2 kt a second), a change of weather rather than a blow. */
+let WIND_T=null;
+function weatherApply(w){const W_=WEATHER[w];if(!W_)return;cfg.weather=w;
+  if(!UI.started){WIND.spd=W_.spd;WIND.turb=W_.turb;WIND.gust=W_.gust;WIND_T=null;return;}
+  WIND_T={spd:W_.spd,turb:W_.turb,gust:W_.gust};if(typeof dlNote==='function')dlNote(`Weather: the wind goes to ${W_.spd} kt over ${Math.max(1,Math.round(Math.abs(W_.spd-WIND.spd)/2))} s`);}
+function windEase(dt){if(!WIND_T)return;const r={spd:2,turb:0.25,gust:1.5};let done=true;
+  for(const k in WIND_T){WIND[k]=approach(WIND[k],WIND_T[k],r[k]*dt);if(WIND[k]!==WIND_T[k])done=false;}if(done)WIND_T=null;}
+function windNow(){return WIND_T||WIND;}   // what the wind is going to be
+function profileApply(n){const P=PROFILES[n];if(!P)return;Object.assign(cfg,P.cfg);coachWant(P.coach);cfg.profile=n;if(typeof uiSync==='function')uiSync();if(typeof welcomeLevels==='function')welcomeLevels();}
+function profileCheck(){   // a setting changed by hand: the profile and the weather say 'custom'
+  const P=PROFILES[cfg.profile];if(P&&(Object.keys(P.cfg).some(k=>cfg[k]!==P.cfg[k])||(UI.started?coachMode():UI.coachMode)!==P.coach)){cfg.profile='custom';uiSync();}
+  const W_=WEATHER[cfg.weather],Wn=windNow();if(W_&&(Wn.spd!==W_.spd||Wn.turb!==W_.turb||Wn.gust!==W_.gust)){cfg.weather='custom';uiSync();}}
+/* (2.14) The settings stay in this browser (until 2.13 only the graphics and the gamepad's mapping did):
+   saved once a second when something changed, never during a lesson or the performance test (they set
+   their own), and read before the setup is built. */
+const PERSIST=['mass','cgx','dT','sas','attHold','hdgHold','hoverAssist','cycLaw','kbdCol','kbdPed','pedRate','mouse','mouseButtons','mouseTravel','mouseCurve','mouseCal',
+  'view','fov','cloud','tod','vis','frame','htYaw','htPitch','aprChin','hud','rotorDisc','fpm','predict','predictT','sound','volume','profile','weather','motion'];
+function settingsSnap(){const Wn=windNow(),o={v:2,cfg:{},wind:{dir:WIND.dir,spd:Wn.spd,turb:Wn.turb,gust:Wn.gust},coach:UI.started?coachMode():UI.coachMode};for(const k of PERSIST)if(cfg[k]!==undefined)o.cfg[k]=cfg[k];return o;}
+function settingsSave(){if(TUTOR.on||PT.on||REPLAY.on)return;profileCheck();try{const j=JSON.stringify(settingsSnap());if(j!==UI.savedJ){localStorage.setItem('ec135fd.settings',j);UI.savedJ=j;}}catch(e){}}
+function settingsLoad(){let o=null;try{o=JSON.parse(localStorage.getItem('ec135fd.settings')||'null');}catch(e){}
+  if(!o||!o.cfg){profileApply('beginner');UI.coachMode='cues';return false;}   // the first start: Beginner, every aid and the coach (the setup's Level takes them away)
+  for(const k of PERSIST){const v=o.cfg[k];if(v!==undefined&&(cfg[k]===undefined||typeof v===typeof cfg[k]))cfg[k]=v;}
+  if(o.wind&&(o.v||1)>=2)for(const k of ['dir','spd','turb','gust'])if(typeof o.wind[k]==='number')WIND[k]=o.wind[k];   // (2.16.1) until then a level set the wind: dropped, calm air
+  if((o.v||1)<2)cfg.weather='calm';
+  UI.coachMode=['off','cues','voice'].includes(o.coach)?o.coach:'cues';UI.savedJ=JSON.stringify(o);return true;}
+function settingsReset(){try{localStorage.removeItem('ec135fd.settings');localStorage.removeItem('ec135fd.gfx');}catch(e){}location.reload();}
 function cfgGet(k){if(k==='coach')return COACH.on;if(k==='coachVoice')return COACH.voice;if(k==='wdir')return WIND.dir;if(k==='wspd')return WIND.spd;if(k==='wturb')return WIND.turb;if(k==='wgust')return WIND.gust;if(k==='padMap')return DEV.padMap;if(k==='padDead')return cfg.padDead;return cfg[k];}
-function cfgSet(k,v){if(k==='coach'){coachSet(v?(COACH.voice?'voice':'cues'):'off');return;}if(k==='coachVoice'){coachSet(v?'voice':(COACH.on?'cues':'off'));return;}if(k==='wdir')WIND.dir=v;else if(k==='wspd')WIND.spd=v;else if(k==='wturb')WIND.turb=v;else if(k==='wgust')WIND.gust=v;else if(k==='padMap'){DEV.padMap=v;if(v!=='custom')padPreset(v);else padSave();}else if(k==='padDead'){cfg.padDead=v;padSave();}else cfg[k]=v;
+function cfgSet(k,v){if(k==='profile'){if(v!=='custom')profileApply(v);return;}if(k==='weather'){if(v!=='custom'){weatherApply(v);uiSync();}return;}if(k==='coach'){coachSet(v?(COACH.voice?'voice':'cues'):'off');return;}if(k==='coachVoice'){coachSet(v?'voice':(COACH.on?'cues':'off'));return;}if(k==='wdir')WIND.dir=v;else if(k==='wspd')WIND.spd=v;else if(k==='wturb')WIND.turb=v;else if(k==='wgust')WIND.gust=v;else if(k==='padMap'){DEV.padMap=v;if(v!=='custom')padPreset(v);else padSave();}else if(k==='padDead'){cfg.padDead=v;padSave();}else cfg[k]=v;
   if(k==='view')setView(v);
   if(k==='gfx')gfxSet(v);
 }
@@ -64,18 +115,32 @@ function buildSetup(){
       const sp=document.createElement('span');sp.textContent=label;row.appendChild(sp);
       let inp;
       if(type==='note'){row.className='note';sp.textContent=label;root.appendChild(row);continue;}
+      if(type==='profnote'){const d=document.createElement('div');d.className='note';d.id='profNote';d.textContent=PROFILE_NOTE[cfg.profile]||'';root.appendChild(d);continue;}
+      if(type==='reset'){const d=document.createElement('div');d.className='note';d.innerHTML='<button id="setReset" title="Back to the first start: beginner profile, mouse not fitted, default graphics">Reset all settings</button>';root.appendChild(d);
+        d.querySelector('#setReset').onclick=e=>{e.preventDefault();settingsReset();};continue;}
+      if(type==='cal'){const d=document.createElement('div');d.className='note';d.innerHTML='<button id="calRun" title="The next capture of the mouse starts it: sweep from the pad\'s left edge to its right edge, click">Fit the travel to the mouse pad</button> <span id="calNote"></span>';root.appendChild(d);
+        d.querySelector('#calRun').onclick=e=>{e.preventDefault();e.target.blur();CAL.pending=true;const n=document.getElementById('calNote');if(n)n.textContent='click into the view to start';};continue;}
       if(type==='pad'){const d=document.createElement('div');d.id='padPanel';root.appendChild(d);padPanelBuild(d);continue;}
+      if(type==='ht'){const d=document.createElement('div');d.className='note';   // (2.13) head tracking by webcam
+        d.innerHTML='<div style="display:flex;gap:6px;flex-wrap:wrap"><button id="htRun" title="The camera picture stays in this browser; the face detector (about 10 MB) comes from jsDelivr the first time">Head tracking (webcam): start</button><button id="htCentre" title="Z">Centre (Z)</button></div><div id="htStatus" class="data" style="margin-top:4px">off</div>';
+        root.appendChild(d);d.querySelector('#htRun').onclick=e=>{e.preventDefault();e.target.blur();if(HT.on)htStop();else htStart();};
+        d.querySelector('#htCentre').onclick=e=>{e.preventDefault();e.target.blur();htCentre();};continue;}
+      if(type==='perf'){const d=document.createElement('div');d.className='note';   // (2.12.3) the performance test
+        d.innerHTML='<div style="display:flex;gap:6px"><button id="perfRun" title="Measures the view here, eight ways, 2.5 s each; hands off meanwhile">Performance test (here, 25 s)</button><button id="perfCopy">Copy</button></div><textarea id="perfOut" readonly rows="3" style="width:100%;margin-top:6px;font:10px/1.35 ui-monospace,monospace;background:#0d0c0a;color:var(--ink);border:1px solid #2e2924;resize:vertical"></textarea>';
+        root.appendChild(d);d.querySelector('#perfRun').onclick=e=>{e.preventDefault();e.target.blur();perfStart();};
+        d.querySelector('#perfCopy').onclick=e=>{e.preventDefault();const t=document.getElementById('perfOut');t.select();let ok=false;try{ok=document.execCommand('copy');}catch(_){}if(!ok&&navigator.clipboard)navigator.clipboard.writeText(t.value).catch(()=>{});e.target.blur();};continue;}
       if(type==='range'){inp=document.createElement('input');inp.type='range';inp.min=it[3];inp.max=it[4];inp.step=it[5];inp.value=cfgGet(k);const val=document.createElement('b');val.className='data';val.textContent=cfgGet(k)+' '+it[6];
         inp.oninput=()=>{cfgSet(k,parseFloat(inp.value));val.textContent=inp.value+' '+it[6];};row.appendChild(inp);row.appendChild(val);}
       else if(type==='check'){inp=document.createElement('input');inp.type='checkbox';inp.checked=!!cfgGet(k);inp.onchange=()=>cfgSet(k,inp.checked);row.appendChild(inp);}
-      else{inp=document.createElement('select');for(const o of it[3]){const op=document.createElement('option');op.value=o;op.textContent=o;inp.appendChild(op);}inp.value=cfgGet(k);inp.onchange=()=>cfgSet(k,inp.value);row.appendChild(inp);}
-      inp.dataset.key=k;root.appendChild(row);
+      else{inp=document.createElement('select');for(const o of it[3]){const op=document.createElement('option');op.value=o;op.textContent=(it[4]&&it[4][o])||o;inp.appendChild(op);}inp.value=cfgGet(k);inp.onchange=()=>cfgSet(k,inp.value);row.appendChild(inp);}
+      inp.dataset.key=k;if(type==='range')inp.dataset.unit=it[6];root.appendChild(row);
     }
   }
   const ex=document.getElementById('exercise');ex.innerHTML='';for(const k in EXERCISES){const op=document.createElement('option');op.value=k;op.textContent=EXERCISES[k].name;ex.appendChild(op);}
   ex.onchange=()=>{startExercise(ex.value);ex.blur();};
 }
-function uiSync(){document.querySelectorAll('#setupBody [data-key]').forEach(el=>{const k=el.dataset.key;if(el.type==='checkbox')el.checked=!!cfgGet(k);else el.value=cfgGet(k);});}
+function uiSync(){document.querySelectorAll('#setupBody [data-key]').forEach(el=>{const k=el.dataset.key;if(el.type==='checkbox')el.checked=!!cfgGet(k);else el.value=cfgGet(k);if(el.type==='range'&&el.nextSibling&&el.nextSibling.classList&&el.nextSibling.classList.contains('data'))el.nextSibling.textContent=cfgGet(k)+' '+(el.dataset.unit||'');});
+  const pn=document.getElementById('profNote');if(pn)pn.textContent=PROFILE_NOTE[cfg.profile]||'';const cn=document.getElementById('calNote');if(cn&&!CAL.pending)cn.textContent='';}
 /* The autopilot trims the aircraft in fast time and hands it over: every
    airborne reset starts calm, with stick, pedal and collective at trim. */
 function trimNow(sec){
@@ -83,9 +148,13 @@ function trimNow(sec){
   /* Position hold first, then pure velocity hold until the aircraft is
      really still: the integrators then hold exactly the zero-acceleration
      trim, which is what gets handed over. */
+  /* (2.16.1) trimmed in the mean wind: turbulence and gusts are held off while the autopilot trims and start from
+     nothing at the hand-over (the first gust some seconds later), so the aircraft is not handed over in a gust */
+  const wk={t:WIND.turb,g:WIND.gust};WIND.turb=0;WIND.gust=0;windReset();
   let o;for(let t=0;t<(sec||8);t+=DT){o=apStep(DT);IN.col=o.col;IN.lon=o.lon;IN.lat=o.lat;IN.ped=o.ped;step(DT);}
   if(hover){for(let t=0;t<20;t+=DT){o=apStep(DT);IN.col=o.col;IN.lon=o.lon;IN.lat=o.lat;IN.ped=o.ped;step(DT);   // keep holding the spot until still and back on it
     if(t>4&&Math.hypot(S.vb[0],S.vb[1])<0.03&&Math.abs(S.vs)<0.03&&vlen(S.om)<0.2*DEG&&Math.hypot(S.pos[0]-AP.posN,S.pos[1]-AP.posE)<0.3)break;}}
+  WIND.turb=wk.t;WIND.gust=wk.g;windReset();
   AP.on=false;AP.posN=AP.posE=null;trimHandover(o);DEV.kbd.col=o.col;DEV.kbd.psiRef=S.eul[2];DEV.kbd.ped=0;DEV.kbd.lon=DEV.kbd.lat=0;IN.trimLon=IN.trimLat=IN.trimPed=0;
   if(COACH.ap){COACH.trimTh=S.eul[1];COACH.trimPhi=S.eul[0];}S.log=[];S.t=0;S.logT=0;
 }
@@ -135,10 +204,37 @@ function engineFailure(kind){if(kind==='restore'){for(const en of S.eng.e){en.fa
 /* CSV of the 20-s log: the browser saves it from a blob link, opened as a file or from a web server alike. */
 function downloadCSV(){const csv=exportCSV();if(!csv)return;const name='ec135-flight-dynamics-log.csv';
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=name;a.click();}
+/* (2.12.3) The performance test (setup, View). At the present place, the simulation held, the view is drawn
+   for 2.5 s in each of eight ways: the normal cockpit view and the approach view, the approach view without its
+   chin windows and with them at full resolution and in the full shader (2.12.4), both views in light graphics and with half the pixels.
+   Per frame: the interval in the page's own loop (what the eye sees), the time to issue the frame (JavaScript),
+   the time until the GPU has drawn it (a one-pixel read waits for it) and the overlay's. One block of text to
+   copy: it says where the time goes on this machine. */
+const PT={on:false,i:0,t:0,a:[],keep:null,res:[]};
+const PT_LIST=[['normal',{apr:'off'}],['approach',{apr:'on'}],['approach, no chin',{apr:'on',noChin:1}],['approach, chin full',{apr:'on',chinFull:1}],
+  ['normal, light gfx',{apr:'off',gfx:'light'}],['approach, light gfx',{apr:'on',gfx:'light'}],['normal, 1/2 pixels',{apr:'off',scale:Math.SQRT1_2}],['approach, 1/2 pixels',{apr:'on',scale:Math.SQRT1_2}]];
+function perfOut(t){const o=document.getElementById('perfOut');if(o){o.value=t;o.rows=Math.min(14,t.split('\n').length+1);}}
+function perfApply(o){cfg.apr=o.apr;APR.k=o.apr==='on'?1:0;PERF.noChin=!!o.noChin;PERF.chinFull=!!o.chinFull;PERF.scale=o.scale||1;cfg.gfx=o.gfx||PT.keep.gfx;}
+function perfSync(){const gl=R3.gl;if(gl){PT.px=PT.px||new Uint8Array(4);gl.readPixels(0,0,1,1,gl.RGBA,gl.UNSIGNED_BYTE,PT.px);}}
+function perfStart(){if(PT.on)return;PT.keep={view:cfg.view,apr:cfg.apr,k:APR.k,armed:APR.armed,freeze:UI.freeze,gfx:cfg.gfx,drs:DRS.s};
+  const su=document.getElementById('setup');if(su)su.classList.remove('open');
+  UI.freeze=true;cfg.view='cockpit';PT.on=true;PERF.on=true;PT.i=0;PT.t=0;PT.a=[];PT.res=[];perfApply(PT_LIST[0][1]);perfOut('running: about 25 s, hands off');}
+function perfFrame(dt,js,draw,hud){PT.t+=dt;if(PT.t>0.6)PT.a.push([dt*1000,js,draw,hud]);if(PT.t<3.1)return;
+  const med=k=>{const b=PT.a.map(r=>r[k]).sort((x,y)=>x-y);return b[b.length>>1]||0;},p90=k=>{const b=PT.a.map(r=>r[k]).sort((x,y)=>x-y);return b[Math.floor(b.length*0.9)]||0;};
+  PT.res.push([PT_LIST[PT.i][0],med(0),p90(0),med(1),med(2),med(3),R3.canvas.width+'x'+R3.canvas.height]);PT.i++;PT.t=0;PT.a=[];
+  if(PT.i<PT_LIST.length){perfApply(PT_LIST[PT.i][1]);return;}
+  PT.on=false;PERF.on=false;PERF.noChin=false;PERF.chinFull=false;PERF.scale=1;
+  const k=PT.keep;cfg.view=k.view;cfg.apr=k.apr;cfg.gfx=k.gfx;APR.k=k.k;APR.armed=k.armed;UI.freeze=k.freeze;
+  const f=v=>v.toFixed(1).padStart(6),L=['EC135 '+APP_VERSION+' performance test · '+(()=>{const u=navigator.userAgent,b=(u.match(/Firefox\/[\d.]+/)||u.match(/Edg\/[\d.]+/)||u.match(/Chrome\/[\d.]+/)||u.match(/Version\/[\d.]+(?= .*Safari)/)||['?'])[0],o=(u.match(/Linux|Windows|Mac OS X|Android|iPhone|iPad|CrOS/)||['?'])[0];return b+' '+o+(/Wayland/i.test(u)?' Wayland':'');})()+' · '+String(R3.info&&R3.info.renderer||'?')+' · page '+R3.w+'x'+R3.h+' · '+cfg.gfx+' (DRS '+Math.round(k.drs*100)+' %) · at '+Math.round(S.pos[0])+','+Math.round(S.pos[1])+' '+Math.round(S.hAGL)+' m',
+    'ms per frame:           interval   p90    js  drawn  hud  buffer'];
+  for(const r of PT.res)L.push(r[0].padEnd(22)+f(r[1])+f(r[2])+f(r[3])+f(r[4])+f(r[5])+'  '+r[6]);
+  perfOut(L.join('\n'));const su=document.getElementById('setup');if(su)su.classList.add('open');}
 function loop(now){
   requestAnimationFrame(loop);
   let dtF=Math.min(0.1,(now-UI.last)/1000||0);UI.last=now;
-  if(!UI.paused&&!UI.freeze){   // UI.freeze: still frame without the pause text (screenshots)
+  const wel=UI.welEl||(UI.welEl=document.getElementById('welcome')),hold=!!(wel&&wel.style.display!=='none');   // (2.16.1) nothing moves behind the welcome card
+  if(!UI.paused&&!UI.freeze&&!hold){   // UI.freeze: still frame without the pause text (screenshots)
+    windEase(dtF);
     inputStep(dtF);tutorStep(dtF);apDemoStep(dtF);afcsStep(dtF);coachStep(dtF);
     UI.acc+=dtF;let n=0;
     while(UI.acc>=DT&&n<60){step(DT);phantomStep(DT);UI.acc-=DT;n++;}
@@ -147,10 +243,14 @@ function loop(now){
     if(ex&&ex.trigger==='engfail'&&UI.exT>10&&!UI.trig){UI.trig=true;engineFailure('both');}
     if(ex&&ex.trigger==='oei'&&UI.exT>5&&!UI.trig){UI.trig=true;engineFailure('one');}
   }
-  if(!UI.paused&&!UI.freeze)predStep();
+  if(!UI.paused&&!UI.freeze&&!hold)predStep();
+  htStep(dtF);   // (2.13) the head, by webcam
   replayFrame(dtF);
-  render(dtF);hudDraw(dtF);soundUpdate(dtF);
+  if(PT.on){const t0=performance.now();render(dtF);const t1=performance.now();perfSync();const t2=performance.now();hudDraw(dtF);perfFrame(dtF,t1-t0,t2-t0,performance.now()-t2);}   // (2.12.3) the performance test
+  else{render(dtF);hudDraw(dtF);}
+  soundUpdate(dtF);
   sideUpdate(dtF);
+  if(now-(UI.saveAt||0)>1000){UI.saveAt=now;settingsSave();}   // (2.14) once a second of real time (a slow frame's dt is capped)
   replayAfter();
 }
 /* Score: position hold against the exercise target over the last 30 s. */
@@ -251,7 +351,12 @@ function sideUpdate(dtF){
   debriefCheck(dtF||1/60);
   const el=id=>document.getElementById(id);const f0=v=>String(Math.round(v)||0);   // no "-0"
   UI.sideT=(UI.sideT||0)+1;if(UI.sideT%6===0){chartDraw();scoreUpdate();apMenuSync();}
+  /* (2.12.8) frames per second (the average over about a second) in the GL line, and after the approach view
+     is switched, the rate before and 3 s after: one number to compare on any machine */
+  if(dtF>0&&dtF<0.5)UI.fps=UI.fps?UI.fps+(1/dtF-UI.fps)*Math.min(1,dtF/1):1/dtF;
+  if(APR.fpsCmp&&performance.now()-APR.fpsCmp.t>3000){const c=APR.fpsCmp;APR.fpsCmp=null;APR.fpsNote=`approach view ${c.on?'on':'off'}: ${Math.round(c.f0)} → ${Math.round(UI.fps)} fps`;APR.fpsNoteT=performance.now();dlNote(APR.fpsNote[0].toUpperCase()+APR.fpsNote.slice(1));}
   if(UI.sideT%3===0){const su=document.getElementById('setup');if(su&&su.classList.contains('open'))padPanelUpdate();}
+  if(UI.sideT%10===0){const hs=document.getElementById('htStatus'),hb=document.getElementById('htRun');if(hs&&hs.textContent!==HT.status)hs.textContent=HT.status;if(hb){const t=HT.busy?'Head tracking: starting…':HT.on?'Head tracking: stop':'Head tracking (webcam): start';if(hb.textContent!==t)hb.textContent=t;}}
   /* the numbers at 15 Hz, and only what changed: every text change costs the page a style and layout
      pass (2.2 rewrote all of them every frame) */
   UI.sideAcc=(UI.sideAcc||0)+(dtF||1/60);if(UI.sideAcc<1/15)return;UI.sideAcc=0;
@@ -261,13 +366,20 @@ function sideUpdate(dtF){
   set('bigNr',S.NR.toFixed(1));set('bigFli',S.eng.fli.toFixed(1));
   col('bigNr',(S.NR<H.nr.minPowerOn||S.NR>H.nr.maxPowerOn)&&S.eng.mode!=='off'?'var(--hot)':'var(--ink)');
   col('bigFli',S.eng.fli>11?'var(--hot)':S.eng.fli>10?'var(--amber)':'var(--ink)');
-  if(R3.info&&R3.canvas){const g=el('gl');set('gl',(R3.soft?'SOFTWARE RENDERING (the browser is not using the GPU: switch on hardware acceleration) · ':'')+`GL ${R3.info.depthBits}-bit depth · ${R3.info.fragHighp?'highp':'mediump only'} · ${GFX.mode}${cfg.gfx==='auto'?' (auto)':''} · ${R3.canvas.width}×${R3.canvas.height} px · ${String(R3.info.renderer).slice(0,40)}`);const ti=R3.info.renderer+(GFX.why?' · '+GFX.why:'');if(g&&g.title!==ti)g.title=ti;col('gl',R3.soft?'var(--amber)':'');}
+  if(R3.info&&R3.canvas){const g=el('gl');set('gl',(R3.soft?'SOFTWARE RENDERING (the browser is not using the GPU: switch on hardware acceleration) · ':'')+`GL ${R3.info.depthBits}-bit depth · ${R3.info.fragHighp?'highp':'mediump only'} · ${GFX.mode}${cfg.gfx==='auto'?' (auto)':''} · ${R3.canvas.width}×${R3.canvas.height} px · ${Math.round(UI.fps||0)} fps${APR.fpsNote&&performance.now()-APR.fpsNoteT<60000?' · '+APR.fpsNote:''} · ${String(R3.info.renderer).slice(0,40)}`);const ti=R3.info.renderer+(GFX.why?' · '+GFX.why:'');if(g&&g.title!==ti)g.title=ti;col('gl',R3.soft?'var(--amber)':'');}
   set('stat',`${S.eng.mode.toUpperCase().padEnd(5)}${f0((S.Peng||S.Pload)/1e3).padStart(4)}kW N1 ${S.eng.e.map(e=>f0(e.N1).padStart(3)).join('/')} ${f0(S.m)}kg DA${f0(atmo(S.alt,cfg.dT).dalt/FT).padStart(6)}ft${f0(S.t).padStart(5)}s`);
   if(S.incident){const inc=el('inc');if(inc.dataset.t!==String(S.incident.t)){inc.dataset.t=String(S.incident.t);inc.textContent=S.incident.text;inc.title=S.incident.text;}
     set('incAge',`${Math.max(0,S.t-S.incident.t).toFixed(0)} s ago`);}
 }
+/* (2.14) the welcome card's level: the three profiles, the saved one marked */
+function welcomeLevels(){const box=document.getElementById('wLevel');if(!box)return;
+  if(!box.childElementCount){for(const [n,l] of [['beginner','Beginner'],['intermediate','Intermediate'],['realistic','Realistic']]){const b=document.createElement('button');b.dataset.p=n;b.textContent=l;b.title=PROFILE_NOTE[n];b.onclick=()=>{profileApply(n);b.blur();};box.appendChild(b);}}
+  for(const b of box.querySelectorAll('button'))b.classList.toggle('on',b.dataset.p===cfg.profile);
+  const t=document.getElementById('wLevelNote');if(t)t.textContent=PROFILE_NOTE[cfg.profile]||'';}
 function boot(){
   const stage=document.getElementById('stage');
+  settingsLoad();   // (2.14) before anything reads the settings
+  window.addEventListener('pagehide',settingsSave);   // and what changed in the last second
   glInit(document.getElementById('world'));hudInit(document.getElementById('ovl'));inputInit(stage);buildSetup();
   document.getElementById('setupTab').onclick=()=>document.getElementById('setup').classList.toggle('open');
   for(const [id,fn] of [['rCold',()=>{cfg.resetKind='cold';uiReset('cold');}],['rPad',()=>{cfg.resetKind='pad';uiReset('pad');}],['rHover',()=>{cfg.resetKind='hover';uiReset('hover');}],['rHigh',()=>{cfg.resetKind='high';uiReset('high');}],['rCruise',()=>{cfg.resetKind='cruise';uiReset('cruise');}],
@@ -278,18 +390,20 @@ function boot(){
   document.getElementById('tutorStart').onclick=()=>{tutorStart(parseInt(ts.value));document.getElementById('tutorStart').blur();};
   document.getElementById('tutorStop').onclick=()=>tutorStop();
   for(const [id,m] of [['coachOff','off'],['coachCues','cues'],['coachVoice','voice']])document.getElementById(id).onclick=()=>{coachSet(m);document.getElementById(id).blur();};
-  coachButtons();
+  coachSet(UI.coachMode||'cues');   // (2.16.1) the saved or the level's coach from the first frame
   for(const [id,k] of [['asAlt',()=>AFCS.vs?'vs':'alt'],['asHdg',()=>'hdg'],['asSpd',()=>S.ias>40*KT?'ias':'hov']])document.getElementById(id).onclick=()=>{afcsToggle(k());document.getElementById(id).blur();};afcsButtons();apMenuInit();
   ts.onchange=()=>{if(TUTOR.on)tutorStart(parseInt(ts.value));ts.blur();};
   document.querySelectorAll('#setupBody select').forEach(el=>el.addEventListener('change',()=>el.blur()));
   // welcome card: the first thing a new pilot sees
   const w=document.getElementById('welcome');
   const wl=()=>{w.querySelector('h1').textContent='EC135 Flight Dynamics';
-    w.querySelector('p').textContent='EC135 flight dynamics for learning. A helicopter has four controls that all talk to each other; the tutor hands them over one at a time in thirteen lessons, the stick in five stages. Mouse = stick (a click into the view captures it, Esc releases), W/S = collective, A/D = pedals.';
+    w.querySelector('p').textContent='EC135 flight dynamics for learning. A helicopter has four controls that all talk to each other; the tutor hands them over one at a time in thirteen lessons, the stick in five stages. Mouse = stick (a click into the view captures it, Esc releases), W/S = collective, A/D = pedals; ? or F1 lists every key. The training aids are on; the setup\'s Level takes them away.';
     document.getElementById('wTutor').textContent='Start the tutor – lesson 1';document.getElementById('wFree').textContent='Fly free';};
   wl();
-  document.getElementById('wTutor').onclick=()=>{w.style.display='none';soundStart();coachSet('cues');tutorStart(0);};
-  document.getElementById('wFree').onclick=()=>{w.style.display='none';soundStart();coachSet('cues');};
+  welcomeLevels();
+  const go=()=>{w.style.display='none';UI.started=true;soundStart();coachSet(UI.coachMode||'cues');};
+  document.getElementById('wTutor').onclick=()=>{go();tutorStart(0);};
+  document.getElementById('wFree').onclick=()=>{go();startExercise(UI.ex||'free');};   // (2.16.1) trimmed anew in the air the level chose
   window.addEventListener('blur',()=>{if(!UI.paused){UI.paused=true;UI.autoPaused=true;}});
   stage.addEventListener('mousedown',()=>{if(UI.autoPaused){UI.paused=false;UI.autoPaused=false;}});
   refreshTexts();

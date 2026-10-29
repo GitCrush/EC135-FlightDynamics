@@ -330,6 +330,7 @@ MB.prototype.add=function(pos,nrm,col,idx,M,Wf){Wf=Wf||this.wDefault;if(Wf)this.
 /* pack (2.9.1, the trees): normals and colours as bytes (4 a vertex, one unused), the sway weight and phase as
    two bytes: 22 bytes a vertex instead of 44, half the forest's memory (colours must stay within 0..1) */
 MB.prototype.upload=function(gl,pack){return this.chunks.filter(c=>c.I.length).map(c=>{const m={n:c.I.length},nv=c.P.length/3;
+  {let lo=[1e9,1e9,1e9],hi=[-1e9,-1e9,-1e9];for(let i=0;i<nv;i++)for(let k=0;k<3;k++){const v=c.P[i*3+k];if(v<lo[k])lo[k]=v;if(v>hi[k])hi[k]=v;}m.c=[0,1,2].map(k=>(lo[k]+hi[k])/2);m.r=Math.hypot(hi[0]-lo[0],hi[1]-lo[1],hi[2]-lo[2])/2;}   // (2.12) a bounding sphere per chunk: the scene's pieces are chunked by place (MB.fresh) and culled
   const buf=a=>{const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,a,gl.STATIC_DRAW);return b;};
   m.vp=buf(new Float32Array(c.P));
   if(pack){const N=new Int8Array(nv*4),C=new Uint8Array(nv*4);for(let i=0;i<nv;i++)for(let k=0;k<3;k++){N[i*4+k]=Math.round(clamp(c.N[i*3+k],-1,1)*127);C[i*4+k]=Math.round(clamp(c.C[i*3+k],0,1)*255);}
@@ -391,6 +392,7 @@ const UPX=[0,0,1, 0,1,0, -1,0,0];                       // maps +x of a gCone to
    that and the shimmer were the "aliasing everywhere".) */
 const GFX={mode:'full',why:''};
 const DRS={s:1,win:[],good:0,floor:0.6,cap:1,capT:0,check:null,t:0};
+const PERF={on:false,noChin:false,chinFull:false,scale:1};   // (2.12.3) the performance test's switches (95_ui.js perfStart)
 function gfxEffective(){return cfg.gfx==='light'||(cfg.gfx!=='full'&&R3.soft)?'light':'full';}
 function gfxSet(choice){cfg.gfx=choice;try{localStorage.setItem('ec135fd.gfx',choice);localStorage.removeItem('ec135fd.gfxAuto');}catch(e){}
   GFX.mode=gfxEffective();drsReset();}
@@ -398,13 +400,13 @@ function drsReset(){Object.assign(DRS,{s:1,win:[],good:0,floor:0.6,cap:1,capT:0,
 function gfxPixelRatio(W,H){   // drawing-buffer pixels per page pixel: the screen's density (at most 2) within the budget, times the dynamic scale
   const dpr=Math.min(2,typeof devicePixelRatio==='number'&&devicePixelRatio>0?devicePixelRatio:1);
   const r=Math.min(dpr,Math.sqrt((R3.soft&&cfg.gfx!=='full'?0.5e6:GFX.mode==='light'?1.2e6:2.6e6)/Math.max(1,W*H)));
-  return cfg.gfx==='full'?r:r*DRS.s;}
+  return (cfg.gfx==='full'?r:r*DRS.s)*(PERF.scale||1);}
 /* Dynamic resolution: frame intervals in windows of 45 frames against 60 per second. A late window steps
    the scale down by 0.1; if the next window is not faster the pixels were not the bottleneck (the CPU or
    the screen is), so the step is undone and taken as the floor. Four windows with room step it back up; a
    step up that has to be taken back caps the scale there for a minute. */
 function drsStep(dt){
-  DRS.t+=dt;if(cfg.gfx==='full'||!(dt>0)||dt>0.25||DRS.t<2)return;
+  DRS.t+=dt;if(cfg.gfx==='full'||PERF.on||!(dt>0)||dt>0.25||DRS.t<2)return;
   const w=DRS.win;w.push(dt);if(w.length<45)return;
   const mean=w.reduce((a,b)=>a+b,0)/w.length;w.length=0;const T=1/60;
   if(DRS.capT>0&&(DRS.capT-=45*mean)<=0)DRS.cap=1;
@@ -495,11 +497,13 @@ function buildScenery(gl){
   b.wDefault=wGround;
   R3.socks=[[35,-45,7],[2366,700,6],[212,-872,6],[1563,-976,6],[-2258,-1458,5]];   // the field, the summit, the clearing, the hill, the high-rise (2.9)
   for(const [n,e,hp] of R3.socks)tube(b,[n,e,hAt(n,e)],[n,e,hAt(n,e)-hp],0.06,0.05,[0.8,0.8,0.8],6);
+  {const [n,e]=HAPI.pos,z=hAt(n,e);const hb=gBox([n,e,z-0.25],[0.45,0.3,0.25]);b.add(hb.P,hb.N,[0.18,0.18,0.2],hb.I);const lg=gBox([n,e,z-0.04],[0.5,0.35,0.04]);b.add(lg.P,lg.N,[0.5,0.5,0.5],lg.I);}   // (2.15) the HAPI's housing west of the pad
   for(const [n,e] of [[25,25],[25,-25],[-25,25],[-25,-25]]){const c=gCone(0,0.35,-1.0,0.0,8);b.add(c.P,c.N,[0.95,0.45,0.1],c.I,{R:UPX,T:[n,e,hAt(n,e)]});}
   // power line along the north-south road: the hazard low flying is about
   for(let n=-1400;n<=1400;n+=70){const e=-322,z=hAt(n,e);tube(b,[n,e,z],[n,e,z-11],0.18,0.14,[0.45,0.40,0.35],5);const cb=gBox([0,0,-10.6],[0.12,1.6,0.08]);b.add(cb.P,cb.N,[0.45,0.40,0.35],cb.I,{T:[n,e,z]});}
   // every wire the rotor can hit (10_atmo.js WIRES: this line, the one across the river valley), as the physics sees it
-  b.wDefault=null;for(const w of WIRES)if(w[6]!=='j')tube(b,[w[0],w[1],-w[2]],[w[3],w[4],-w[5]],0.03,0.03,[0.15,0.15,0.15],3);b.wDefault=wGround;
+  b.fresh();b.wDefault=null;for(const w of WIRES)if(w[6]!=='j')tube(b,[w[0],w[1],-w[2]],[w[3],w[4],-w[5]],0.03,0.03,[0.15,0.15,0.15],3);b.wDefault=wGround;
+  b.fresh();
   // village east of the road
   R3.chimneys=[];
   for(let i=0;i<16;i++){const n=300+rng()*140,e=480+rng()*220;if(Math.abs(n-280)<14)continue;const z=hAt(n,e),w=5+rng()*3,l=6+rng()*4,hh=3+rng()*1.5;const R=rotZ(rng()<0.5?0:Math.PI/2);
@@ -512,6 +516,7 @@ function buildScenery(gl){
     for(const [cn,ce,sn,se] of [[0,-16,22,0.15],[0,16,22,0.15],[22,0,0.15,16],[-22,-7,0.15,9],[-22,9,0.15,7]]){const wl=gBox([cn,ce,-0.6],[sn,se,0.6]);b.add(wl.P,wl.N,[0.70,0.66,0.60],wl.I,{T:[400,600,hAt(400+cn,600+ce)]});}
     for(let i=0;i<5;i++)for(let j=0;j<7;j++){if(j===3)continue;const gn=400-19+i*3.2,ge=600-12+j*4,gs=gBox([0,0,-0.4],[0.1,0.35,0.4]);b.add(gs.P,gs.N,[0.58,0.57,0.55],gs.I,{T:[gn,ge,hAt(gn,ge)]});}}
   buildHamlet(b,hAt);   // (2.11) the second settlement, on the north-south road
+  b.fresh();
   // hospital with the rooftop pad (the plateau the physics sees is in BUILDINGS)
   for(const bd of BUILDINGS){const z=-groundH(bd.n,bd.e);const bx=gBox([0,0,-bd.h/2],[bd.w,bd.l,bd.h/2]);b.add(bx.P,bx.N,[0.78,0.76,0.72],bx.I,{T:[bd.n,bd.e,z]});
     for(let f=1;f<bd.h/3.2;f++){const band=gBox([0,0,-f*3.2],[bd.w+0.05,bd.l+0.05,0.5]);b.add(band.P,band.N,[0.35,0.42,0.50],band.I,{T:[bd.n,bd.e,z]});}
@@ -521,6 +526,7 @@ function buildScenery(gl){
       for(let i=0;i<8;i++){const a=i/8*2*Math.PI;const l=gBox([13*Math.cos(a),13*Math.sin(a),-bd.h-0.6],[0.1,0.1,0.6]);b.add(l.P,l.N,[1.0,0.85,0.2],l.I,{T:[bd.n,bd.e,z]});}
       const rail=gBox([0,0,-bd.h-0.6],[bd.w,bd.l,0.05]);}
     const cross=gBox([bd.w+0.05,0,-bd.h*0.6],[0.05,2.5,0.6]);b.add(cross.P,cross.N,[0.85,0.15,0.15],cross.I,{T:[bd.n,bd.e,z]});const cross2=gBox([bd.w+0.05,0,-bd.h*0.6],[0.05,0.6,2.5]);b.add(cross2.P,cross2.N,[0.85,0.15,0.15],cross2.I,{T:[bd.n,bd.e,z]});}
+  b.fresh();
   // wind turbine towers (the rotors are drawn live)
   R3.turbines=[[900,-700],[1010,-560],[1120,-420]];
   for(const [n,e] of R3.turbines){const z=hAt(n,e);tube(b,[n,e,z],[n,e,z-60],2.2,1.3,[0.90,0.90,0.90],10);}
@@ -537,9 +543,11 @@ function roofPad(b,n,e,z){const pd=gDisc(0,11,32);b.add(pd.P,pd.N,[0.22,0.22,0.2
   const hb=gBox([0,0,-0.20],[2.2,0.35,0.02]);b.add(hb.P,hb.N,[0.95,0.95,0.92],hb.I,{T:[n,e,z]});for(const y of [-1.8,1.8]){const bb=gBox([0,y,-0.20],[0.35,2.0,0.02]);b.add(bb.P,bb.N,[0.95,0.95,0.92],bb.I,{T:[n,e,z]});}
   for(let i=0;i<8;i++){const a=i/8*2*Math.PI;const l=gBox([12*Math.cos(a),12*Math.sin(a),-0.6],[0.1,0.1,0.6]);b.add(l.P,l.N,[1.0,0.85,0.2],l.I,{T:[n,e,z]});}}
 function buildWorld29(b,hAt){
+  b.fresh();
   // the bridge where the road crosses the inflow (n 280, e 380): deck, railings, piers
   {const dk=gBox([280,380,-0.25],[5.6,75,0.3]);b.add(dk.P,dk.N,[0.40,0.40,0.41],dk.I);for(const dn of [-5.5,5.5]){const r=gBox([280+dn,380,-1.0],[0.08,75,0.45]);b.add(r.P,r.N,[0.75,0.75,0.73],r.I);}
    for(const de of [-26,-8,8,26]){const z=hAt(280,380+de);const pr=gBox([280,380+de,(z-0.6)/2],[4.2,0.7,Math.abs(z-0.6)/2+0.3]);b.add(pr.P,pr.N,[0.62,0.61,0.58],pr.I);}}
+  b.fresh();
   // the town
   {const z=-TERRAIN.town.h,walls=[[0.82,0.78,0.70],[0.78,0.74,0.66],[0.86,0.83,0.76],[0.74,0.70,0.64],[0.80,0.62,0.52]];
    for(const bd of TOWN_B){const T=[bd.n,bd.e,z],c=bd.c===undefined?0.5:bd.c;
@@ -556,14 +564,17 @@ function buildWorld29(b,hAt){
      if(!bd.pad)for(const [cn,ce,sn,se] of [[bd.w,0,0.15,bd.l],[-bd.w,0,0.15,bd.l],[0,bd.l,bd.w,0.15],[0,-bd.l,bd.w,0.15]]){const pw=gBox([cn,ce,-bd.h-0.45],[sn,se,0.45]);b.add(pw.P,pw.N,rc,pw.I,{T});}
      if(bd.pad)roofPad(b,bd.n,bd.e,z-bd.h);
      else if(bd.w>6&&bd.l>6){const mc=gBox([bd.w*0.3*(c-0.5),bd.l*0.2,-bd.h-1.1],[Math.min(3,bd.w*0.3),Math.min(2.5,bd.l*0.25),1.1]);b.add(mc.P,mc.N,[0.55,0.56,0.57],mc.I,{T});}}}
+  b.fresh();
   // the line across the river valley: lattice pylons (square frustums), cross-arms, orange marker balls mid-span on the middle wire
   {const V=[[1180,-260],[1160,-20],[1140,220],[1120,460],[1100,700]];
    for(const [n,e] of V){const z=hAt(n,e),c=gCone(0,1.7,24,0.45,4,false);b.add(c.P,c.N,[0.62,0.63,0.64],c.I,{R:mmul(rotZ(Math.PI/4),UPX),T:[n,e,z]});const ca=gBox([0,0,-23.7],[2.9,0.25,0.25]);b.add(ca.P,ca.N,[0.62,0.63,0.64],ca.I,{T:[n,e,z]});}
    for(let i=0;i<V.length-1;i++){const m=[(V[i][0]+V[i+1][0])/2,(V[i][1]+V[i+1][1])/2],z=-((groundH(V[i][0],V[i][1])+groundH(V[i+1][0],V[i+1][1]))/2+24-4.5);
      for(const off of [-40,0,40]){const k=off/((Math.hypot(V[i+1][0]-V[i][0],V[i+1][1]-V[i][1]))/2),zz=z-4.5*(Math.abs(k));const ball=gEll([0.45,0.45,0.45],8,6);b.add(ball.P,ball.N,i%2?[0.95,0.95,0.95]:[0.95,0.42,0.08],ball.I,{T:[m[0]+(V[i+1][0]-V[i][0])*off/((Math.hypot(V[i+1][0]-V[i][0],V[i+1][1]-V[i][1]))),m[1]+(V[i+1][1]-V[i][1])*off/((Math.hypot(V[i+1][0]-V[i][0],V[i+1][1]-V[i][1]))),zz+0.45]});}}}
+  b.fresh();
   // the factory by the town: a hall and its stack (it smokes: 86_life.js)
   {const n=-2100,e=-1150,z=hAt(n,e);tube(b,[n,e,z],[n,e,z-40],1.7,1.1,[0.55,0.30,0.22],10);for(const hz of [-12,-24,-36]){const r=gBox([0,0,hz],[1.6-0.012*Math.abs(hz),1.6-0.012*Math.abs(hz),0.25]);b.add(r.P,r.N,[0.85,0.85,0.85],r.I,{T:[n,e,z]});}
    const hall=gBox([-30,0,-6],[22,14,6]);b.add(hall.P,hall.N,[0.66,0.64,0.60],hall.I,{T:[n,e,z]});const sr=gRoof(22.4,14.4,-12,-15);b.add(sr.P,sr.N,[0.42,0.44,0.46],sr.I,{T:[n-30,e,z]});}
+  b.fresh();
   // the slope site on the hill: four orange cones round a 14 m square
   for(const [dn,de] of [[7,7],[7,-7],[-7,7],[-7,-7]]){const n=1550+dn,e=-988+de,c=gCone(0,0.35,-1.0,0.0,8);b.add(c.P,c.N,[0.95,0.45,0.1],c.I,{R:UPX,T:[n,e,hAt(n,e)]});}
 }
@@ -650,7 +661,7 @@ function house(b,n,e,R,l,w,car,shed){const z=-groundH(n,e),T=[n,e,z],fl=10,fw=w+
   for(const [cx,cy] of [[bk,fw],[bk,-fw],[-l,fw],[-l,-fw],[bk,0],[(bk-l)/2,fw],[(bk-l)/2,-fw]]){const p=gBox([cx,cy,-0.5],[0.06,0.06,0.5]);b.add(p.P,p.N,rail,p.I,{R,T});}
   if(shed){const sb=gBox([bk+2.2,fw-2.2,-1.1],[1.6,1.4,1.1]);b.add(sb.P,sb.N,[0.45,0.38,0.30],sb.I,{R,T});const sr=gRoof(1.8,1.6,-2.2,-3.0);b.add(sr.P,sr.N,[0.35,0.33,0.32],sr.I,{R,T:[n+mrot(R,[bk+2.2,fw-2.2,0])[0],e+mrot(R,[bk+2.2,fw-2.2,0])[1],z]});}
   R3.houses.push([n,e]);if(car){const q=mrot(R,[0,w+2.6,0]),psi=Math.atan2(R[3],R[0]);R3.parked.push([n+q[0],e+q[1],psi,groundH(n+q[0],e+q[1])]);}}
-function buildHamlet(b,hAt){const rng=makeRng(37),H=HAMLET;
+function buildHamlet(b,hAt){const rng=makeRng(37),H=HAMLET;b.fresh();
   const put=(n,e,facing,i)=>{const w=4.5+rng()*2,l=5.5+rng()*2.5,hh=3.0+rng()*1.3,R=rotZ(facing),z=hAt(n,e),T=[n,e,z];
     const hb=gBox([0,0,-hh/2],[l,w,hh/2]);b.add(hb.P,hb.N,[0.78+0.14*rng(),0.74+0.06*rng(),0.66],hb.I,{R,T});const rf=gRoof(l+0.4,w+0.4,-hh,-hh-w*0.65);b.add(rf.P,rf.N,[0.45+0.3*rng(),0.26,0.21],rf.I,{R,T});
     if(i%4===1){const ch=gBox([0,0,-hh-w*0.65-0.2],[0.3,0.3,0.7]);b.add(ch.P,ch.N,[0.55,0.32,0.25],ch.I,{T});}
@@ -673,7 +684,7 @@ function farmSites(){if(FARMS)return FARMS;const F=[],rng=makeRng(23);
   return FARMS=F;}
 function nearFarm(n,e,r){for(const f of farmSites())if(Math.hypot(f.n-n,f.e-e)<r)return true;return false;}
 function buildFarms(b,hAt){const rng=makeRng(31);
-  for(const f of farmSites()){const R=rotZ(f.a),z=hAt(f.n,f.e),T=[f.n,f.e,z];
+  for(const f of farmSites()){b.fresh();const R=rotZ(f.a),z=hAt(f.n,f.e),T=[f.n,f.e,z];
     const hw=4.5+rng(),hl=5.5+1.5*rng(),hh=3.2+0.6*rng();const hb=gBox([0,0,-hh/2],[hl,hw,hh/2]);b.add(hb.P,hb.N,[0.84+0.08*rng(),0.78,0.68],hb.I,{R,T});const hr=gRoof(hl+0.4,hw+0.4,-hh,-hh-hw*0.75);b.add(hr.P,hr.N,[0.55+0.15*rng(),0.28,0.22],hr.I,{R,T});
     const bw=4.5,bl=8+2*rng(),bh=4.2;const bb=gBox([-hl-bl-6,0,-bh/2],[bl,bw,bh/2]);b.add(bb.P,bb.N,[0.62,0.55,0.45],bb.I,{R,T});const br=gRoof(bl+0.5,bw+0.5,-bh,-bh-bw*0.6);b.add(br.P,br.N,[0.40,0.40,0.42],br.I,{R,T});
     const sh=gBox([0,hw+9,-1.6],[6,3,1.6]);b.add(sh.P,sh.N,[0.50,0.46,0.40],sh.I,{R,T});const sr=gRoof(6.4,3.4,-3.2,-4.6);b.add(sr.P,sr.N,[0.45,0.42,0.40],sr.I,{R,T});   // a shed
@@ -759,7 +770,7 @@ const VEG_LOD={tree:{kd:[350,600,1200,2200],kv:[0.55,0.2],ce:0.3,bands:[['0',0,1
   bush:{kd:[260,300,330,350],kv:[0.6,0.3],ce:0,bands:[['0',0,1e9]]},rock:{kd:[110,180,280,400],kv:[0.6,0.25],ce:0,bands:[['0',0,1e9]]},reed:{kd:[110,140,160,180],kv:[0.6,0.3],ce:0,bands:[['0',0,1e9]]}};
 function vegKeep(L,d,sc,f){const D=L.kd.map(x=>x*sc),ss=(a,b,x)=>{const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t);};
   const k=d<D[1]?1+(L.kv[0]-1)*ss(D[0],D[1],d):d<D[2]?L.kv[0]+(L.kv[1]-L.kv[0])*ss(D[1],D[2],d):L.kv[1]*(1-ss(D[2],D[3],d));return k*f;}
-function drawForest(P,eye,lite){const gl=R3.gl,ext=R3.ext,pr=R3.pr.inst;if(!ext||!pr)return;
+function drawForest(P,eye,lite,rmax){const gl=R3.gl,ext=R3.ext,pr=R3.pr.inst;if(!ext||!pr)return;   // rmax: nothing beyond (the chin windows, 2.12.2)
   const key=lite?'forestLite':'forest';if(!R3.m[key])R3.m[key]=buildForest(gl,lite);const F=R3.m[key];
   const sc=lite?0.75:1,kf=lite?1.15:1,R1=750*sc,ez=eye[2],BW=15*sc;   // BW: half the width of a cross-fade between two shapes
   const range=(n0,e0,sz,zlo,zhi)=>{const dx=Math.max(n0-eye[0],0,eye[0]-n0-sz),dy=Math.max(e0-eye[1],0,eye[1]-e0-sz),fx=Math.max(Math.abs(eye[0]-n0),Math.abs(eye[0]-n0-sz)),fy=Math.max(Math.abs(eye[1]-e0),Math.abs(eye[1]-e0-sz));
@@ -769,9 +780,10 @@ function drawForest(P,eye,lite){const gl=R3.gl,ext=R3.ext,pr=R3.pr.inst;if(!ext|
   const tile=(B,types,d0,d1)=>{for(const t of types){const b=B[t];if(!b)continue;const lod=VEG_LOD[t==='pine'||t==='broad'?'tree':t],f=t==='pine'||t==='broad'?(lite?0.55:1):1,dsc=t==='pine'||t==='broad'?sc:1;
       for(const [lv,lo,hi] of lod.bands){const blo=lo*dsc,bhi=hi*dsc;if(d1<blo-BW||d0>=bhi+BW)continue;const dm=Math.max(d0,blo-BW);if(dm>lod.kd[3]*dsc)continue;   // (the bands overlap by the cross-fade)
         const n=upto(b.ranks,vegKeep(lod,dm,dsc,f)+0.08);if(n>0)(L[t+lv]=L[t+lv]||[]).push([b.b,n,[blo,bhi],lod,dsc,f,dm]);}}};
-  for(const c of F.coarse){if(!sphereVisible(P,c.c,c.r))continue;const [c0,c1]=range(c.n0,c.e0,F.CS,c.zlo,c.zhi);if(c0>2200*sc)continue;
+  const RM=Math.min(2200*sc,rmax||1e9);
+  for(const c of F.coarse){if(!sphereVisible(P,c.c,c.r))continue;const [c0,c1]=range(c.n0,c.e0,F.CS,c.zlo,c.zhi);if(c0>RM)continue;
     if(c0>R1+BW){tile(c.bufs,['pine','broad'],c0,c1);nd++;continue;}
-    for(const o of c.fine){if(!sphereVisible(P,o.c,o.r))continue;nd++;const [d0,d1]=range(o.n0,o.e0,F.FT,o.zlo,o.zhi);tile(o.bufs,['pine','broad','bush','rock','reed'],d0,d1);}}
+    for(const o of c.fine){if(!sphereVisible(P,o.c,o.r)||!boxVisible(P,[o.n0,o.e0,o.zlo-22],[o.n0+F.FT,o.e0+F.FT,o.zhi+2]))continue;const [d0,d1]=range(o.n0,o.e0,F.FT,o.zlo,o.zhi);if(d0>RM)continue;nd++;tile(o.bufs,['pine','broad','bush','rock','reed'],d0,d1);}}   // (2.12.2) the box too: a sphere round a flat tile reaches far under the ground, where a view looking down goes on
   R3.tilesDrawn=nd;
   gl.useProgram(pr.p);gl.uniformMatrix4fv(pr.u.uMVP,false,R3.vp);gl.uniform3fv(pr.u.uSun,R3.sun);gl.uniform3fv(pr.u.uCam,R3.cam.pos);gl.uniform1f(pr.u.uAlpha,1);gl.uniform1f(pr.u.uSpec,0);
   gl.uniform3fv(pr.u.uFog,R3.fog);gl.uniform4fv(pr.u.uWash,R3.wash||[0,0,0,1]);gl.uniform1f(pr.u.uT,R3.time);gl.uniform1f(pr.u.uCloud,cfg.cloud);gl.uniform2fv(pr.u.uWind,R3.windXY||[0,0]);
@@ -793,11 +805,12 @@ function drawForest(P,eye,lite){const gl=R3.gl,ext=R3.ext,pr=R3.pr.inst;if(!ext|
   gl.disable(gl.SAMPLE_ALPHA_TO_COVERAGE);for(const i of [a.aI0,a.aI1,a.aI2]){ext.vertexAttribDivisorANGLE(i,0);gl.disableVertexAttribArray(i);}if(a.aT>=0)gl.disableVertexAttribArray(a.aT);}
 /* The trees' shadows (2.11): within R of the eye (fading over the last 60 m), the middle shapes, on the tangent
    plane at each foot; bushes and boulders too. Called inside the shadow pass (stencil, blending set up). */
-function drawForestShadows(P,eye,lite){const gl=R3.gl,ext=R3.ext,pr=R3.pr.instShd,F=R3.m[lite?'forestLite':'forest'];if(!ext||!pr||!F)return;
+function drawForestShadows(P,eye,lite,mg){const gl=R3.gl,ext=R3.ext,pr=R3.pr.instShd,F=R3.m[lite?'forestLite':'forest'];if(!ext||!pr||!F)return;   // mg: how far outside the view a tree may stand and still throw its shadow into it (default R; the chin windows 50 m: 17 m trees, the sun at 20° or higher)
   const R=lite?130:220,a=pr.a,dist=(n0,e0,sz)=>Math.hypot(Math.max(n0-eye[0],0,eye[0]-n0-sz),Math.max(e0-eye[1],0,eye[1]-e0-sz));
   gl.useProgram(pr.p);gl.uniformMatrix4fv(pr.u.uMVP,false,R3.vp);gl.uniform3fv(pr.u.uSun,R3.shSun);gl.uniform3fv(pr.u.uCam,R3.cam.pos);gl.uniform3fv(pr.u.uEye,eye);gl.uniform2f(pr.u.uBand,R-60,R);gl.uniform1f(pr.u.uAlpha,0.40);gl.uniform1f(pr.u.uK,lite?1.15:1);
   const L={};
-  for(const c of F.coarse){if(dist(c.n0,c.e0,F.CS)>R)continue;for(const o of c.fine){if(dist(o.n0,o.e0,F.FT)>R||!sphereVisible(P,o.c,o.r+R))continue;
+  for(const c of F.coarse){if(dist(c.n0,c.e0,F.CS)>R)continue;for(const o of c.fine){if(dist(o.n0,o.e0,F.FT)>R)continue;const m=mg===undefined?R:mg,sx=R3.shSun[0],sy=R3.shSun[1],sl=Math.hypot(sx,sy)||1,mx=m*sx/sl,my=m*sy/sl;   // a tree throws its shadow away from the sun: the box reaches that way
+    if(!sphereVisible(P,o.c,o.r+m)||!boxVisible(P,[o.n0-Math.max(0,mx),o.e0-Math.max(0,my),o.zlo-22],[o.n0+F.FT-Math.min(0,mx),o.e0+F.FT-Math.min(0,my),o.zhi+2]))continue;
     for(const [t,k] of [['pine','pine1'],['broad','broad1'],['bush','bush0'],['rock','rock0']])if(o.bufs[t])(L[k]=L[k]||[]).push(o.bufs[t]);}}
   for(const k in L){const m=F.tpl[k];gl.bindBuffer(gl.ARRAY_BUFFER,m.vp);gl.enableVertexAttribArray(a.aP);gl.vertexAttribPointer(a.aP,3,gl.FLOAT,false,0,0);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,m.ib);
     for(const bf of L[k]){gl.bindBuffer(gl.ARRAY_BUFFER,bf.b);
@@ -810,6 +823,7 @@ function drawForestShadows(P,eye,lite){const gl=R3.gl,ext=R3.ext,pr=R3.pr.instSh
 function frustumPlanes(m){const r=i=>[m[i],m[4+i],m[8+i],m[12+i]],P=[];const w=r(3);
   for(const i of [0,1,2])for(const sg of [1,-1]){const a=r(i),p=[w[0]+sg*a[0],w[1]+sg*a[1],w[2]+sg*a[2],w[3]+sg*a[3]];const l=Math.hypot(p[0],p[1],p[2]);P.push(p.map(v=>v/l));}return P;}
 function sphereVisible(P,c,r){for(const p of P)if(p[0]*c[0]+p[1]*c[1]+p[2]*c[2]+p[3]<-r)return false;return true;}
+function boxVisible(P,lo,hi){for(const p of P)if(p[0]*(p[0]>0?hi[0]:lo[0])+p[1]*(p[1]>0?hi[1]:lo[1])+p[2]*(p[2]>0?hi[2]:lo[2])+p[3]<0)return false;return true;}   // (2.12.2) an axis-aligned box: its corner furthest along each plane's normal
 /* Lofted body with superelliptic sections: [x, half-width, half-height,
    z-centre, exponent] (2 = ellipse, larger = boxier), normals from the
    surface itself, colour per vertex from colFn(x, angle, section). */
@@ -1106,18 +1120,211 @@ function drawMesh(pr,m,M,alpha=1,parts){const gl=R3.gl;gl.useProgram(pr.p);
   if(pr.u.uNoise){gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,R3.noiseTex);gl.uniform1i(pr.u.uNoise,1);gl.activeTexture(gl.TEXTURE0);}
   if(pr.u.uShore){gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,R3.shoreTex);gl.uniform1i(pr.u.uShore,2);gl.activeTexture(gl.TEXTURE0);}
   if(parts){for(const b of parts)gl.drawElements(gl.TRIANGLES,b.n,gl.UNSIGNED_SHORT,b.o);}else gl.drawElements(gl.TRIANGLES,m.n,gl.UNSIGNED_SHORT,0);}
+/* The world's static part, the ground and the shadows, as functions (2.12), drawn for the camera and
+   view-projection in R3 (cam, vp). */
+function sceneVisible(P){return R3.m.scene.filter(m=>sphereVisible(P,m.c,m.r));}   // (2.12) the scene's chunks in view
+function drawStatics(cpos,lite,dt,rmax){const gl=R3.gl,P=frustumPlanes(R3.vp);   // rmax: the cars within it only, no boat or birds (the chin windows)
+  for(const m of sceneVisible(P))drawMesh(R3.pr.lit,m,M4I);
+  drawForest(P,cpos,lite,rmax);   // (2.9.2) trees, bushes, rocks, reeds
+  {const w=S.wind,ws=Math.hypot(w[0],w[1]);const az=ws>0.2?Math.atan2(w[1],w[0]):WIND.dir*DEG+Math.PI;const droop=lerp(65*DEG,3*DEG,clamp(ws/7,0,1));   // windsock: points downwind, droops when calm
+    const Rm=mmul(rotZ(az),rotY(-droop));for(const [n,e,hp] of R3.socks){if(!sphereVisible(P,[n,e,-terrainH(n,e)-hp],6))continue;drawMesh(R3.pr.lit,R3.m.sock,m4model(Rm,[n,e,-terrainH(n,e)-hp]));}}   // (2.12.8) only those in view
+  {const w=S.wind,ws=Math.hypot(w[0],w[1]);const az=ws>0.5?Math.atan2(-w[1],-w[0]):WIND.dir*DEG;R3.turb+=dt*clamp(ws/6,0.15,1)*1.3;   // wind turbines: face the wind, turn with it
+    for(const [n,e] of R3.turbines){if(!sphereVisible(P,[n,e,-terrainH(n,e)-60],75))continue;drawMesh(R3.pr.lit,R3.m.turbine,m4model(mmul(rotZ(az),rotX(R3.turb)),[n,e,-terrainH(n,e)-60]));}}
+  lifeDraw(dt,rmax);}   // cars, the boat, birds (86_life.js)
+function drawGround(cpos,lite){const gl=R3.gl;
+  {const g=R3.m.ground,P=frustumPlanes(R3.vp),R=[[],[]];let cur=null,cls=-1;   // (2.9.2) only the ground's blocks in view; (2.10) those beyond ~900 m with the light shader (a pixel covers over a metre there: none of the fine detail is left to see); consecutive blocks of a kind in one call
+   for(const b of g.blocks){const k=!sphereVisible(P,b.c,b.r)?0:(lite||Math.hypot(b.c[0]-cpos[0],b.c[1]-cpos[1],b.c[2]-cpos[2])-b.r>900)?2:1;
+     if(k&&k===cls&&cur&&cur.o+cur.n*2===b.o)cur.n+=b.n;else if(k){cur={o:b.o,n:b.n};R[k-1].push(cur);}else cur=null;cls=k;}
+   if(R[0].length)drawMesh(R3.pr.gnd,g,M4I,1,R[0]);if(R[1].length)drawMesh(lite?R3.pr.gnd:R3.pr.gndLite,g,M4I,1,R[1]);}
+  if(R3.m.river){gl.disable(gl.CULL_FACE);for(const m of R3.m.river)drawMesh(R3.pr.water,m,M4I);gl.enable(gl.CULL_FACE);}}   // the rivers, over the flood plain
+/* Shadow: every aircraft mesh projected along the sun onto the ground plane under the aircraft.
+   The stencil lets each pixel be darkened once, however many shadow triangles cover it (without
+   a stencil buffer, depth-equal rejection does the same, less cleanly). (2.11) the scenery's first. */
+function drawShadows(cpos,lite,A,near){const gl=R3.gl,{R,rt,st,hubW,Rh}=A;   // near: the chin windows' pass (2.12.2), the scenery's shadows only from close by
+  const sun=R3.shSun,zg=-terrainH(S.pos[0],S.pos[1])-0.03,kx=sun[0]/sun[2],ky=sun[1]/sun[2];
+  const Sh=new Float32Array([1,0,0,0, 0,1,0,0, -kx,-ky,0,0, kx*zg,ky*zg,zg,1]);   // column-major: x' = x - kx (z - zg), y' = y - ky (z - zg), z' = zg
+  const hAbove=-S.pos[2]-terrainH(S.pos[0],S.pos[1]),al=clamp(0.42-hAbove*0.0035,0.06,0.42);
+  const stc=R3.info&&R3.info.stencil;
+  gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(-2,-8);gl.disable(gl.CULL_FACE);
+  if(stc){gl.enable(gl.STENCIL_TEST);gl.stencilFunc(gl.EQUAL,0,0xff);gl.stencilOp(gl.KEEP,gl.KEEP,gl.INCR);gl.depthMask(false);}else gl.depthFunc(gl.LESS);
+  const shd=(m,Mm,a)=>drawMesh(R3.pr.shadow,m,m4mul(Sh,Mm),a);
+  {const sv=R3.sun;R3.sun=R3.shSun;const P=frustumPlanes(R3.vp);   // (2.11) the scenery's shadows first: the buildings, the turbines' rotors, the cars near by, the trees
+   for(const m of sceneVisible(P))drawMesh(R3.pr.shd,m,M4I,0.42);
+   {const w=S.wind,ws=Math.hypot(w[0],w[1]);const az=ws>0.5?Math.atan2(-w[1],-w[0]):WIND.dir*DEG;for(const [n,e] of R3.turbines){if(Math.hypot(n-cpos[0],e-cpos[1])>(near?300:900))continue;R3.pr.shd.aTconst=[-terrainH(n,e),1];drawMesh(R3.pr.shd,R3.m.turbine,m4model(mmul(rotZ(az),rotX(R3.turb)),[n,e,-terrainH(n,e)-60]),0.42);}}
+   if(typeof lifeShadows==='function')lifeShadows((m,M,zg)=>{R3.pr.shd.aTconst=[zg,1];drawMesh(R3.pr.shd,m,M,0.42);},cpos,near?Math.min(400,near):400);
+   R3.pr.shd.aTconst=null;drawForestShadows(P,cpos,lite,near?50:undefined);R3.sun=sv;}
+  shd(R3.m.body,m4model(R,S.pos),al);shd(R3.m.hub,m4model(Rh,hubW),al);
+  for(let k=0;k<rt.N;k++){const psi=st.psi+2*Math.PI*k/rt.N;const a=Math.atan2(-rt.s*Math.sin(psi),-Math.cos(psi));shd(R3.m.blade,m4model(mmul(Rh,mmul(rotZ(a),rotY(st.beta[k]))),hubW),al);}
+  if(st.Om>15){if(stc)gl.stencilFunc(gl.EQUAL,0,0xff);shd(R3.m.disc,m4model(Rh,hubW),al*0.18*clamp((st.Om-15)/25,0,1));}   // the spinning disc dims the ground a little
+  if(stc){gl.disable(gl.STENCIL_TEST);gl.depthMask(true);}
+  gl.disable(gl.POLYGON_OFFSET_FILL);gl.depthFunc(gl.LEQUAL);gl.disable(gl.BLEND);gl.enable(gl.CULL_FACE);}
+/* The approach view (2.12). Below ~60 m and under ~40 kt on an approach the pilot's gaze lowers by itself, as a
+   pilot's does on short final: the line of sight goes down to 25°, the view grows taller (75° instead of 62°), and
+   with it the cockpit moves up the screen: the panel rises from the bottom to where it hangs in the airframe and
+   under it the chin windows come into view (89_panel.js draws their frame), the ground 1-4 m ahead of the skids,
+   the pad's markings, the aircraft's shadow. One picture, one projection: what leaves the windscreen's lower edge
+   reappears under the panel where it belongs. The horizon stays in the top sixth of the view. The blend k follows
+   height and ground speed with a 1.5 s lag, so it slides once per approach, not with every gust.
+   (2.12.4) Only by key (4) since 2.12.4; the arming below decides the hint that offers it (and the one that
+   offers the normal view back on a departure), no longer the view itself.
+   (2.12.1) Only on the approach, never on the take-off: there the lowered gaze takes the horizon's picture away
+   while the attitude is being set. The view is armed when the aircraft has been away from the ground (above ~90 m
+   or faster than ~55 kt: the next time it is low and slow it is arriving), or when a flight starts in the air
+   above 30 m or faster than 20 kt (the approach exercises); it is disarmed after 2 s on the skids (the next lift-
+   off is a departure) and by a departure from the hover or a go-around (2.5 s of climbing above 300 fpm while
+   speeding up, or above 600 fpm: a flare slows down, a correction in the hover is short). A flight that starts
+   in the hover or on the pad starts disarmed.
+   Automatic (cfg.apr 'auto'), held ('on') or never ('off'); key 4. */
+const APR={k:0,armed:false,gT:0,dT:0,gs:0,acc:0,hint:'',hintT:0};
+function aprEnv(){const gs=Math.hypot(S.vb[0],S.vb[1])/KT,h=-S.pos[2]-terrainH(S.pos[0],S.pos[1])-1.3;   // the skids' height (S.hAGL, also before the first step)
+  return {h,gs,k:sm(90,45,h)*sm(55,30,gs)};}
+function aprWant(){return cfg.apr==='on'?1:0;}   // (2.12.4) by key only (4): the situation gives a hint (aprHint), not the view
+function aprArm(dt){const E=aprEnv();
+  if(APR.S!==S){APR.armed=E.h>30||E.gs>20;APR.gT=0;APR.dT=0;APR.gs=E.gs;APR.acc=0;return;}   // a new flight: in the air and moving, an approach; in the hover or on the pad, a departure
+  if(!(dt>0))return;
+  APR.acc+=((E.gs-APR.gs)/dt-APR.acc)*Math.min(1,dt/0.6);APR.gs=E.gs;   // ground speed's rate, kt/s, smoothed
+  if(E.k<0.02){APR.armed=true;APR.dT=0;APR.gT=0;return;}   // away from the ground: the next low and slow is an arrival
+  APR.gT=S.onGround?APR.gT+dt:0;if(APR.gT>2)APR.armed=false;   // landed: the next lift-off is a departure
+  const fpm=S.vs/FPM;if((fpm>300&&APR.acc>0.3)||fpm>600)APR.dT+=dt;else APR.dT=Math.max(0,APR.dT-dt);if(APR.dT>2.5)APR.armed=false;}   // climbing and speeding up, or climbing fast: a departure (a flare slows down, a correction in the hover is short)
+function aprStep(dt){const rp=typeof REPLAY==='object'&&REPLAY.on,fresh=!rp&&APR.S!==S;if(!rp)aprArm(dt);if(fresh){APR.S=S;APR.k=aprWant();return;}   // a new flight (placeAt): straight to its view, no slide; in the replay (a state of its own every frame) the arming stands still
+  APR.k+=(aprWant()-APR.k)*Math.min(1,dt/1.5);if(APR.k<0.002)APR.k=0;if(APR.k>0.998)APR.k=1;
+  aprHint(dt,rp);}
+/* (2.12.4) The hint (90_hud.js draws it above the panel, 8 s from the moment the situation arises): on an
+   approach, low and slow, with the view off, '4 approach view'; on a departure (the view disarmed: after a
+   landing, on the pad, in the hover, climbing away) with the view on, '4 back to the normal view'. */
+function aprHint(dt,rp){const E=aprEnv(),h=rp||cfg.view!=='cockpit'?'':cfg.apr==='on'?(!APR.armed?'dep':''):(APR.armed&&E.k>0.6&&!S.onGround?'apr':'');
+  if(APR.ack){APR.ack=false;APR.hint=h;APR.hintT=99;return;}   // the key was pressed: the situation as it now stands needs no hint
+  if(h!==APR.hint){APR.hint=h;APR.hintT=0;}else APR.hintT+=dt;}
+/* (2.12.2) The chin windows: their own small pass, after the main one (2.12.3: one for both). The main pass stops under the
+   panel's top (the scissor, as in the normal cockpit view); each window's screen rectangle is then drawn
+   with a projection cut down to it (the same pixels as the full view's projection would give, the frustum
+   only as wide as the window, so only what is in it is drawn): the aircraft, the scenery and trees in it,
+   the cars within reach, the ground, the shadows, the target's column and the predicted path. No sky (the
+   windows look 36-60° down) and no downwash particles (right under the eye they are large sprites: the
+   overdraw that made 2.12's approach view slow). */
+function subRectM(x,y,w,h,bw,bh){const ax=x/bw*2-1,bx=(x+w)/bw*2-1,ay=y/bh*2-1,by=(y+h)/bh*2-1;
+  return new Float32Array([2/(bx-ax),0,0,0, 0,2/(by-ay),0,0, 0,0,1,0, -(bx+ax)/(bx-ax),-(by+ay)/(by-ay),0,1]);}   // NDC of the rectangle onto the whole of NDC
+/* (2.12.3) One pass for both windows: the rectangle round the two of them, its depth cleared to the near plane
+   (so the depth test turns the scene away there before it is shaded) and the windows themselves punched back to
+   the far plane: only their pixels are drawn. */
+function chinMask(quads,X0,Y0,w,h,pxr,Hh){const gl=R3.gl;if(!R3.pr.mask){R3.pr.mask=glProg(gl,'attribute vec3 aP;void main(){gl_Position=vec4(aP,1.0);}',GLSL_PREC+'void main(){gl_FragColor=vec4(0.0);}');R3.maskBuf=gl.createBuffer();}
+  const pr=R3.pr.mask,T=[];
+  for(const q of quads){const N=q.map(v=>[(v[0]*pxr-X0)/w*2-1,((Hh-v[1])*pxr-Y0)/h*2-1]);for(const i of [0,1,2,0,2,3])T.push(N[i][0],N[i][1],0.99999);}
+  gl.clearDepth(0);gl.clear(gl.DEPTH_BUFFER_BIT);gl.clearDepth(1);
+  gl.useProgram(pr.p);gl.bindBuffer(gl.ARRAY_BUFFER,R3.maskBuf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(T),gl.DYNAMIC_DRAW);
+  gl.enableVertexAttribArray(pr.a.aP);gl.vertexAttribPointer(pr.a.aP,3,gl.FLOAT,false,0,0);
+  gl.colorMask(false,false,false,false);gl.disable(gl.CULL_FACE);gl.depthFunc(gl.ALWAYS);gl.drawArrays(gl.TRIANGLES,0,T.length/3);
+  gl.depthFunc(gl.LEQUAL);gl.colorMask(true,true,true,true);gl.enable(gl.CULL_FACE);}
+/* (2.12.4) Seen through the chin windows. The windows are drawn at half the resolution into a texture of their
+   own (a framebuffer with depth and stencil, no multisampling) and laid into the view through a glass: slightly
+   tinted, a little less contrast, darker towards the frame, a faint sheen of the sky at the forward edge. The
+   ground in them is the light shader's (no flowers' dots, no finest octave). Under *full* graphics both at full
+   resolution and in the full shader. A quarter of the pixels, each cheaper: the windows cost little now, and
+   through the glass the softer picture reads as the glass's, not as a lower setting. */
+function chinFB(w,h){const gl=R3.gl;let F=R3.chinFB;if(F&&F.w>=w&&F.h>=h)return F.ok?F:null;
+  const W=Math.max(w,F?F.w:0),H=Math.max(h,F?F.h:0);
+  if(F){gl.deleteFramebuffer(F.fb);gl.deleteTexture(F.tex);gl.deleteRenderbuffer(F.rb);}
+  const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,W,H,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+  for(const [k,v] of [[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR],[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE]])gl.texParameteri(gl.TEXTURE_2D,k,v);
+  const rb=gl.createRenderbuffer();gl.bindRenderbuffer(gl.RENDERBUFFER,rb);gl.renderbufferStorage(gl.RENDERBUFFER,gl.DEPTH_STENCIL,W,H);
+  const fb=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,tex,0);gl.framebufferRenderbuffer(gl.FRAMEBUFFER,gl.DEPTH_STENCIL_ATTACHMENT,gl.RENDERBUFFER,rb);
+  const ok=gl.checkFramebufferStatus(gl.FRAMEBUFFER)===gl.FRAMEBUFFER_COMPLETE;gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.bindRenderbuffer(gl.RENDERBUFFER,null);
+  R3.chinFB=F={fb,tex,rb,w:W,h:H,ok};return ok?F:null;}
+const VS_GLASS='attribute vec3 aP;attribute vec4 aC;varying vec4 vC;void main(){vC=aC;gl_Position=vec4(aP.xy,0.0,1.0);}';
+const FS_GLASS=`${GLSL_PREC}uniform sampler2D uTex;uniform vec3 uFog;varying vec4 vC;
+void main(){vec3 c=texture2D(uTex,vC.xy).rgb;float l=dot(c,vec3(0.30,0.59,0.11));
+  c=mix(c,vec3(l),0.10)*vec3(0.93,0.97,0.95);                                        // the glass: a faint green-grey, a little less contrast
+  float e=min(min(vC.z,1.0-vC.z),min(vC.w,1.0-vC.w));c*=0.86+0.14*smoothstep(0.0,0.14,e);   // darker towards the frame
+  c=mix(c,uFog,0.04+0.06*(1.0-vC.w));gl_FragColor=vec4(c,1.0);}`;                    // the sky's sheen, more at the forward edge
+function chinGlass(quads,F,X0,Y0,w,h,w2,h2,pxr,Hh,bw,bh){const gl=R3.gl;if(!R3.pr.glass){R3.pr.glass=glProg(gl,VS_GLASS,FS_GLASS);R3.glassBuf=gl.createBuffer();}
+  const pr=R3.pr.glass,T=[],st=[[0,0],[1,0],[1,1],[0,1]];
+  for(const q of quads){const V=q.map((v,i)=>{const x=v[0]*pxr,y=(Hh-v[1])*pxr;return [x/bw*2-1,y/bh*2-1,0,(x-X0)/w*w2/F.w,(y-Y0)/h*h2/F.h,st[i][0],st[i][1]];});
+    for(const i of [0,1,2,0,2,3])T.push(...V[i]);}
+  gl.useProgram(pr.p);gl.bindBuffer(gl.ARRAY_BUFFER,R3.glassBuf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(T),gl.DYNAMIC_DRAW);
+  gl.enableVertexAttribArray(pr.a.aP);gl.vertexAttribPointer(pr.a.aP,3,gl.FLOAT,false,28,0);gl.enableVertexAttribArray(pr.a.aC);gl.vertexAttribPointer(pr.a.aC,4,gl.FLOAT,false,28,12);
+  gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,F.tex);gl.uniform1i(pr.u.uTex,0);gl.uniform3fv(pr.u.uFog,R3.fog);
+  gl.disable(gl.DEPTH_TEST);gl.disable(gl.CULL_FACE);gl.drawArrays(gl.TRIANGLES,0,T.length/7);gl.enable(gl.DEPTH_TEST);gl.enable(gl.CULL_FACE);}
+/* (2.12.6) In two steps. Before the view: where the windows are (their screen rectangle) and, with a
+   framebuffer, their picture drawn into it. After the view: that picture laid in through the glass. 2.12.4
+   drew the windows after the view, which switched away from the view's framebuffer and back in the middle
+   of the frame: on many GPUs that stores the whole multisampled picture and loads it again. Without a
+   framebuffer the windows are drawn straight into the view after it, as in 2.12.3. */
+function chinGeom(W,Hh,pxr,bw,bh){
+  if(!(cfg.view==='cockpit'&&!cfg.panel3d&&HUD.panelUp>0&&HUD.panelA>0.99&&PANEL.lay)||PERF.noChin)return null;
+  const yb=HUD.panelTop+(PNL_H+8)*PANEL.lay.s,quads=chinQuads(0.03);if(!quads.length)return null;
+  const xs=quads.flat().map(v=>v[0]),ys=quads.flat().map(v=>v[1]);
+  const xa=Math.max(0,Math.min(...xs)-2),xb=Math.min(W,Math.max(...xs)+2),ya=Math.max(yb-10,Math.min(...ys)-2),yz=Math.min(Hh,Math.max(...ys)+2);
+  const X0=Math.floor(xa*pxr),X1=Math.min(bw,Math.ceil(xb*pxr)),Y0=Math.max(0,Math.floor((Hh-yz)*pxr)),Y1=Math.min(bh,Math.ceil((Hh-ya)*pxr));
+  if(X1-X0<2||Y1-Y0<2)return null;
+  const w=X1-X0,h=Y1-Y0,full=PERF.chinFull||cfg.gfx==='full',sc=full?1:0.5;
+  return {quads,X0,Y0,w,h,full,w2:Math.max(2,Math.ceil(w*sc)),h2:Math.max(2,Math.ceil(h*sc))};}
+function chinDraw(lite,A,g,Hh,pxr,bw,bh){const gl=R3.gl,c=R3.cam,vp0=R3.vp,gnd=R3.pr.gnd;if(!g.full)R3.pr.gnd=R3.pr.gndLite;
+  const hE=-c.pos[2]-terrainH(c.pos[0],c.pos[1]),rmax=clamp(2*hE+40,40,200);
+  gl.clear(gl.COLOR_BUFFER_BIT|gl.STENCIL_BUFFER_BIT);
+  chinMask(g.quads,g.X0,g.Y0,g.w,g.h,pxr,Hh);   // the floor round the windows: nothing shaded there
+  R3.vp=m4mul(subRectM(g.X0,g.Y0,g.w,g.h,bw,bh),vp0);
+  R3.spec=0.55;drawMesh(R3.pr.lit,R3.m.body,m4model(A.R,S.pos));R3.spec=0;
+  drawStatics(c.pos,lite,0,rmax);drawGround(c.pos,lite);drawShadows(c.pos,lite,A,rmax);
+  gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);gl.disable(gl.CULL_FACE);
+  if(TUTOR.target){const [n,e]=TUTOR.target;const pulse=0.25+0.15*Math.sin(R3.time*3);drawMesh(R3.pr.lit,R3.m.column,m4model(UPX,[n,e,-terrainH(n,e)]),pulse);}
+  guideGL();if(cfg.predict&&PRED.res)predGL();
+  gl.depthMask(true);gl.disable(gl.BLEND);gl.enable(gl.CULL_FACE);
+  R3.vp=vp0;R3.pr.gnd=gnd;}
+function chinPre(lite,A,W,Hh,pxr,bw,bh){const g=chinGeom(W,Hh,pxr,bw,bh);if(!g)return null;const gl=R3.gl;
+  g.F=chinFB(g.w2,g.h2);if(!g.F)return g;
+  /* (2.12.8) when the approach view's frames come late (under 50 per second for 2 s, the rate the side panel
+     shows), the windows' picture is drawn every other frame and the last one laid in between: through the
+     glass, at half the resolution, the ground under the skids moves on at 25-30 pictures a second */
+  const fps=typeof UI==='object'?UI.fps||60:60;APR.lateT=APR.k>0.9&&fps<50&&!PERF.on?(APR.lateT||0)+(R3.dtF||0):0;if(APR.k<0.5)APR.half=false;else if(APR.lateT>2)APR.half=true;
+  R3.chinN=(R3.chinN||0)+1;const key=g.w2+'x'+g.h2;
+  if(APR.half&&R3.chinN%2&&R3.chinKey===key&&R3.chinLast){Object.assign(g,R3.chinLast,{quads:g.quads,F:g.F});return g;}   // the last picture, its own rectangle
+  R3.chinKey=key;R3.chinLast={X0:g.X0,Y0:g.Y0,w:g.w,h:g.h,w2:g.w2,h2:g.h2};
+  gl.bindFramebuffer(gl.FRAMEBUFFER,g.F.fb);gl.viewport(0,0,g.w2,g.h2);gl.enable(gl.SCISSOR_TEST);gl.scissor(0,0,g.w2,g.h2);gl.clearColor(R3.fog[0],R3.fog[1],R3.fog[2],1);gl.clearStencil(0);
+  chinDraw(lite,A,g,Hh,pxr,bw,bh);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,bw,bh);gl.disable(gl.SCISSOR_TEST);return g;}
+function chinPost(lite,A,g,Hh,pxr,bw,bh){if(!g)return;const gl=R3.gl;
+  if(g.F)chinGlass(g.quads,g.F,g.X0,g.Y0,g.w,g.h,g.w2,g.h2,pxr,Hh,bw,bh);
+  else{gl.enable(gl.SCISSOR_TEST);gl.viewport(g.X0,g.Y0,g.w,g.h);gl.scissor(g.X0,g.Y0,g.w,g.h);chinDraw(lite,A,g,Hh,pxr,bw,bh);gl.disable(gl.SCISSOR_TEST);}
+  gl.viewport(0,0,bw,bh);}
+const LOOK_GLANCE={on:false};
 /* ---- cameras ---- */
+/* (2.15) Motion cues. A pilot feels an acceleration before any instrument shows its result: the seat pushes
+   up when the lever comes up (0.025 g per 1 % in the hover), the body leans into a deceleration, the airframe
+   shudders through translational lift, in the vortex ring, in retreating blade stall, at a hard touchdown.
+   A screen gives none of that, which is why the vertical speed is chased (2.13.2). The head here does what a
+   head does in the seat: it lags the cockpit by an amount that follows the onset of the specific force
+   (high-passed with 0.8 s, so a steady turn or climb does not hold it off-centre), down and a nod with more g,
+   forward in a deceleration, sideways in a skid. Smooth: no shaking of the picture (a rotor's vibration in the
+   view was tried and left out, it makes the picture harder to read). Subtle: 0.25 m and 3° per g, full: twice
+   that, the offset limited to 6 and 12 cm. Only in the cockpit, not in the replay. */
+const MOT={lx:0,ly:0,lz:0,o:[0,0,0],p:0,y:0};
+function motionStep(dt){const g=REPLAY.on?0:cfg.motion==='full'?1:cfg.motion==='subtle'?0.5:0;
+  if(!g||!(dt>0)){MOT.o=[0,0,0];MOT.p=MOT.y=0;return MOT;}
+  const fx=(S.ax||0)/9.81,fy=(S.ay||0)/9.81,fz=(S.nz||1)-1,k=Math.min(1,dt/0.8);
+  MOT.lx+=(fx-MOT.lx)*k;MOT.ly+=(fy-MOT.ly)*k;MOT.lz+=(fz-MOT.lz)*k;   // the slow part, washed out
+  const hx=fx-MOT.lx,hy=fy-MOT.ly,hz=fz-MOT.lz,lim=0.06+0.06*(g>0.5?1:0),c=v=>clamp(v,-lim,lim),K=0.5*g;
+  const want=[c(-K*hx),c(-K*hy),c(K*hz)];   // body axes: x forward, y right, z down; the head lags the acceleration
+  for(let i=0;i<3;i++)MOT.o[i]+=(want[i]-MOT.o[i])*Math.min(1,dt/0.08);   // the neck: 80 ms
+  MOT.p=clamp(6*g*DEG*hz-3*g*DEG*hx,-3*DEG,3*DEG);   // a nod down (the line of sight lower) with more g and in a deceleration
+  return MOT;}
 function cameraUpdate(dt){
   const c=R3.cam,R=qmat(S.q),[phi,th,psi]=S.eul;
   // head: the mouse sets a target, the camera follows with a 120 ms lag; on release both return forward
-  const lk=DEV.look;if(!lk.on){lk.yawT=(lk.yawT||0)*Math.max(0,1-dt*6);lk.pitchT=(lk.pitchT||0)*Math.max(0,1-dt*6);}
+  /* (2.13) Glances: Q and E held look out of the left and the right door window and down at the ground beside
+     the skid (70° to the side, 25° down), the way a pilot glances while hovering; the stick stays in the hand
+     (unlike C, which takes the mouse for the head). Released, the head comes back. Shift+Q and Shift+E are the
+     tutor's quit and the engines. */
+  const lk=DEV.look,K=DEV.keys,sh=K.ShiftLeft||K.ShiftRight,gl=sh||lk.on?0:(K.KeyE?1:0)-(K.KeyQ?1:0);LOOK_GLANCE.on=gl!==0;
+  if(!lk.on){if(gl){lk.yawT=gl*70*DEG;lk.pitchT=-25*DEG;}else if(HT.on&&HT.ok&&cfg.view==='cockpit'){lk.yawT=HT.yaw;lk.pitchT=HT.pitch;}else{lk.yawT=(lk.yawT||0)*Math.max(0,1-dt*6);lk.pitchT=(lk.pitchT||0)*Math.max(0,1-dt*6);}}   // (2.13) the head by webcam (88_headtrack.js) after the glances
   const kf=Math.min(1,dt/0.12);lk.yaw+=((lk.yawT||0)-lk.yaw)*kf;lk.pitch+=((lk.pitchT||0)-lk.pitch)*kf;
+  aprStep(dt);   // (2.12) the approach view's state, in every view (switching to the cockpit finds it current)
   if(cfg.view==='cockpit'){
-    c.pos=vadd(S.pos,mrot(R,H.pilot.eye));
+    const mo=motionStep(dt);   // (2.15) the head with the accelerations
+    c.pos=vadd(S.pos,mrot(R,vadd(H.pilot.eye,mo.o)));
     // head yaw about the body vertical, then pitch; the line of sight looks down so that the bottom of the view sits ~36° below (the flight displays), see cockpitFov
-    const fv=cockpitFov(R3.w/Math.max(1,R3.h));
-    const cy=Math.cos(lk.yaw),sy=Math.sin(lk.yaw),el=fv.down-lk.pitch,ce=Math.cos(el),se=Math.sin(el);
-    c.f=mrot(R,[ce*cy,ce*sy,se]);c.u=mrot(R,[se*cy,se*sy,-ce]);c.fov=fv.v;
+    const fv=cockpitFov(R3.w/Math.max(1,R3.h),APR.k);
+    const hy=lk.yaw+mo.y,cy=Math.cos(hy),sy=Math.sin(hy),el=fv.down-lk.pitch+mo.p,ce=Math.cos(el),se=Math.sin(el);
+    c.f=mrot(R,[ce*cy,ce*sy,se]);c.u=mrot(R,[se*cy,se*sy,-ce]);c.fov=fv.v;c.gaze=fv.down;   // gaze: the line of sight's angle under the nose line (the panel's lift, 89_panel.js)
   }else if(cfg.view==='chase'){
     const vN=mrot(R,S.vb);const fast=Math.hypot(vN[0],vN[1])>12;
     const want=c.lockPsi!==undefined?c.lockPsi:fast?Math.atan2(vN[1],vN[0]):psi;   // lockPsi: fixed camera azimuth (screenshots)
@@ -1147,11 +1354,35 @@ function cameraUpdate(dt){
    allowed up to 100° in either direction, which still stretched the frame
    in narrow and wide windows. Returns the vertical angle and the look-down
    angle. */
-function cockpitFov(asp){const h0=clamp(cfg.fov||72,50,90)*DEG,vMax=62*DEG,vMin=46*DEG,hMax=85*DEG;
+function cockpitFov(asp,k){const h0=clamp(cfg.fov||72,50,90)*DEG,vMax=62*DEG,vMin=46*DEG,hMax=85*DEG;k=k||0;
   let v=2*Math.atan(Math.tan(h0/2)/asp);
   if(v>vMax)v=vMax;
   else if(v<vMin){const h=Math.min(hMax,Math.max(h0,2*Math.atan(Math.tan(vMin/2)*asp)));v=2*Math.atan(Math.tan(h/2)/asp);}
-  return {v,down:clamp(36*DEG-v/2,5*DEG,14*DEG)};}
+  const down=clamp(36*DEG-v/2,5*DEG,14*DEG);
+  if(k<=0)return {v,down};
+  /* (2.13) without the chin windows (the default): the gaze only, 15° lower, the view as tall as ever and the
+     panel where it is: 15° more of the ground ahead of the nose above the panel, the horizon still in the top
+     fifth, nothing more to draw */
+  if(!cfg.aprChin)return {v,down:down+15*DEG*k};
+  // (2.12) the approach view with the chin windows: taller (up to 75°) and the gaze down to 25°, the bottom of the view 63° below the nose line; the top keeps 10° of sky
+  const va=v+(75*DEG-v)*k,bot=36*DEG+27*DEG*k,da=Math.min(bot-va/2,va/2-10*DEG);
+  return {v:va,down:lerp(down,clamp(da,5*DEG,26*DEG),k)};}
+/* (2.15) HAPI, the helicopter approach path indicator (ICAO Annex 14 Vol. II): one light beside the pad that
+   shows the pilot where he is against the approach slope by its colour, seen within 15° either side of the
+   approach course. Above: flashing green; on the slope (45 minutes of arc): green; slightly below (15
+   minutes): red; below: flashing red; the flashing at 2 Hz. Here: 6° (the phantom's approach), the course
+   360° (from the south, where the approach exercises start), the light 14 m west of the pad's centre. */
+const HAPI={pos:[-4,-14],h:0.45,slope:6,course:0,half:15,sig:''};
+function hapiSignal(eye){const [n,e]=HAPI.pos,z=-(terrainH(n,e)+HAPI.h),dn=eye[0]-n,de=eye[1]-e,dh=Math.hypot(dn,de),up=z-eye[2];
+  if(dh<30||dh>5000)return '';const brg=Math.atan2(de,dn)/DEG,off=Math.abs(((brg-(HAPI.course+180))%360+540)%360-180);if(off>HAPI.half)return '';
+  const el=Math.atan2(up,dh)/DEG,s=HAPI.slope;return el>s+0.375?'above':el>=s-0.375?'on':el>=s-0.625?'low':'below';}
+function hapiDraw(x){HAPI.sig='';if(!(cfg.view==='cockpit'||cfg.view==='chase')||!R3.cam.f)return;const c=R3.cam,sig=hapiSignal(c.pos);HAPI.sig=sig;if(!sig)return;
+  const [n,e]=HAPI.pos,w=[n,e,-(terrainH(n,e)+HAPI.h)],d=vsub(w,c.pos);if(vdot(d,c.f)<=0)return;const p=project(w);if(!p)return;
+  const flash=(sig==='above'||sig==='below')&&((R3.time||performance.now()/1000)*2%1)>0.5;if(flash)return;
+  const col=sig==='above'||sig==='on'?'111,255,140':'255,70,50',dist=vlen(d),r=clamp(1400/dist,2.2,7);
+  x.save();if(cfg.view==='cockpit'&&HUD.panelA>0.5){x.beginPath();x.rect(0,0,R3.w,HUD.panelTop);x.clip();}
+  const g=x.createRadialGradient(p[0],p[1],0,p[0],p[1],r*4);g.addColorStop(0,`rgba(${col},0.9)`);g.addColorStop(0.25,`rgba(${col},0.45)`);g.addColorStop(1,`rgba(${col},0)`);
+  x.fillStyle=g;x.beginPath();x.arc(p[0],p[1],r*4,0,7);x.fill();x.fillStyle='rgba(255,255,255,0.95)';x.beginPath();x.arc(p[0],p[1],r*0.45,0,7);x.fill();x.restore();}
 function project(w){const v=R3.vp;const x=v[0]*w[0]+v[4]*w[1]+v[8]*w[2]+v[12],y=v[1]*w[0]+v[5]*w[1]+v[9]*w[2]+v[13],z=v[2]*w[0]+v[6]*w[1]+v[10]*w[2]+v[14],ww=v[3]*w[0]+v[7]*w[1]+v[11]*w[2]+v[15];
   if(ww<=0.01)return null;return [(x/ww*0.5+0.5)*R3.w,(0.5-y/ww*0.5)*R3.h];}
 /* The hour and the air (2.9): the sun crosses from the east (06:00) through the south (13:00, 58° up) to the
@@ -1166,18 +1397,21 @@ function skyState(){const t=clamp(cfg.tod===undefined?11:cfg.tod,5.5,20.5),x=cla
   const fog=L([0.88,0.64,0.50],[0.74,0.80,0.88]);R3.fog=fog.map((v,i)=>lerp(v,[0.78,0.80,0.83][i]*(0.75+0.25*k),mist));
   R3.zen=L([0.20,0.27,0.52],[0.30,0.48,0.82]).map((v,i)=>lerp(v,R3.fog[i]*0.95,mist*0.85));R3.fogK=3/(vis*1000);}
 function render(dt){
-  const gl=R3.gl,cv=R3.canvas;R3.time+=dt;
+  const gl=R3.gl,cv=R3.canvas;R3.time+=dt;R3.dtF=dt;
   drsStep(dt);
   const lite=gfxLite();
   const W=cv.clientWidth|0,Hh=cv.clientHeight|0,pxr=gfxPixelRatio(W,Hh),bw=Math.max(1,Math.round(W*pxr)),bh=Math.max(1,Math.round(Hh*pxr));if(cv.width!==bw||cv.height!==bh){cv.width=bw;cv.height=bh;}
   R3.w=W;R3.h=Hh;R3.ph=bh;R3.pxr=pxr;gl.viewport(0,0,bw,bh);   // R3.w/h: page pixels (the HUD projects into them); the drawing buffer has pxr times as many each way
   R3.pr.gnd=lite?R3.pr.gndLite:R3.pr.gndFull;R3.pr.sky=lite?R3.pr.skyLite:R3.pr.skyFull;
   cameraUpdate(dt);
-  const c=R3.cam;R3.vp=m4mul(m4persp(c.fov,W/Hh,1.0,R3.far),m4view(c.pos,c.f,c.u));
+  const c=R3.cam,vpFull=R3.vp=m4mul(m4persp(c.fov,W/Hh,1.0,R3.far),m4view(c.pos,c.f,c.u));
   skyState();R3.windXY=[S.wind[0],S.wind[1]];
+  const R=qmat(S.q),rt=H.rotor,st=S.rot,hubW=vadd(S.pos,mrot(R,rt.hub)),Rh=mmul(R,rt.Rbh),A={R,rt,st,hubW,Rh};
+  const chin=chinPre(lite,A,W,Hh,pxr,bw,bh);   // (2.12.6) the chin windows first, into their own framebuffer: the view's framebuffer is then drawn in one go
   /* (2.9.2) in the cockpit the instrument panel covers the bottom of the view: nothing is drawn under it */
-  const cut=cfg.view==='cockpit'&&!cfg.panel3d&&HUD.panelA>0.99&&HUD.panelTop<Hh-40?Math.round((Hh-HUD.panelTop-20)*pxr):0;
-  if(cut>0){gl.enable(gl.SCISSOR_TEST);gl.scissor(0,cut,bw,bh-cut);}else gl.disable(gl.SCISSOR_TEST);
+  const cut=cfg.view==='cockpit'&&!cfg.panel3d&&HUD.panelA>0.99&&HUD.panelTop<Hh-40?Math.round((Hh-HUD.panelTop-20)*pxr):0;   // (2.12.2) also over a lifted panel: the chin windows under it are their own small passes (renderChin)
+  if(cut>0){gl.enable(gl.SCISSOR_TEST);gl.scissor(0,cut,bw,bh-cut);   // (2.12.3) and the viewport with it: the projection cut down to the part above the panel (the same pixels), so what lies under the panel is not even sent
+    gl.viewport(0,cut,bw,bh-cut);R3.vp=m4mul(subRectM(0,cut,bw,bh-cut,bw,bh),vpFull);}else gl.disable(gl.SCISSOR_TEST);
   gl.clearColor(R3.fog[0],R3.fog[1],R3.fog[2],1);gl.clearStencil(0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT|gl.STENCIL_BUFFER_BIT);
   /* Nearest first, so the depth test turns hidden pixels away before they are shaded: the cockpit, the
      aircraft, buildings and trees, then the ground, then the sky into whatever is left. Then the shadow
@@ -1185,51 +1419,18 @@ function render(dt){
   const cockpit=cfg.view==='cockpit'&&!!cfg.panel3d,early=cockpit&&R3.info&&R3.info.depthBits>=24;   // the 3D cockpit only on request (cfg.panel3d); since 2.6.1 the cockpit is the flat panel (89_panel.js)
   if(early){gl.depthRange(0,0.01);drawCockpit();gl.depthRange(0.01,1);}
   // the aircraft
-  const R=qmat(S.q),rt=H.rotor,st=S.rot;
   R3.spec=0.55;drawMesh(R3.pr.lit,R3.m.body,m4model(R,S.pos));   // from the cockpit the cabin's own faces are back faces (culled): only skids, nose and tail show
   drawMesh(R3.pr.lit,R3.m.fen,m4model(R,S.pos));
-  const hubW=vadd(S.pos,mrot(R,rt.hub)),Rh=mmul(R,rt.Rbh);
   drawMesh(R3.pr.lit,R3.m.hub,m4model(Rh,hubW));
   if(!(cfg.view==='cockpit'&&st.Om>15))for(let k=0;k<rt.N;k++){const psi=st.psi+2*Math.PI*k/rt.N;const a=Math.atan2(-rt.s*Math.sin(psi),-Math.cos(psi));   // from the seat a turning rotor is its blur (the disc below), not four blades caught at random
     drawMesh(R3.pr.lit,R3.m.blade,m4model(mmul(Rh,mmul(rotZ(a),rotY(st.beta[k]))),hubW));}
   R3.spec=0;
   R3.wash=ngWash();   // (2.9: before the trees, which bend in it)
-  // scenery: buildings, trees (near tiles in full detail), windsock, wind turbines
-  for(const m of R3.m.scene)drawMesh(R3.pr.lit,m,M4I);
-  drawForest(frustumPlanes(R3.vp),c.pos,lite);   // (2.9.2) trees, bushes, rocks, reeds
-  {const w=S.wind,ws=Math.hypot(w[0],w[1]);const az=ws>0.2?Math.atan2(w[1],w[0]):WIND.dir*DEG+Math.PI;const droop=lerp(65*DEG,3*DEG,clamp(ws/7,0,1));   // windsock: points downwind, droops when calm
-    const Rm=mmul(rotZ(az),rotY(-droop));for(const [n,e,hp] of R3.socks)drawMesh(R3.pr.lit,R3.m.sock,m4model(Rm,[n,e,-terrainH(n,e)-hp]));}
-  {const w=S.wind,ws=Math.hypot(w[0],w[1]);const az=ws>0.5?Math.atan2(-w[1],-w[0]):WIND.dir*DEG;R3.turb+=dt*clamp(ws/6,0.15,1)*1.3;   // wind turbines: face the wind, turn with it
-    for(const [n,e] of R3.turbines){drawMesh(R3.pr.lit,R3.m.turbine,m4model(mmul(rotZ(az),rotX(R3.turb)),[n,e,-terrainH(n,e)-60]));}}
-  lifeDraw(dt);   // cars, the boat, birds (86_life.js)
-  // the ground, then the sky dome (centred on the camera, just inside the far plane) where nothing else is
+  drawStatics(c.pos,lite,dt);   // scenery, trees, windsocks, turbines, cars
   R3.wash=ngWash();
-  {const g=R3.m.ground,P=frustumPlanes(R3.vp),R=[[],[]];let cur=null,cls=-1;   // (2.9.2) only the ground's blocks in view; (2.10) those beyond ~900 m with the light shader (a pixel covers over a metre there: none of the fine detail is left to see); consecutive blocks of a kind in one call
-   for(const b of g.blocks){const k=!sphereVisible(P,b.c,b.r)?0:(lite||Math.hypot(b.c[0]-c.pos[0],b.c[1]-c.pos[1],b.c[2]-c.pos[2])-b.r>900)?2:1;
-     if(k&&k===cls&&cur&&cur.o+cur.n*2===b.o)cur.n+=b.n;else if(k){cur={o:b.o,n:b.n};R[k-1].push(cur);}else cur=null;cls=k;}
-   if(R[0].length)drawMesh(R3.pr.gnd,g,M4I,1,R[0]);if(R[1].length)drawMesh(lite?R3.pr.gnd:R3.pr.gndLite,g,M4I,1,R[1]);}
-  if(R3.m.river){gl.disable(gl.CULL_FACE);for(const m of R3.m.river)drawMesh(R3.pr.water,m,M4I);gl.enable(gl.CULL_FACE);}   // the rivers, over the flood plain
-  gl.depthMask(false);gl.disable(gl.CULL_FACE);drawMesh(R3.pr.sky,R3.m.sky,m4model([1,0,0,0,1,0,0,0,1],c.pos));gl.depthMask(true);gl.enable(gl.CULL_FACE);
-  /* Shadow: every aircraft mesh projected along the sun onto the ground plane under the aircraft.
-     The stencil lets each pixel be darkened once, however many shadow triangles cover it (without
-     a stencil buffer, depth-equal rejection does the same, less cleanly). */
-  {const sun=R3.shSun,zg=-terrainH(S.pos[0],S.pos[1])-0.03,kx=sun[0]/sun[2],ky=sun[1]/sun[2];
-   const Sh=new Float32Array([1,0,0,0, 0,1,0,0, -kx,-ky,0,0, kx*zg,ky*zg,zg,1]);   // column-major: x' = x - kx (z - zg), y' = y - ky (z - zg), z' = zg
-   const hAbove=-S.pos[2]-terrainH(S.pos[0],S.pos[1]),al=clamp(0.42-hAbove*0.0035,0.06,0.42);
-   const stc=R3.info&&R3.info.stencil;
-   gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(-2,-8);gl.disable(gl.CULL_FACE);
-   if(stc){gl.enable(gl.STENCIL_TEST);gl.stencilFunc(gl.EQUAL,0,0xff);gl.stencilOp(gl.KEEP,gl.KEEP,gl.INCR);gl.depthMask(false);}else gl.depthFunc(gl.LESS);
-   const shd=(m,Mm,a)=>drawMesh(R3.pr.shadow,m,m4mul(Sh,Mm),a);
-   {const sv=R3.sun;R3.sun=R3.shSun;const P=frustumPlanes(R3.vp);   // (2.11) the scenery's shadows first: the buildings, the turbines' rotors, the cars near by, the trees
-    for(const m of R3.m.scene)drawMesh(R3.pr.shd,m,M4I,0.42);
-    {const w=S.wind,ws=Math.hypot(w[0],w[1]);const az=ws>0.5?Math.atan2(-w[1],-w[0]):WIND.dir*DEG;for(const [n,e] of R3.turbines){if(Math.hypot(n-c.pos[0],e-c.pos[1])>900)continue;R3.pr.shd.aTconst=[-terrainH(n,e),1];drawMesh(R3.pr.shd,R3.m.turbine,m4model(mmul(rotZ(az),rotX(R3.turb)),[n,e,-terrainH(n,e)-60]),0.42);}}
-    if(typeof lifeShadows==='function')lifeShadows((m,M,zg)=>{R3.pr.shd.aTconst=[zg,1];drawMesh(R3.pr.shd,m,M,0.42);},c.pos,400);
-    R3.pr.shd.aTconst=null;drawForestShadows(P,c.pos,lite);R3.sun=sv;}
-   shd(R3.m.body,m4model(R,S.pos),al);shd(R3.m.hub,m4model(Rh,hubW),al);
-   for(let k=0;k<rt.N;k++){const psi=st.psi+2*Math.PI*k/rt.N;const a=Math.atan2(-rt.s*Math.sin(psi),-Math.cos(psi));shd(R3.m.blade,m4model(mmul(Rh,mmul(rotZ(a),rotY(st.beta[k]))),hubW),al);}
-   if(st.Om>15){if(stc)gl.stencilFunc(gl.EQUAL,0,0xff);shd(R3.m.disc,m4model(Rh,hubW),al*0.18*clamp((st.Om-15)/25,0,1));}   // the spinning disc dims the ground a little
-   if(stc){gl.disable(gl.STENCIL_TEST);gl.depthMask(true);}
-   gl.disable(gl.POLYGON_OFFSET_FILL);gl.depthFunc(gl.LEQUAL);gl.disable(gl.BLEND);gl.enable(gl.CULL_FACE);}
+  drawGround(c.pos,lite);
+  gl.depthMask(false);gl.disable(gl.CULL_FACE);drawMesh(R3.pr.sky,R3.m.sky,m4model([1,0,0,0,1,0,0,0,1],c.pos));gl.depthMask(true);gl.enable(gl.CULL_FACE);   // the sky dome (centred on the camera, just inside the far plane) where nothing else is
+  drawShadows(c.pos,lite,{R,rt,st,hubW,Rh});
   ngDraw(dt);   // downwash particles (after the sky, which would otherwise paint over them)
   lifeSmoke(dt);   // the chimneys' smoke (86_life.js)
   // rotor disc blur at the tip-path plane, Fenestron blur, the phantom, the tutor's target, the prediction
@@ -1249,5 +1450,6 @@ function render(dt){
   gl.depthMask(true);gl.disable(gl.BLEND);gl.enable(gl.CULL_FACE);
   if(early){gl.depthRange(0,0.01);drawCockpitGlass();}
   else if(cockpit){gl.clear(gl.DEPTH_BUFFER_BIT);drawCockpit();drawCockpitGlass();}
-  gl.depthRange(0,1);gl.disable(gl.SCISSOR_TEST);
+  gl.depthRange(0,1);gl.disable(gl.SCISSOR_TEST);R3.vp=vpFull;gl.viewport(0,0,bw,bh);   // the full view's projection again: the HUD projects with it
+  chinPost(lite,A,chin,Hh,pxr,bw,bh);   // (2.12.2) the chin windows under a lifted panel: laid in through their glass
 }

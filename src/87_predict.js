@@ -136,6 +136,17 @@ function predPath(every){const r=PRED.res;if(!r)return [];const p=r.pts,K=PRED_P
     out.push({t,n:p[i*K+1],e:p[i*K+2],d:p[i*K+3],psi:p[i*K+4],phi:p[i*K+5],th:p[i*K+6],h:p[i*K+7]});}
   return out;}
 function predEnd(){const r=PRED.res;return r&&r.n>1?r.pts[(r.n-1)*PRED_PS]-(S.t-r.t0):0;}
+/* (2.13.2) The vertical speed 6 s ahead, controls held: the lead the collective needs. The rotor
+   answers the lever at once (the FLI moves with it, the seat feels 0.025 g per 1 % of lever) but the
+   vertical speed settles with a time constant of about 4 s in the hover; watching the vertical speed
+   alone, the hand keeps adding until it shows, and then it is too much (the classic chase). A pilot
+   has the seat of his pants and a power setting he knows; the screen has neither, so the VSI and the
+   HUD carry a mark where the vertical speed will be (with a touchdown predicted before then, the sink
+   just before it). Smoothed over 0.15 s; null without a prediction. */
+function predVS(){const e=predEnd(),tc=predEvents().touch;if(e<1.2)return null;
+  const t=tc&&tc.t<6.5?tc.t-0.3:Math.min(6,e-0.3);if(t<0.3)return null;   // a touchdown before then: the sink just before it (the footprint's colour), not the skids standing on the ground
+  const a=predAt(t-0.25),b=predAt(t+0.25);return a&&b?-(b.d-a.d)/0.5:null;}
+function predTrendStep(dt){const v=cfg.predict&&!REPLAY.on?predVS():null;PRED.vsTr=v===null?null:(PRED.vsTr==null?v:PRED.vsTr+(v-PRED.vsTr)*Math.min(1,dt/0.15));}
 /* the first touchdown and a crash, in seconds from now (null when none or already past) */
 function predEvents(){const r=PRED.res,o={touch:null,crash:null};if(!r)return o;const dt0=S.t-r.t0;
   if(r.touch&&r.touch.t-dt0>-0.1)o.touch={...r.touch,t:r.touch.t-dt0};

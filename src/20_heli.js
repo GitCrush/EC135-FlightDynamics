@@ -25,6 +25,12 @@ const H={
      so Iyy stays an estimate and the difference is an open deviation
      (test/qualities.js reports it). */
   ctlTau:0.02,
+  /* (2.16) Pitch: an equivalent delay of 25 ms in the longitudinal channel only. DLR's identified models of
+     the EC135 need, beyond flapping and inflow, the lead-lag dynamics (the regressive lag mode near
+     11.7 rad/s appears as a dipole in the pitch response, Seher-Weiss and von Gruenhagen, CEAS 2007); this
+     model has rigid lag. With it the pitch phase delay at 75 kt is 93 ms (published 92, ERF 1997 Table 4;
+     70 without). The bandwidth stays quicker than published (2.85 against 1.84 rad/s): an open deviation. */
+  lonDelay:0.025,
   /* Couplings the training aids take out, measured from this model in
      vertical climbs and descents at zero ground speed (test/qualities.js
      re-measures them and fails if they drift): roll attitude and pedal

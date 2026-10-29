@@ -130,10 +130,11 @@ function trimSet(){
   if(typeof DEV!=='undefined'){DEV.kbd.lon=DEV.kbd.lat=0;DEV.mouse.vx=DEV.mouse.vy=0;}
 }
 /* Clear the trim (key Y): back to the hover trim, eased in by the reference rate limit. */
-function trimClear(){const h=TRIM.hover||{th:3.6*DEG,phi:4.2*DEG,lon:-0.385,lat:0.01};TRIM.th=h.th;TRIM.phi=h.phi;TRIM.lon=h.lon;TRIM.lat=h.lat;
+function trimClear(){const h=TRIM.hover||{th:3.6*DEG,phi:4.2*DEG,lon:-0.385,lat:0.01};TRIM.th=h.th;TRIM.phi=h.phi;TRIM.lon=h.lon;TRIM.lat=h.lat;SAS.toTrim=!!SAS.rc;
   if(typeof DEV!=='undefined'){DEV.kbd.lon=DEV.kbd.lat=0;DEV.mouse.vx=DEV.mouse.vy=0;}}
 /* Beep trim (Shift + arrows): moves the trim attitude at 3 °/s, as the four-way switch on a cyclic does. */
-function trimBeep(dl,dt){TRIM.th=clamp(TRIM.th-dl[0]*3*DEG*dt,-0.4,0.35);TRIM.phi=clamp(TRIM.phi+dl[1]*3*DEG*dt,-0.4,0.4);}
+function trimBeep(dl,dt){TRIM.th=clamp(TRIM.th-dl[0]*3*DEG*dt,-0.4,0.35);TRIM.phi=clamp(TRIM.phi+dl[1]*3*DEG*dt,-0.4,0.4);
+  if(SAS.rc){SAS.refTh=clamp(SAS.refTh-dl[0]*3*DEG*dt,-0.45,0.45);SAS.refPhi=clamp(SAS.refPhi+dl[1]*3*DEG*dt,-0.75,0.75);}}   // (2.13.1) under rate command the held attitude is what the switch moves
 function trimLearn(dt,raw){
   // learn only from an unaccelerated aircraft: slow is not enough, an aircraft that is just pulling away is slow too
   const R=qmat(S.q),vN=mrot(R,S.vb);if(!SAS.vN)SAS.vN=vN.slice();
@@ -165,7 +166,7 @@ function sasApply(dt,raw){
       // lift-off: start at the present attitude and roll into the trim at 5 °/s while still pivoting on the skids
       const lift=SAS.mode==='damp';
       SAS.refTh=th;SAS.refPhi=phi;SAS.thC=SAS.refTh;SAS.phC=SAS.refPhi;SAS.intL=SAS.outLon-(mode==='att'?0.85:0.55)*q;SAS.intR=SAS.outLat+(mode==='att'?0.7:0.5)*p;SAS.liftT=lift?0:99;}
-    SAS.mode=mode;
+    SAS.mode=mode;SAS.rc=false;   // the rate command (re)starts from what this law takes over
   }
   SAS.liftT=(SAS.liftT===undefined?99:SAS.liftT)+dt;
   const ease=(SAS.liftT<3?5:2)*DEG*dt;
@@ -187,7 +188,41 @@ function sasApply(dt,raw){
     lon=lerp(raw.lon+0.35*q+TRIM.lon,2.2*(th-thC)+0.55*q+SAS.intL,k); lat=lerp(raw.lat-0.35*p+TRIM.lat,2.4*(phC-phi)-0.5*p+SAS.intR,k);
   }else if(mode==='att'){
     // attitude command around the trim: full stick = 15° pitch / 20° roll away from it; integrator holds it without error
-    SAS.refTh=approach(SAS.refTh,TRIM.th,ease);SAS.refPhi=approach(SAS.refPhi,TRIM.phi,ease);
+    /* (2.13.1) Above 45 kt (SAS.fwd, back below 35 kt) the stick is rate
+       command, attitude hold (RCAH), as in modern AFCS (ADS-33's response
+       type for forward flight): deflection rolls or pitches the aircraft,
+       linear beyond a dead centre of 3 % (90°/s of roll and 40°/s of pitch
+       at the stop, about what the bare aircraft gives: 20 % of stick 15°/s
+       of roll), and the centred stick holds the attitude it has. A turn is a
+       push and back to the centre, a reversal one push the other way, a
+       flare a pull: the bare aircraft behaves the same (stick = rate),
+       only it does not hold. With the attitude command everywhere (until
+       2.13, cfg.cycLaw 'acah') a 30° turn held 85 % of the stick, 1,360 px
+       of mouse, for the whole turn, and a reversal 2,700 px. In the hover
+       the attitude command stays: there a centred stick has to mean
+       "stand still". Bumpless both ways: entering, the attitude held is
+       kept and a stick still deflected (accelerating through 45 kt) is the
+       new centre until it comes back; leaving (slowing through 35 kt), the
+       attitude reference takes the stick offset and then eases to the
+       hover trim, where a deceleration is heading. Within 3 % of the
+       centre the stick is dead, so a mouse that comes back almost to the
+       centre holds; with the wings within 4° of the trim bank and the
+       stick centred the wings level and the heading hold takes over. */
+    const rc=SAS.fwd&&cfg.cycLaw!=='acah',offL=(15*raw.lon+13*raw.lon**3)*DEG,offR=(20*raw.lat+20*raw.lat**3)*DEG;
+    if(rc!==!!SAS.rc){
+      if(rc){SAS.refTh=SAS.thC===undefined?th:SAS.thC;SAS.refPhi=(SAS.phC===undefined?phi:SAS.phC)-phMix;SAS.rcL=raw.lon;SAS.rcR=raw.lat;}
+      else{SAS.refTh=(SAS.thC===undefined?th:SAS.thC)+offL;SAS.refPhi=(SAS.phC===undefined?phi:SAS.phC)-phMix-offR;TRIM.th=TRIM.hover?TRIM.hover.th:3.6*DEG;}
+      SAS.rc=rc;SAS.holdF=false;SAS.toTrim=false;}
+    let qC=0,pC=0;
+    if(rc){
+      const fold=(o,v)=>o*v<=0?0:Math.abs(v)<Math.abs(o)?v:o;SAS.rcL=fold(SAS.rcL||0,raw.lon);SAS.rcR=fold(SAS.rcR||0,raw.lat);   // the held stick at the switch folds back to the centre with the hand
+      const dz=v=>Math.sign(v)*Math.max(0,Math.abs(v)-0.03)/0.97,uL=dz(raw.lon-SAS.rcL),uR=dz(raw.lat-SAS.rcR);
+      qC=-40*DEG*uL;pC=90*DEG*uR;   // stick forward = nose down; about the bare aircraft's rates (80 to 100°/s of roll at the stop)
+      SAS.refTh=clamp(SAS.refTh+qC*dt,-0.45,0.45);SAS.refPhi=clamp(SAS.refPhi+pC*dt,-0.75,0.75);
+      if(SAS.toTrim){if(uL||uR)SAS.toTrim=false;else{SAS.refTh=approach(SAS.refTh,TRIM.th,ease);SAS.refPhi=approach(SAS.refPhi,TRIM.phi,ease);}}   // Y: back to the hover trim, until the stick moves
+      if(uR===0&&Math.abs(SAS.refPhi-TRIM.phi)<4*DEG)SAS.refPhi=approach(SAS.refPhi,TRIM.phi,ease);   // wings level for the heading hold
+    }else{SAS.refTh=approach(SAS.refTh,TRIM.th,ease);SAS.refPhi=approach(SAS.refPhi,TRIM.phi,ease);}
+    const sl=rc?0:1;   // the stick offset belongs to the attitude command only
     /* Command shaping: fine around the centre (10 % stick = 1.5° pitch, 2° bank), steep at the stops
        (full stick = 28° pitch, 40° bank from the trim) so quick stops and steep turns stay flyable with the aid on. */
     /* Cruise heading hold through the roll axis: with the stick centred and
@@ -197,10 +232,10 @@ function sasApply(dt,raw){
        stick comes back. */
     let phHdg=0;
     if(SAS.fwd&&cfg.hdgHold&&Math.abs(raw.lat)<0.05){
-      if(!SAS.holdF&&Math.abs(phi-SAS.refPhi)<3*DEG&&Math.abs(r)<2*DEG){SAS.holdF=true;SAS.psiRefF=psi;}
+      if(!SAS.holdF&&Math.abs(phi-SAS.refPhi)<3*DEG&&Math.abs(r)<2*DEG&&(!rc||Math.abs(SAS.refPhi-TRIM.phi)<1*DEG)){SAS.holdF=true;SAS.psiRefF=psi;}
       if(SAS.holdF)phHdg=clamp(1.0*wrapPi(SAS.psiRefF-psi),-5*DEG,5*DEG);
     }else SAS.holdF=false;
-    const thC=clamp(SAS.refTh-(15*raw.lon+13*raw.lon**3)*DEG,-0.55,0.55), phC=clamp(SAS.refPhi+phMix+phHdg+(20*raw.lat+20*raw.lat**3)*DEG,-0.75,0.75);
+    const thC=clamp(SAS.refTh-sl*offL,-0.55,0.55), phC=clamp(SAS.refPhi+phMix+phHdg+sl*offR,-0.75,0.75);
     /* Anti-wind-up: the integrators trim out steady errors (speed changes
        the trimmed stick a lot) but stop while the command itself moves
        fast (a manoeuvre) or the stick is at its stop. */
@@ -209,7 +244,7 @@ function sasApply(dt,raw){
     if(!mvL&&!(Math.abs(SAS.outLon)>=0.99&&Math.sign(eL)===Math.sign(SAS.outLon)))SAS.intL=clamp(SAS.intL+eL*dt*0.5,light?TRIM.lon-0.12:-1,light?TRIM.lon+0.12:1);
     if(!mvR&&!(Math.abs(SAS.outLat)>=0.99&&Math.sign(eR)===Math.sign(SAS.outLat)))SAS.intR=clamp(SAS.intR+eR*dt*0.5,light?TRIM.lat-0.10:-1,light?TRIM.lat+0.10:1);
     // light on the skids the integrators may lead the stick by a bounded amount, as a pilot's hand does before the aircraft comes free
-    lon=2.0*eL+0.85*q+SAS.intL; lat=2.2*eR-0.7*p+SAS.intR;SAS.thC=thC;SAS.phC=phC;     // well damped: no overshoot after a large input
+    lon=2.0*eL+0.85*(q-qC)+SAS.intL; lat=2.2*eR-0.7*(p-pC)+SAS.intR;SAS.thC=thC;SAS.phC=phC;     // well damped: no overshoot after a large input; under rate command the commanded rate is not damped
   }else if(mode==='damp'){
     lon=raw.lon+0.35*q+TRIM.lon; lat=raw.lat-0.35*p+TRIM.lat;         // rate damping only; the trim stick is still fed forward
   }else if(!raw.att){

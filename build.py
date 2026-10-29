@@ -10,6 +10,9 @@ tpl=open(os.path.join(root,'html','template.html'),encoding='utf8').read()
 assert '<!--ENGINE-->' in tpl
 phys='\n'.join(open(os.path.join(root,'src',f),encoding='utf8').read() for f in src if int(f[:2])<=70)   # for the motion predictor's worker
 assert '</script' not in phys
+import json
+ver=json.load(open(os.path.join(root,'package.json'),encoding='utf8'))['version']   # (2.12.6) the version, shown in the setup and the performance test
+js=js.replace('%%VERSION%%',ver);phys=phys.replace('%%VERSION%%',ver);tpl=tpl.replace('%%VERSION%%',ver)
 out=tpl.replace('<!--ENGINE-->',js).replace('<!--PHYSICS-->',phys)
 # a syntax error in any module would stop the whole page: check the script with node when it is there
 import shutil,subprocess,tempfile

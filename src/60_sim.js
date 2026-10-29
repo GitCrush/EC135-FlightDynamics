@@ -2,11 +2,12 @@
 const DT=1/360;                                   // 55 steps per rotor revolution at 100 % NR
 const cfg={
   mass:2500, cgx:0.0, dT:0, qnh:1013,             // aircraft & atmosphere
-  sas:true, attHold:true, hdgHold:true, hoverAssist:false, assistK:1,   // stability augmentation (training aids); assistK blends hover assist with the raw stick
+  sas:true, attHold:true, hdgHold:true, hoverAssist:false, assistK:1, cycLaw:'rcah',   // stability augmentation (training aids); assistK blends hover assist with the raw stick; cycLaw: above 45 kt rate command (2.13.1) or attitude command
   kbdCol:'metered', kbdPed:'heading', pedRate:25,            // keyboard pilot models; yaw rate per pedal key, °/s
-  mouse:true, mouseMode:'stick', mouseTravel:1600, mouseButtons:true, padDead:0.06,   // px of mouse movement for full stick (real stick: 80 mm lateral, 108 mm longitudinal per side)
-  view:'cockpit', hud:true, rotorDisc:true, fpm:true, predict:true,predictT:'auto', sound:true,volume:70, cloud:0.4,tod:11,vis:12,
+  mouse:true, mouseMode:'stick', mouseTravel:1600, mouseCurve:'linear', mouseButtons:true, padDead:0.06, mouseCal:false,   // mouseCal: fitted to the pad once (2.14)   // px of mouse movement for full stick (real stick: 80 mm lateral, 108 mm longitudinal per side)
+  view:'cockpit', hud:true, rotorDisc:true, fpm:true, predict:true,predictT:'auto', sound:true,volume:70, cloud:0.4,tod:11,vis:12,apr:'off',
   engFail:'none',
+  profile:'beginner', weather:'calm', motion:'subtle',   // (2.15) motion cues: off | subtle | full   // (2.14) the setup's profile and weather preset ('custom' once a setting differs)
 };
 const IN={col:0.45,lon:0,lat:0,ped:0,             // controls after the pilot models, [0..1] / [-1..1]
           raw:{col:0.45,lon:0,lat:0,ped:0},       // device values
@@ -35,12 +36,12 @@ function placeAt(n,e,altAGL,psi,ias){
   S.onGround=altAGL<0.5;
   if(altAGL>0.5){S.rot.lam0=0.05;IN.col=0.52;S.ctl.col=0.52;}else{IN.col=0.05;S.ctl.col=0.05;}
   IN.lon=IN.lat=IN.ped=0;IN.trimLon=IN.trimLat=IN.trimPed=0;
-  S.eng.int=0;for(const en of S.eng.e){en.P=altAGL>0.5?220e3:15e3;en.N1=80;en.on=true;en.fail=false;en.startT=0;}
+  S.eng.int=0;for(const en of S.eng.e){en.P=altAGL>0.5?220e3:15e3;en.N1=80;en.on=true;en.fail=false;en.startT=0;en.sw='flight';en.dir=-1;en.TOT=altAGL>0.5?560:490;}S.eng.brake=false;
   windReset();
   return S;
 }
 function reset(kind){
-  if(kind==='cold'){placeAt(0,0,0,0,0);S.rot.Om=0;S.rot.lam0=0;for(const en of S.eng.e){en.on=false;en.P=0;en.N1=0;}for(let k=0;k<H.rotor.N;k++)S.rot.beta[k]=-0.03;return S;}
+  if(kind==='cold'){placeAt(0,0,0,0,0);S.rot.Om=0;S.rot.lam0=0;S.eng.brake=true;for(const en of S.eng.e){en.on=false;en.P=0;en.N1=0;en.sw='off';en.dir=1;en.TOT=atmo(0,cfg.dT).T-273.15;}for(let k=0;k<H.rotor.N;k++)S.rot.beta[k]=-0.03;return S;}
   if(kind==='hover')return placeAt(0,0,3,0,0);
   if(kind==='high')return placeAt(-200,0,1000*FT,0,0);
   if(kind==='cruise')return placeAt(-1500,0,1500*FT,0,100);
@@ -67,7 +68,9 @@ function step(dt){
   const rate=dt/0.45, kf=Math.min(1,dt/Math.max(H.ctlTau||0,dt));
   const srv=(cur,cmd,r)=>approach(cur,cur+(cmd-cur)*kf,r);
   S.ctl.col=srv(S.ctl.col,clamp(IN.col,0,1),rate);
-  S.ctl.lon=srv(S.ctl.lon,sat(IN.lon,1),2*rate);
+  let lonCmd=sat(IN.lon,1);   // (2.16) H.lonDelay: the pitch channel's equivalent delay, a short ring of the last commands
+  if(H.lonDelay>0){const n=Math.max(1,Math.round(H.lonDelay/dt)),B=S.lonBuf||(S.lonBuf=[]);B.push(lonCmd);while(B.length>n)B.shift();lonCmd=B[0];}
+  S.ctl.lon=srv(S.ctl.lon,lonCmd,2*rate);
   S.ctl.lat=srv(S.ctl.lat,sat(IN.lat,1),2*rate);
   S.ctl.ped=srv(S.ctl.ped,sat(IN.ped,1),2*rate);
   const th0=rt.col0+S.ctl.col*(rt.col1-rt.col0);
@@ -98,6 +101,7 @@ function step(dt){
      still get full power, the FLI sits at the limit while NR bleeds. */
   const qCap=S.NR<60?H.eng.qMax+Math.pow(S.NR/60,3)*26000:1e9;
   const lapse=H.eng.thk*(at.p/101325)*Math.pow(at.T/288.15,-H.eng.thb);   // turbine power in the present air
+  S.eng.oat=at.T-273.15;   // (2.16) for the turbine outlet temperature
   const Ptot=engStep(H.eng,S.eng,dt,S.NR,S.Peng,0,(IN.col-S.ctl.col),qCap*Math.max(st.Om,1)+H.eng.idle*2,lapse);
   const Qeng=Math.min(Math.max(0,Ptot)/Math.max(st.Om,5),qCap);                  // freewheel
   const Qmesh=H.eng.mesh*Math.max(Qeng,Pfen/Math.max(st.Om,5)+H.eng.acc/rt.Om0);   // mesh losses on the torque the gearbox passes
@@ -115,6 +119,7 @@ function step(dt){
      its polar inertia to the yaw axis. Shaft axis in body: (-sin tilt, 0, cos tilt). */
   const omdShaft=-Math.sin(rt.tilt)*S.omd[0]+Math.cos(rt.tilt)*S.omd[2];
   st.Om=Math.max(0,st.Om+((Qeng-Qload)/rt.Ir-rt.s*omdShaft)*dt);
+  if(S.eng.brake)st.Om=Math.max(0,st.Om-dt*0.05*rt.Om0);   // (2.16) the rotor brake: 5 % NR a second down to standstill
   // fuel: burned mass comes off the take-off mass
   S.fuelBurn+=Ptot/3.6e6*H.eng.sfc*dt;
   S.Pavail=S.eng.Pavail;
@@ -153,7 +158,7 @@ function step(dt){
   const gyro=vcross(S.om,vadd(Iw,Hrot));
   S.omd=mrot(Iinv,vsub(Mc,gyro));
   const acc=vsub(vscl(F,1/m),vcross(S.om,S.vb));
-  S.nz=-(acc[2]-gB[2]/m+ (vcross(S.om,S.vb))[2])/9.81; S.ay=(F[1]-gB[1])/m;
+  S.nz=-(acc[2]-gB[2]/m+ (vcross(S.om,S.vb))[2])/9.81; S.ay=(F[1]-gB[1])/m; S.ax=(F[0]-gB[0])/m;   // specific force (2.15: ax for the motion cues)
   S.om=vadd(S.om,vscl(S.omd,dt));
   S.vb=vadd(S.vb,vscl(acc,dt));
   S.q=qstep(S.q,S.om,dt);

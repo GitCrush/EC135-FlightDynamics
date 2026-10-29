@@ -46,10 +46,11 @@ function lifeParked(){if(LIFE.parkedM)return LIFE.parkedM;const rng=makeRng(79),
 function lifeShadows(shd,cp,r){if(!LIFE.ready)return;const t=R3.time;
   for(const c of LIFE.cars){const q=lifeCar(c,t);if(Math.hypot(q.n-cp[0],q.e-cp[1])>r)continue;shd(c.m<0?LIFE.truckM:LIFE.carM[c.m],m4model(rotZ(q.psi),[q.n,q.e,-q.h]),-q.h);}
   for(const p of lifeParked()){if(Math.hypot(p.n-cp[0],p.e-cp[1])>r)continue;shd(LIFE.carM[p.m],m4model(rotZ(p.psi),[p.n,p.e,-p.g]),-p.g);}}
-function lifeDraw(dt){const gl=R3.gl;if(!gl)return;lifeInit(gl);const t=R3.time,cp=R3.cam.pos;
-  for(const p of lifeParked()){if(Math.hypot(p.n-cp[0],p.e-cp[1])>2000)continue;drawMesh(R3.pr.lit,LIFE.carM[p.m],m4model(rotZ(p.psi),[p.n,p.e,-p.g]));}
+function lifeDraw(dt,rmax){const gl=R3.gl;if(!gl)return;lifeInit(gl);const t=R3.time,cp=R3.cam.pos,rp=rmax||2000,rc=rmax||2500,P=frustumPlanes(R3.vp);   // rmax: only the cars within it, no boat or birds (the chin windows, 2.12.2); cars out of view are not drawn
+  for(const p of lifeParked()){if(Math.hypot(p.n-cp[0],p.e-cp[1])>rp||!sphereVisible(P,[p.n,p.e,-p.g-1],4))continue;drawMesh(R3.pr.lit,LIFE.carM[p.m],m4model(rotZ(p.psi),[p.n,p.e,-p.g]));}
   // cars
-  for(const c of LIFE.cars){const q=lifeCar(c,t);if(Math.hypot(q.n-cp[0],q.e-cp[1])>2500)continue;drawMesh(R3.pr.lit,c.m<0?LIFE.truckM:LIFE.carM[c.m],m4model(rotZ(q.psi),[q.n,q.e,-q.h]));}
+  for(const c of LIFE.cars){const q=lifeCar(c,t);if(Math.hypot(q.n-cp[0],q.e-cp[1])>rc||!sphereVisible(P,[q.n,q.e,-q.h-1.5],7))continue;drawMesh(R3.pr.lit,c.m<0?LIFE.truckM:LIFE.carM[c.m],m4model(rotZ(q.psi),[q.n,q.e,-q.h]));}
+  if(rmax)return;
   // the boat
   {const L=TERRAIN.lake,a=t*0.035,n=L.n+70*Math.cos(a),e=L.e+48*Math.sin(a),psi=Math.atan2(48*Math.cos(a),-70*Math.sin(a));
    if(Math.hypot(n-cp[0],e-cp[1])<3000)drawMesh(R3.pr.lit,LIFE.boatM,m4model(mmul(rotZ(psi),rotX(0.10+0.04*Math.sin(t*1.3))),[n,e,-(L.h+0.4)+0.05*Math.sin(t*1.9)]));}

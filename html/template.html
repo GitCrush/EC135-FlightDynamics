@@ -106,6 +106,9 @@ select{width:100%}
 #welcome .btns button{padding:10px 8px;font-size:14px}
 #welcome .primary{border-color:var(--amber);color:var(--amber)}
 #welcome .link{cursor:pointer;color:var(--ice)}
+#welcome .lvlh{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);margin-bottom:6px}
+#welcome #wLevel button{padding:7px 6px;font-size:13px}
+#welcome .lvln{font-size:12px;line-height:1.4;color:var(--mute);min-height:34px;margin:6px 0 14px}
 @media (max-width:820px){#hud{display:none}}
 </style>
 </head>
@@ -114,7 +117,7 @@ select{width:100%}
   <canvas id="world"></canvas>
   <canvas id="ovl"></canvas>
   <div id="setup">
-    <div class="eyebrow"><span>Setup</span><span>EC135 Flight Dynamics</span></div>
+    <div class="eyebrow"><span>Setup</span><span>EC135 Flight Dynamics %%VERSION%%</span></div>
     <div id="setupBody"></div>
   </div>
   <div id="setupTab">Setup</div>
@@ -164,7 +167,7 @@ select{width:100%}
   <div class="btns"><button id="coachOff">Off</button><button id="coachCues">Cues</button><button id="coachVoice">Cues + voice</button></div>
   <div class="eyebrow"><span>Autopilot</span><span>U I O · J menu</span></div>
   <div class="btns"><button id="asAlt" title="U: ALT holds the height (collective)">ALT</button><button id="asHdg" title="O: HDG holds the heading (pedals in the hover, bank and pedals at speed)">HDG</button><button id="asSpd" title="I: HOV holds the position over the ground below 40 kt, IAS the airspeed above (cyclic)">HOV</button><button id="asMenu" title="J: the autopilot menu: V/S, the targets">Menu&hellip;</button></div>
-  <div class="eyebrow"><span>Tutor</span><span>N next · B back · Q</span></div>
+  <div class="eyebrow"><span>Tutor</span><span>N next · B back · ⇧Q</span></div>
   <select id="tutorSel"></select>
   <div class="btns"><button id="tutorStart">Start lesson</button><button id="tutorStop">Stop</button></div>
   <div class="eyebrow"><span>Exercise</span><span>R repeats</span></div>

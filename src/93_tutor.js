@@ -25,7 +25,7 @@ const LESSONS=[
   steps:[
    {text:'Your only control now is the collective: W raises it slowly, S lowers it (or the mouse wheel). The autopilot holds attitude and heading. Tap W and watch the FLI rise.',hl:['col','fli'],check:(dt)=>S.ctl.col>0.22},
    {text:'Keep raising until the skids lift. At about 35 % the aircraft gets light: the skid loads in the controls box go to zero. Climb slowly.',hl:['col','ra'],check:(dt)=>S.hAGL>0.6},
-   {text:'Stop the climb at 3 m: lower the collective a little as you pass 2 m. Height answers with a delay: small corrections, then wait. Hold 3 m (±1 m) for 5 seconds.',hl:['ra','col'],check:(dt)=>tHold(Math.abs(S.hAGL-3)<1&&!S.onGround,5,dt)},
+   {text:'Stop the climb at 3 m: lower the collective a little as you pass 2 m. Height answers with a delay: small corrections, then wait. The V/S scale under the height shows the vertical speed now (white) and in 6 s (cyan, with an arrow towards it); the VSI in the panel has the same cyan mark. Move the lever until the cyan mark sits at zero, then leave it. Hold 3 m (±1 m) for 5 seconds.',hl:['ra','col'],check:(dt)=>tHold(Math.abs(S.hAGL-3)<1&&!S.onGround,5,dt)},
    {text:'Climb to 10 m and come back to 3 m. When you lower the collective the aircraft starts sinking a second later: that delay is what you have to learn to feel.',hl:['ra','col'],check:(dt)=>{if(S.hAGL>9.5)TUTOR.flag=true;return TUTOR.flag&&Math.abs(S.hAGL-3)<1&&Math.abs(S.vs)<1;}},
    {text:'Land: lower the collective a hair, let it sink at less than 1 m/s (under 200 fpm). When the skids touch, lower the collective fully.',hl:['ra','col'],check:(dt)=>S.onGround&&S.touch&&S.touch.vs<1.5&&S.ctl.col<0.15},
   ]},
@@ -92,7 +92,7 @@ const LESSONS=[
   steps:[
    {text:'Lower the nose a little and accelerate. Between 15 and 25 kt the aircraft shudders and wants to climb: the rotor reaches clean air (translational lift). Ease the collective, hold the nose. Target: 60 kt and 300 ft.',hl:['ias','ra'],check:(dt)=>S.ias>55*KT&&S.hAGL>300*FT},
    {text:'Climb to 500 ft and level off: lower the collective until the vertical speed is zero. Hold 60 kt (±10) and 500 ft (±100) for 10 seconds. Speed comes from the stick, height from the collective.',hl:['ias','ra','col'],check:(dt)=>tHold(Math.abs(S.ias/KT-60)<10&&Math.abs(S.hAGL/FT-500)<100,10,dt)},
-   {text:'Turn: stick slightly right, the aircraft banks and turns. A touch of aft stick keeps the nose up. Turn to heading 180 and hold it.',hl:['hdg','stick'],check:(dt)=>tHold(tHdg(180,10)&&S.hAGL>200*FT,5,dt)},
+   {text:'Turn: push the stick a little to the right and back to the centre. At this speed the aids hold the bank you leave and the aircraft turns (with the attitude command at speed, chosen in the setup, hold the stick there instead). Roll out with the same push to the left. Turn to heading 180 and hold it.',hl:['hdg','stick'],check:(dt)=>tHold(tHdg(180,10)&&S.hAGL>200*FT,5,dt)},
   ]},
  {title:'Approach and landing',reset:'approach',lock:{col:false,cyc:false,ped:false},aids:{sas:true,attHold:true,hdgHold:true,hoverAssist:false},
   steps:[
@@ -101,7 +101,12 @@ const LESSONS=[
    {text:'Land as you learned: drift zero, then sink, collective fully down once the skids sit. After that you are ready for the exercises in the menu.',hl:['drift','ra'],target:[0,0],check:(dt)=>S.onGround&&tDist(0,0)<8&&S.ctl.col<0.2},
   ]},
 ];
+/* (2.14) A lesson sets its own aids, key models and calm air; what the pilot had comes back when the tutor
+   stops (the settings are saved, and a lesson must not overwrite them) */
+const TUTOR_KEEP=['sas','attHold','hdgHold','hoverAssist','kbdCol','kbdPed','assistK'];
 function tutorStart(li){afcsOffAll();
+  if(!TUTOR.keep){TUTOR.keep={cfg:{},wind:{spd:WIND.spd,turb:WIND.turb,gust:WIND.gust}};for(const k of TUTOR_KEEP)TUTOR.keep.cfg[k]=cfg[k];}
+  WIND.spd=0;WIND.turb=0;WIND.gust=0;
   TUTOR.on=true;TUTOR.li=clamp(li,0,LESSONS.length-1);TUTOR.lessonDone=false;
   const L=LESSONS[TUTOR.li];
   cfg.resetKind=L.reset;uiReset(L.reset);UI.phantom=null;
@@ -126,7 +131,8 @@ function tutorNext(){if(!TUTOR.on)return;const L=LESSONS[TUTOR.li];
   if(TUTOR.lessonDone||TUTOR.si>=L.steps.length-1){if(TUTOR.li<LESSONS.length-1)tutorStart(TUTOR.li+1);else tutorStop();return;}
   tutorSetStep(TUTOR.si+1);}
 function tutorBack(){if(!TUTOR.on)return;if(TUTOR.si>0)tutorSetStep(TUTOR.si-1);else if(TUTOR.li>0)tutorStart(TUTOR.li-1);}
-function tutorStop(){AP.freezeInt=false;TUTOR.on=false;TUTOR.target=null;TUTOR.lockCol=TUTOR.lockCyc=TUTOR.lockLon=TUTOR.lockLat=TUTOR.lockPed=false;TUTOR.demo=false;TUTOR.showTrim=false;AP.on=false;AP.posN=AP.posE=null;if(S)S.tether=null;cfg.assistK=1;cfg.attHold=true;}
+function tutorStop(){AP.freezeInt=false;TUTOR.on=false;TUTOR.target=null;TUTOR.lockCol=TUTOR.lockCyc=TUTOR.lockLon=TUTOR.lockLat=TUTOR.lockPed=false;TUTOR.demo=false;TUTOR.showTrim=false;AP.on=false;AP.posN=AP.posE=null;if(S)S.tether=null;cfg.assistK=1;cfg.attHold=true;
+  if(TUTOR.keep){Object.assign(cfg,TUTOR.keep.cfg);Object.assign(WIND,TUTOR.keep.wind);TUTOR.keep=null;if(typeof uiSync==='function')uiSync();}}   // (2.14) the pilot's own settings back
 /* Called after the devices have written IN and before the physics step:
    locked axes take the autopilot, then the step is checked. */
 function tutorStep(dt){

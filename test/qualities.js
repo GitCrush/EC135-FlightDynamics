@@ -157,7 +157,7 @@ if(!FAST){console.log('\n■ Attitude bandwidth and phase delay at 75 kt, bare a
  within('CAL','roll bandwidth (published 3.7 rad/s, ±15 %)',ro.bw,3.7*0.85,3.7*1.15,'rad/s',src+'; Ixx from the same paper');
  within('CAL','roll phase delay (published 55 ms, ±15 ms)',ro.tp*1000,40,70,'ms',src+'; servo lag fitted to it');
  row('KNOWN','pitch bandwidth: published 1.84 rad/s; model quicker (bound 3.3)',pi.bw,pi.bw<=3.3,'open deviation, see docs/TECHNICAL.md','rad/s');
- row('KNOWN','pitch phase delay: published 92 ms (bound ≥ 50)',pi.tp*1000,pi.tp*1000>=50,'open deviation','ms');
+ within('CAL','pitch phase delay (published 92 ms, ±15 ms)',pi.tp*1000,77,107,'ms',src+'; the 25 ms equivalent delay in pitch (H.lonDelay, 2.16) fitted to it');
  reg('roll bandwidth 75 kt (rad/s)',ro.bw,0.08);reg('pitch bandwidth 75 kt (rad/s)',pi.bw,0.08);}
 
 console.log('\n■ Performance against published figures');

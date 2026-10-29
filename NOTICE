@@ -6,3 +6,8 @@ Licensed under the Apache License, Version 2.0.
 Independent training and educational project. Not affiliated with or
 endorsed by Airbus Helicopters. "EC135" refers to the helicopter type
 modelled. Not a certified flight training device.
+
+Head tracking (2.13) embeds MediaPipe's BlazeFace short-range face detection
+model (blaze_face_short_range.tflite, Google LLC, Apache License 2.0) and
+loads the MediaPipe Tasks Vision library (@mediapipe/tasks-vision 0.10.14,
+Google LLC, Apache License 2.0) from jsDelivr when head tracking is started.
