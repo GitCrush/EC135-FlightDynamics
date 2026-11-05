@@ -27,7 +27,18 @@ body{font-family:"Arial Narrow","Helvetica Neue Condensed",Roboto Condensed,sans
 canvas#world{display:block;width:100%;height:100%}
 canvas#ovl{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
 /* ---- side panel ---- */
-#hud{width:302px;flex:0 0 302px;height:100%;background:var(--panel);border-left:1px solid #26221d;padding:12px 14px 10px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;scrollbar-gutter:stable}
+#hud{width:288px;flex:0 0 288px;height:100%;background:var(--panel);border-left:1px solid #26221d;padding:12px 12px 10px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;scrollbar-gutter:stable}
+/* (2.17.1) the side panel flies, the menu sets up: a head with the menu button, the numbers, cards */
+.hudhead{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.brand{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--mute);white-space:nowrap}
+.brand b{color:var(--amber);font-weight:600}
+#menuBtn{padding:5px 10px;font-size:11px;letter-spacing:.16em;text-transform:uppercase;border-color:#3a342c}
+kbd{font:10px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--mute);border:1px solid #3a342c;border-bottom-width:2px;border-radius:3px;padding:0 4px;margin-left:5px;white-space:nowrap}
+.card{background:#171512;border:1px solid #26221d;border-radius:4px;padding:8px 10px 10px}
+#hud .card .eyebrow{margin-bottom:7px}
+.seg{display:flex;gap:0}.seg button{flex:1 1 0;border-radius:0;padding:5px 4px}.seg button+button{border-left-color:transparent}.seg button.on{border-left-color:#49e36b}
+#nowTitle{font-size:14px;font-weight:600;line-height:1.25;color:var(--ink);margin-bottom:4px}
+#softWarn{font-size:11px;line-height:1.35;color:var(--hot)}
 .eyebrow{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--mute);display:flex;justify-content:space-between;align-items:baseline}
 .bigrow{display:flex;gap:8px;align-items:flex-end}
 .big{flex:1}
@@ -37,9 +48,10 @@ canvas#ovl{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:
    when a number changes its digit count or a text grows. The children
    must not shrink either (a flex column squeezes overflow:hidden items). */
 #hud>*{flex:0 0 auto}
-#stat,#gl{font-size:11px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:14px;line-height:14px;font-variant-numeric:tabular-nums}
-#gl{font-size:10px}
+#stat{font-size:11px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:14px;line-height:14px;font-variant-numeric:tabular-nums}
+#gl{font-size:10.5px;line-height:1.45;color:var(--mute);margin:2px 0 8px;word-break:break-word}
 #inc{font-size:11.5px;line-height:1.3;color:var(--amber);height:60px;overflow:hidden;border-left:2px solid var(--amber);padding-left:8px}
+#inc:empty::before{content:'none';color:var(--mute)}
 .big b{font-variant-numeric:tabular-nums;min-width:4ch}
 #brief{height:72px;overflow-y:auto}
 #score{height:14px;line-height:14px;white-space:nowrap;overflow:hidden}
@@ -52,19 +64,43 @@ select{width:100%}
 #brief{font-size:12.5px;line-height:1.4;color:var(--ink)}
 #score{font-size:11px;color:var(--ice)}
 #chart{width:100%;height:60px;display:block;background:#0d0c0a}
-#keys{font-size:11px;line-height:1.5;color:var(--mute);height:16px;white-space:nowrap;overflow:hidden}
+#keys{font-size:11px;line-height:1.5;color:var(--mute);height:16px;white-space:nowrap;overflow:hidden;margin-top:auto}
 #keys b{color:var(--ink);font-weight:600}
-/* ---- setup ---- */
-#setup{position:absolute;right:0;top:0;height:100%;width:290px;background:rgba(19,18,16,.96);border-left:1px solid #26221d;transform:translateX(100%);transition:transform .15s;padding:14px;overflow-y:auto;z-index:5}
-#setup.open{transform:none}
-#setupTab{position:absolute;right:0;bottom:14px;background:var(--panel);border:1px solid #2e2924;border-right:0;padding:6px 10px;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--mute);cursor:pointer;z-index:6}
-.sec{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--mute);margin:12px 0 6px;border-bottom:1px solid #26221d;padding-bottom:3px}
-.row{display:flex;align-items:center;gap:8px;font-size:12px;margin:4px 0}
-.row span{flex:1}
-.row input[type=range]{width:100px}
-.row select{width:96px}
-.row b{width:54px;font-size:11px;color:var(--mute);text-align:right}
-.note{font-size:11px;line-height:1.45;color:var(--mute);margin:4px 0 8px}
+/* ---- (2.17.1) the menu: one window over the view, six tabs of cards; it pauses while open ---- */
+#menu{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(13,12,10,.6);z-index:9}
+#menu.open{display:flex}
+#menu .win{width:min(940px,calc(100% - 32px));height:min(660px,calc(100% - 32px));background:var(--panel);border:1px solid #2e2924;border-top:2px solid var(--amber);display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+#menu .mhead{display:flex;align-items:baseline;gap:14px;padding:14px 18px 0}
+#menu .mhead b{font-size:15px;letter-spacing:.2em;text-transform:uppercase;color:var(--amber)}
+#menu .mhead .ver{flex:1;font-size:11px;color:var(--mute);letter-spacing:.06em}
+#menu .mhead .pz{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ice)}
+#menuTabs{display:flex;flex-wrap:wrap;gap:2px;padding:10px 12px 0;border-bottom:1px solid #26221d}
+#menuTabs button{background:none;border:0;border-bottom:2px solid transparent;padding:8px 12px 7px;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
+#menuTabs button:hover{color:var(--ink);border-color:transparent;border-bottom-color:#3a342c}
+#menuTabs button.on{color:var(--ink);border-bottom-color:var(--amber)}
+#menuBody{flex:1;overflow-y:auto;padding:14px 18px 18px;scrollbar-gutter:stable}
+.mtab{display:none;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:12px;align-items:start}
+.mtab.on{display:grid}
+.mtab .card{padding:10px 14px 12px}
+.mtab .card.wide{grid-column:1/-1}
+.mtab .card h4{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--amber);font-weight:400;margin:0 0 8px;opacity:.85}
+.row{display:flex;align-items:center;gap:10px;font-size:12.5px;min-height:28px;margin:1px 0}
+.row span{flex:1;min-width:0;line-height:1.3}
+.row>:not(span){flex:0 0 auto}
+.row input[type=range]{width:130px;accent-color:var(--amber)}
+.row select{width:auto;min-width:150px;max-width:230px}
+.row b{width:58px;font-size:11px;color:var(--mute);text-align:right}
+.row input[type=checkbox]{appearance:none;-webkit-appearance:none;width:34px;height:18px;border-radius:9px;background:#2a2620;border:1px solid #3a342c;position:relative;cursor:pointer;transition:background .12s,border-color .12s}
+.row input[type=checkbox]::after{content:'';position:absolute;left:2px;top:2px;width:12px;height:12px;border-radius:50%;background:var(--mute);transition:left .12s,background .12s}
+.row input[type=checkbox]:checked{background:rgba(73,227,107,.22);border-color:#49e36b}
+.row input[type=checkbox]:checked::after{left:18px;background:#49e36b}
+.note{font-size:11.5px;line-height:1.45;color:var(--mute);margin:4px 0 8px}
+.mtab .btns{margin:4px 0 2px}
+table.keys{width:100%;border-collapse:collapse;font-size:12px}
+table.keys td{padding:4px 6px;vertical-align:top;border-bottom:1px solid #221f1b;line-height:1.35}
+table.keys td:first-child{white-space:nowrap;color:var(--amber);width:1%;text-align:right;padding-right:12px}
+#menuTab{position:absolute;right:0;bottom:14px;background:var(--panel);border:1px solid #2e2924;border-right:0;padding:6px 10px;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--mute);cursor:pointer;z-index:6}
+#menuTab:hover{color:var(--ink)}
 /* ---- autopilot menu (J): which controls it flies, what it holds, how much it shows ---- */
 #apTab{position:absolute;left:0;top:12px;background:var(--panel);border:1px solid #2e2924;border-left:0;padding:6px 10px;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ice);cursor:pointer;z-index:6}
 #apTab.hold{border-color:var(--ice)}
@@ -116,11 +152,14 @@ select{width:100%}
 <div id="stage">
   <canvas id="world"></canvas>
   <canvas id="ovl"></canvas>
-  <div id="setup">
-    <div class="eyebrow"><span>Setup</span><span>EC135 Flight Dynamics %%VERSION%%</span></div>
-    <div id="setupBody"></div>
+  <div id="menu" role="dialog" aria-label="Menu">
+    <div class="win">
+      <div class="mhead"><b>Menu</b><span class="ver">EC135 Flight Dynamics %%VERSION%%</span><span class="pz" id="menuPz">paused</span><button id="menuClose" title="Esc">Close <kbd>Esc</kbd></button></div>
+      <nav id="menuTabs"></nav>
+      <div id="menuBody"></div>
+    </div>
   </div>
-  <div id="setupTab">Setup</div>
+  <div id="menuTab" title="Esc">Menu</div>
   <div id="apTab" title="J: the autopilot menu">Autopilot</div>
   <div id="apMenu" role="dialog" aria-label="Autopilot">
     <div class="head"><b>AUTOPILOT</b><span class="eyebrow" style="flex:1;justify-content:flex-end"><span>J</span></span><button id="amClose" title="Close (J)">Close</button></div>
@@ -151,7 +190,7 @@ select{width:100%}
   </div>
 </div>
 <div id="hud">
-  <div class="eyebrow"><span>EC135 Flight Dynamics</span><span>P2+</span></div>
+  <div class="hudhead"><span class="brand">EC135 <b>P2+</b> · Flight Dynamics</span><button id="menuBtn" title="Esc">Menu</button></div>
   <div class="bigrow">
     <div class="big"><b id="bigIas" class="data">0</b><i>IAS kt</i></div>
     <div class="big"><b id="bigAlt" class="data">0</b><i>RA ft</i></div>
@@ -162,26 +201,27 @@ select{width:100%}
     <div class="big"><b id="bigFli" class="data">0.0</b><i>FLI</i></div>
   </div>
   <div id="stat" class="data"></div>
-  <div id="gl" class="data"></div>
-  <div class="eyebrow"><span>Coach</span><span>K cycles</span></div>
-  <div class="btns"><button id="coachOff">Off</button><button id="coachCues">Cues</button><button id="coachVoice">Cues + voice</button></div>
-  <div class="eyebrow"><span>Autopilot</span><span>U I O · J menu</span></div>
-  <div class="btns"><button id="asAlt" title="U: ALT holds the height (collective)">ALT</button><button id="asHdg" title="O: HDG holds the heading (pedals in the hover, bank and pedals at speed)">HDG</button><button id="asSpd" title="I: HOV holds the position over the ground below 40 kt, IAS the airspeed above (cyclic)">HOV</button><button id="asMenu" title="J: the autopilot menu: V/S, the targets">Menu&hellip;</button></div>
-  <div class="eyebrow"><span>Tutor</span><span>N next · B back · ⇧Q</span></div>
-  <select id="tutorSel"></select>
-  <div class="btns"><button id="tutorStart">Start lesson</button><button id="tutorStop">Stop</button></div>
-  <div class="eyebrow"><span>Exercise</span><span>R repeats</span></div>
-  <select id="exercise"></select>
-  <div id="brief"></div>
-  <div id="score" class="data"></div>
-  <div class="eyebrow"><span>Last 20 s</span><span>X exports CSV</span></div>
-  <canvas id="chart" width="274" height="60"></canvas>
-  <div class="eyebrow"><span>Reset</span><span>Engines</span></div>
-  <div class="btns"><button id="rCold">Cold</button><button id="rPad">Pad</button><button id="rHover">Hover</button><button id="rHigh">1000 ft</button><button id="rCruise">Cruise</button></div>
-  <div class="btns"><button id="eFail">Fail 1  G</button><button id="eBoth">Fail both</button><button id="eRestore">Restore</button><button id="replay">Replay  L</button><button id="eTail" title="Tail drive failure: the Fenestron stops giving thrust">Fail tail</button><button id="csv">CSV</button></div>
-  <div class="eyebrow"><span>Last incident</span><span id="incAge"></span></div>
-  <div id="inc" title=""></div>
-  <div id="keys">Keys and devices: see <b>Setup</b> (bottom right of the view)</div>
+  <div id="softWarn" style="display:none">Software rendering: the browser is not using the graphics card. Switch on hardware acceleration in its settings.</div>
+  <div class="card" id="nowCard">
+    <div class="eyebrow"><span id="nowKind">Exercise</span><span id="nowKeys"></span></div>
+    <div id="nowTitle"></div>
+    <div id="brief"></div>
+    <div id="score" class="data"></div>
+    <div class="btns" id="nowBtns" style="margin-top:6px"><button id="nowBack" title="B">Back</button><button id="nowNext" title="N">Next</button><button id="nowRepeat" title="R">Repeat</button><button id="nowChange">Change…</button></div>
+  </div>
+  <div class="card">
+    <div class="eyebrow"><span>Coach</span><span><kbd>K</kbd></span></div>
+    <div class="btns seg"><button id="coachOff">Off</button><button id="coachCues">Cues</button><button id="coachVoice">Cues + voice</button></div>
+  </div>
+  <div class="card">
+    <div class="eyebrow"><span>Autopilot</span><span><kbd>U</kbd><kbd>I</kbd><kbd>O</kbd><kbd>J</kbd></span></div>
+    <div class="btns"><button id="asAlt" title="U: ALT holds the height (collective)">ALT</button><button id="asHdg" title="O: HDG holds the heading (pedals in the hover, bank and pedals at speed)">HDG</button><button id="asSpd" title="I: HOV holds the position over the ground below 40 kt, IAS the airspeed above">HOV</button><button id="asMenu" title="J: the autopilot menu">Menu…</button></div>
+  </div>
+  <div class="card">
+    <div class="eyebrow"><span>Last incident</span><span id="incAge"></span></div>
+    <div id="inc" title=""></div>
+  </div>
+  <div id="keys"><kbd>?</kbd> all keys · <kbd>Esc</kbd> menu</div>
 </div>
 <script type="text/plain" id="engineSrc"><!--PHYSICS--></script>
 <script>

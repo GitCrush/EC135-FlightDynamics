@@ -117,7 +117,7 @@ async def main():
           key4();fly(4,40);r.off=+APR.k.toFixed(2);
           placeAt(10,10,40,0,0);trimNow(4);AP.on=true;AP.mode='hover';AP.auto=false;AP.posN=S.pos[0];AP.posE=S.pos[1];AP.hdg=S.eul[2];apBumpless(AP);AP.land=false;cameraUpdate(0.03);r.armedAgain=APR.armed;
           const fn=fly(30,3);key4();fly(4,3);r.final=[+APR.k.toFixed(2),fn.h];
-          render(1/60);hudDraw(1/60);render(1/60);hudDraw(1/60);r.up0=Math.round(HUD.panelUp);cfg.aprChin=true;for(let i=0;i<3;i++){cameraUpdate(1/60);render(1/60);hudDraw(1/60);}r.up=Math.round(HUD.panelUp);r.glErr=R3.gl.getError();cfg.aprChin=false;   // drawn: the panel lifted, the chin windows' pass without a GL error
+          cfg.aprChin=false;render(1/60);hudDraw(1/60);render(1/60);hudDraw(1/60);r.up0=Math.round(HUD.panelUp);cfg.aprChin=true;for(let i=0;i<3;i++){cameraUpdate(1/60);render(1/60);hudDraw(1/60);}r.up=Math.round(HUD.panelUp);r.glErr=R3.gl.getError();cfg.aprChin=false;   // drawn: the panel lifted, the chin windows' pass without a GL error
           AP.alt=terrainH(S.pos[0],S.pos[1])+0.5;AP.land=true;fly(40);const ld=fly(6);r.landed=[+APR.k.toFixed(2),ld.h,APR.armed,S.onGround];r.crash=S.crash||'';
           key4();AP.land=false;const lo=fly(20,10);r.liftoff=[+APR.k.toFixed(2),lo.h];AP.on=false;
           startExercise('free');cameraUpdate(0.03);r.freeArmed=APR.armed;startExercise('clearing');cameraUpdate(0.03);r.clearingArmed=APR.armed;cfg.apr='off';
@@ -145,11 +145,30 @@ async def main():
         kq=await pg.evaluate('''()=>{UI.showKeys=false;const ev=(t,k,c)=>window.dispatchEvent(new KeyboardEvent(t,{key:k,code:c}));
           ev('keydown','?','Minus');const a=UI.showKeys;ev('keyup','?','Minus');ev('keydown','F1','F1');const b=UI.showKeys;ev('keyup','F1','F1');return [a,b];}''')
         print('key list',kq);print('key list FAILED' if kq!=[True,False] else 'key list ok')
-        # motion cues and the HAPI (2.15)
-        mh=await pg.evaluate('''()=>{startExercise('free');uiReset('high');cfg.view='cockpit';cfg.motion='subtle';const st=1/60,adv=()=>{for(let j=0;j<6;j++){inputStep(DT);step(DT);}cameraUpdate(st);};
-          for(let i=0;i<60;i++)adv();DEV.kbd.col+=0.06;let mx=0;for(let i=0;i<30;i++){adv();mx=Math.max(mx,MOT.o[2]);}
-          const sig=[];for(const h of [32.3,29.4,26]){placeAt(-300,-14,h,0,0);S.vb[0]=0;cameraUpdate(1/30);sig.push(hapiSignal(R3.cam.pos));}return {head:+(mx*100).toFixed(1),sig};}''')
-        print('motion and HAPI',mh);print('motion/HAPI FAILED' if not (mh['head']>0.5 and mh['sig']==['above','on','below']) else 'motion and HAPI ok')
+        # (2.16.8) the mouse buttons: right held = look around, left click = trim; 'pedals' = the right pedal
+        mb=await pg.evaluate('''()=>{const st=DEV.look.stage,ev=(t,b)=>st.dispatchEvent(new MouseEvent(t,{button:b,bubbles:true})),up=b=>window.dispatchEvent(new MouseEvent('mouseup',{button:b}));
+          cfg.mouseButtons='look';ev('mousedown',2);const on=DEV.look.on;up(2);const off=!DEV.look.on;
+          DEV.mouse.armed=true;HUD.trimT=0;DEV.mouse.vx=0.3;ev('mousedown',0);const trimmed=HUD.trimT>0&&DEV.mouse.vx===0;up(0);
+          cfg.mouseButtons='pedals';ev('mousedown',2);const ped=DEV.mouse.r&&!DEV.look.on;up(2);cfg.mouseButtons='look';DEV.mouse.armed=false;return {on,off,trimmed,ped};}''')
+        print('mouse buttons',mb);print('mouse buttons FAILED' if mb!={'on':True,'off':True,'trimmed':True,'ped':True} else 'mouse buttons ok')
+        # (2.17.0) a gamepad (standard mapping, stubbed): RB trims, the D-pad beeps, LB held + right stick looks, Start pauses and resumes, the curve
+        gp=await pg.evaluate('''()=>{const pad={connected:true,index:0,id:'test pad',mapping:'standard',axes:[0,0,0,0],buttons:Array.from({length:17},()=>({value:0,pressed:false}))};
+          const keep=navigator.getGamepads;navigator.getGamepads=()=>[pad];padPreset('gamepad');DEV.padMap='gamepad';
+          const press=(b,v)=>{pad.buttons[b].value=v;pad.buttons[b].pressed=v>0.5;},fr=n=>{for(let i=0;i<n;i++){padPoll();padButtonsStep(1/60);inputStep(1/60);}};
+          startExercise('free');uiReset('cruise');UI.paused=false;fr(5);
+          HUD.trimT=0;press(5,1);fr(2);press(5,0);fr(2);const trim=HUD.trimT>0;
+          const th0=TRIM.th;press(12,1);fr(60);press(12,0);fr(2);const beep=+((th0-TRIM.th)*57.3).toFixed(2);
+          press(4,1);pad.axes[2]=0.8;fr(5);const look=DEV.look.on&&DEV.look.yawT>1.5&&Math.abs(IN.raw.lat)<0.01;press(4,0);pad.axes[2]=0;fr(3);const lookOff=!DEV.look.on;
+          press(9,1);fr(2);press(9,0);fr(2);const paused=UI.paused;press(9,1);fr(2);press(9,0);fr(2);const resumed=!UI.paused;
+          pad.axes[2]=0.5;fr(3);const curved=+IN.raw.lat.toFixed(3);pad.axes[2]=0;fr(3);
+          navigator.getGamepads=keep;padPreset('gamepad');return {trim,beep,look,lookOff,paused,resumed,curved};}''')
+        print('gamepad',gp);print('gamepad FAILED' if not (gp['trim'] and 2.5<gp['beep']<3.5 and gp['look'] and gp['lookOff'] and gp['paused'] and gp['resumed'] and 0.36<gp['curved']<0.41) else 'gamepad ok')
+        # the head stays at the eye point when the lever moves (2.16.5: no motion cues), and the HAPI (2.15)
+        mh=await pg.evaluate('''()=>{startExercise('free');uiReset('high');cfg.view='cockpit';const st=1/60,adv=()=>{for(let j=0;j<6;j++){inputStep(DT);step(DT);}cameraUpdate(st);};
+          const off=()=>{const e=vadd(S.pos,mrot(qmat(S.q),H.pilot.eye));return Math.hypot(...vsub(R3.cam.pos,e));};
+          for(let i=0;i<60;i++)adv();DEV.kbd.col+=0.06;let mx=0;for(let i=0;i<30;i++){adv();mx=Math.max(mx,off());}
+          const sig=[];for(const h of [32.3,29.4,26]){placeAt(-300,-14,h,0,0);S.vb[0]=0;cameraUpdate(1/30);sig.push(hapiSignal(R3.cam.pos));}return {head:+(mx*100).toFixed(2),sig,mot:typeof motionStep};}''')
+        print('head and HAPI',mh);print('head/HAPI FAILED' if not (mh['head']<0.01 and mh['mot']=='undefined' and mh['sig']==['above','on','below']) else 'head and HAPI ok')
         # the engine start by hand (2.16): brake refuses the start, Shift+B, Shift+1, Shift+2, FLIGHT, rotor at 100 %
         es=await pg.evaluate('''()=>{uiReset('cold');DEV.kbd.col=0.02;const sh=c=>{DEV.keys.ShiftLeft=true;keyAction(c);DEV.keys.ShiftLeft=false;},adv=s=>{for(let i=0;i<s/DT;i++){inputStep(DT);step(DT);}};
           sh('Digit1');const refused=!S.eng.e[0].on&&S.eng.brake;sh('KeyB');sh('Digit1');adv(27);const idle1=S.eng.e[0].on&&S.eng.e[0].startT<=0&&S.eng.e[0].sw==='idle';
@@ -161,6 +180,11 @@ async def main():
         await pg.reload();await pg.wait_for_timeout(3000)
         ks=await pg.evaluate("()=>({p:cfg.profile,mt:cfg.mouseTravel,w:WIND.spd,coach:UI.coachMode})")
         print('settings kept',ks);print('settings FAILED' if ks!={'p':'intermediate','mt':950,'w':0,'coach':'off'} else 'settings ok')
+        # (2.16.5) a travel from the pad fitting of 2.14 to 2.16.4 goes back to 1600 px; one set by hand stays
+        await pg.evaluate("()=>{localStorage.setItem('ec135fd.settings',JSON.stringify({v:3,cfg:{mouseTravel:700,mouseCal:true,profile:'beginner'},wind:{dir:0,spd:0,turb:0,gust:0},coach:'cues'}));}")
+        await pg.reload();await pg.wait_for_timeout(3000)
+        mc=await pg.evaluate("()=>({mt:cfg.mouseTravel,cal:cfg.mouseCal,card:typeof CAL})")
+        print('pad fitting undone',mc);print('pad fitting FAILED' if not (mc['mt']==1600 and mc.get('cal') is None and mc['card']=='undefined') else 'pad fitting undone ok')
         await pg.evaluate("()=>{try{localStorage.removeItem('ec135fd.settings');}catch(e){}}")
         await b.close()
 asyncio.run(main())

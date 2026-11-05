@@ -1056,9 +1056,13 @@ function drawCockpitGlass(){   // the overhead windows' tint, transparent: after
    and a little grit off the pad. (2.0 to 2.1 also grew grass tufts and
    stones in a patch that followed the aircraft; seen from the cockpit they
    popped up as little cones, 'mini trees', and were removed in 2.2.) */
-const VS_PART=`attribute vec3 aP;attribute vec4 aC;uniform mat4 uMVP;uniform float uScale;varying vec4 vC;
-void main(){vec4 c=uMVP*vec4(aP,1.0);gl_Position=c;gl_PointSize=clamp(aC.a*uScale/max(c.w,0.5),1.0,256.0);vC=aC;}`;
-const FS_PART=`${GLSL_PREC}varying vec4 vC;uniform float uAlpha;void main(){vec2 q=gl_PointCoord-0.5;float r=dot(q,q)*4.0;if(r>1.0)discard;gl_FragColor=vec4(vC.rgb,(1.0-r)*uAlpha);}`;
+/* (2.17.2) No discard: a shader that discards keeps many GPUs from testing the depth before it runs, so every
+   sprite was shaded also where the panel or the floor hides it; the corners are alpha 0 now (the particles do
+   not write depth, so nothing changes in the picture). At most 128 px (was 256), and faded out within 1.5-4 m
+   of the eye, where a sprite of dust filled a quarter of the screen. */
+const VS_PART=`attribute vec3 aP;attribute vec4 aC;uniform mat4 uMVP;uniform float uScale;varying vec4 vC;varying float vF;
+void main(){vec4 c=uMVP*vec4(aP,1.0);gl_Position=c;gl_PointSize=clamp(aC.a*uScale/max(c.w,0.5),1.0,128.0);vC=aC;vF=smoothstep(1.5,4.0,c.w);}`;
+const FS_PART=`${GLSL_PREC}varying vec4 vC;varying float vF;uniform float uAlpha;void main(){vec2 q=gl_PointCoord-0.5;float r=dot(q,q)*4.0;gl_FragColor=vec4(vC.rgb,max(0.0,1.0-r)*uAlpha*vF);}`;
 const NG={parts:null,pBuf:null,cBuf:null,n:0};
 /* the shader's hash in single precision, step by step: near the wrap (mod 4096) it amplifies rounding a
    few thousand times, so double precision would paint different fields than the GPU does */
@@ -1204,109 +1208,42 @@ function aprHint(dt,rp){const E=aprEnv(),h=rp||cfg.view!=='cockpit'?'':cfg.apr==
    overdraw that made 2.12's approach view slow). */
 function subRectM(x,y,w,h,bw,bh){const ax=x/bw*2-1,bx=(x+w)/bw*2-1,ay=y/bh*2-1,by=(y+h)/bh*2-1;
   return new Float32Array([2/(bx-ax),0,0,0, 0,2/(by-ay),0,0, 0,0,1,0, -(bx+ax)/(bx-ax),-(by+ay)/(by-ay),0,1]);}   // NDC of the rectangle onto the whole of NDC
-/* (2.12.3) One pass for both windows: the rectangle round the two of them, its depth cleared to the near plane
-   (so the depth test turns the scene away there before it is shaded) and the windows themselves punched back to
-   the far plane: only their pixels are drawn. */
-function chinMask(quads,X0,Y0,w,h,pxr,Hh){const gl=R3.gl;if(!R3.pr.mask){R3.pr.mask=glProg(gl,'attribute vec3 aP;void main(){gl_Position=vec4(aP,1.0);}',GLSL_PREC+'void main(){gl_FragColor=vec4(0.0);}');R3.maskBuf=gl.createBuffer();}
-  const pr=R3.pr.mask,T=[];
-  for(const q of quads){const N=q.map(v=>[(v[0]*pxr-X0)/w*2-1,((Hh-v[1])*pxr-Y0)/h*2-1]);for(const i of [0,1,2,0,2,3])T.push(N[i][0],N[i][1],0.99999);}
-  gl.clearDepth(0);gl.clear(gl.DEPTH_BUFFER_BIT);gl.clearDepth(1);
-  gl.useProgram(pr.p);gl.bindBuffer(gl.ARRAY_BUFFER,R3.maskBuf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(T),gl.DYNAMIC_DRAW);
+/* (2.17.2) The chin windows in the view's own pass. Until 2.17.1 they were a picture of their own (2.12.4-2.12.8:
+   drawn into a framebuffer of their own at half the resolution and laid in through a glass), which cost a second
+   pass over the scene and, on integrated graphics and Vulkan drivers, the switch of framebuffers itself; off by
+   default since 2.13 for that. Now, with the panel lifted (the approach view), the view is drawn over the whole
+   screen, and first the band from the panel's top down is written into the depth buffer at the near plane with
+   the colour off, the two windows (3 cm wider than the floor's openings, which 89_panel.js draws over them with
+   their rims and the glass's tint) punched back to the far plane. The depth test then turns the scene away
+   behind the panel and the floor before it is shaded: what is shaded is what shows, above the panel and in the
+   windows, in one pass. */
+function chinOcclOn(){return cfg.view==='cockpit'&&!cfg.panel3d&&HUD.panelUp>0&&HUD.panelA>0.99&&!!PANEL.lay&&!PERF.noChin;}
+function chinOccl(W,Hh,pxr,bw,bh){const gl=R3.gl;
+  if(!R3.pr.mask){R3.pr.mask=glProg(gl,'attribute vec3 aP;void main(){gl_Position=vec4(aP,1.0);}',GLSL_PREC+'void main(){gl_FragColor=vec4(0.0);}');R3.maskBuf=gl.createBuffer();}
+  /* (2.17.3) Only ever nearer: the band less the windows, cut into trapezoids between the heights of the windows'
+     corners, written with the ordinary depth test. 2.17.2 wrote the whole band near and the windows back to the far
+     plane with the test off; a depth buffer written farther within a frame loses the GPU's coarse per-tile depth
+     (hierarchical Z on AMD), and with it the early rejection the whole scheme rests on. */
+  const N=(x,y)=>[x*pxr/bw*2-1,(Hh-y)*pxr/bh*2-1],T=[],yT=HUD.panelTop+20,Q=chinQuads(0.03);
+  const quad=(ax,ay,bx,by,cx,cy,dx,dy)=>{const v=[N(ax,ay),N(bx,by),N(cx,cy),N(dx,dy)];for(const k of [0,1,2,0,2,3])T.push(v[k][0],v[k][1],-0.99999);};
+  const span=(q,y)=>{let lo=Infinity,hi=-Infinity;for(let i=0;i<4;i++){const a=q[i],b=q[(i+1)%4];
+      if(a[1]===y){lo=Math.min(lo,a[0]);hi=Math.max(hi,a[0]);}
+      if((a[1]-y)*(b[1]-y)<0){const x=a[0]+(b[0]-a[0])*(y-a[1])/(b[1]-a[1]);lo=Math.min(lo,x);hi=Math.max(hi,x);}}
+    return lo<=hi?[lo,hi]:null;};
+  const ys=[yT,Hh+2];for(const q of Q)for(const v of q)if(v[1]>yT&&v[1]<Hh+2)ys.push(v[1]);ys.sort((a,b)=>a-b);
+  for(let k=0;k+1<ys.length;k++){const y0=ys[k],y1=ys[k+1];if(y1-y0<0.01)continue;const ym=(y0+y1)/2;
+    const holes=Q.map(q=>({q,m:span(q,ym)})).filter(h=>h.m).sort((a,b)=>a.m[0]-b.m[0]);let l0=0,l1=0;
+    for(const h of holes){const s0=span(h.q,y0)||h.m,s1=span(h.q,y1)||h.m;quad(l0,y0,s0[0],y0,s1[0],y1,l1,y1);l0=s0[1];l1=s1[1];}
+    quad(l0,y0,W,y0,W,y1,l1,y1);}
+  const pr=R3.pr.mask;gl.useProgram(pr.p);gl.bindBuffer(gl.ARRAY_BUFFER,R3.maskBuf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(T),gl.DYNAMIC_DRAW);
   gl.enableVertexAttribArray(pr.a.aP);gl.vertexAttribPointer(pr.a.aP,3,gl.FLOAT,false,0,0);
-  gl.colorMask(false,false,false,false);gl.disable(gl.CULL_FACE);gl.depthFunc(gl.ALWAYS);gl.drawArrays(gl.TRIANGLES,0,T.length/3);
-  gl.depthFunc(gl.LEQUAL);gl.colorMask(true,true,true,true);gl.enable(gl.CULL_FACE);}
-/* (2.12.4) Seen through the chin windows. The windows are drawn at half the resolution into a texture of their
-   own (a framebuffer with depth and stencil, no multisampling) and laid into the view through a glass: slightly
-   tinted, a little less contrast, darker towards the frame, a faint sheen of the sky at the forward edge. The
-   ground in them is the light shader's (no flowers' dots, no finest octave). Under *full* graphics both at full
-   resolution and in the full shader. A quarter of the pixels, each cheaper: the windows cost little now, and
-   through the glass the softer picture reads as the glass's, not as a lower setting. */
-function chinFB(w,h){const gl=R3.gl;let F=R3.chinFB;if(F&&F.w>=w&&F.h>=h)return F.ok?F:null;
-  const W=Math.max(w,F?F.w:0),H=Math.max(h,F?F.h:0);
-  if(F){gl.deleteFramebuffer(F.fb);gl.deleteTexture(F.tex);gl.deleteRenderbuffer(F.rb);}
-  const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,W,H,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
-  for(const [k,v] of [[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR],[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE]])gl.texParameteri(gl.TEXTURE_2D,k,v);
-  const rb=gl.createRenderbuffer();gl.bindRenderbuffer(gl.RENDERBUFFER,rb);gl.renderbufferStorage(gl.RENDERBUFFER,gl.DEPTH_STENCIL,W,H);
-  const fb=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,tex,0);gl.framebufferRenderbuffer(gl.FRAMEBUFFER,gl.DEPTH_STENCIL_ATTACHMENT,gl.RENDERBUFFER,rb);
-  const ok=gl.checkFramebufferStatus(gl.FRAMEBUFFER)===gl.FRAMEBUFFER_COMPLETE;gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.bindRenderbuffer(gl.RENDERBUFFER,null);
-  R3.chinFB=F={fb,tex,rb,w:W,h:H,ok};return ok?F:null;}
-const VS_GLASS='attribute vec3 aP;attribute vec4 aC;varying vec4 vC;void main(){vC=aC;gl_Position=vec4(aP.xy,0.0,1.0);}';
-const FS_GLASS=`${GLSL_PREC}uniform sampler2D uTex;uniform vec3 uFog;varying vec4 vC;
-void main(){vec3 c=texture2D(uTex,vC.xy).rgb;float l=dot(c,vec3(0.30,0.59,0.11));
-  c=mix(c,vec3(l),0.10)*vec3(0.93,0.97,0.95);                                        // the glass: a faint green-grey, a little less contrast
-  float e=min(min(vC.z,1.0-vC.z),min(vC.w,1.0-vC.w));c*=0.86+0.14*smoothstep(0.0,0.14,e);   // darker towards the frame
-  c=mix(c,uFog,0.04+0.06*(1.0-vC.w));gl_FragColor=vec4(c,1.0);}`;                    // the sky's sheen, more at the forward edge
-function chinGlass(quads,F,X0,Y0,w,h,w2,h2,pxr,Hh,bw,bh){const gl=R3.gl;if(!R3.pr.glass){R3.pr.glass=glProg(gl,VS_GLASS,FS_GLASS);R3.glassBuf=gl.createBuffer();}
-  const pr=R3.pr.glass,T=[],st=[[0,0],[1,0],[1,1],[0,1]];
-  for(const q of quads){const V=q.map((v,i)=>{const x=v[0]*pxr,y=(Hh-v[1])*pxr;return [x/bw*2-1,y/bh*2-1,0,(x-X0)/w*w2/F.w,(y-Y0)/h*h2/F.h,st[i][0],st[i][1]];});
-    for(const i of [0,1,2,0,2,3])T.push(...V[i]);}
-  gl.useProgram(pr.p);gl.bindBuffer(gl.ARRAY_BUFFER,R3.glassBuf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(T),gl.DYNAMIC_DRAW);
-  gl.enableVertexAttribArray(pr.a.aP);gl.vertexAttribPointer(pr.a.aP,3,gl.FLOAT,false,28,0);gl.enableVertexAttribArray(pr.a.aC);gl.vertexAttribPointer(pr.a.aC,4,gl.FLOAT,false,28,12);
-  gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,F.tex);gl.uniform1i(pr.u.uTex,0);gl.uniform3fv(pr.u.uFog,R3.fog);
-  gl.disable(gl.DEPTH_TEST);gl.disable(gl.CULL_FACE);gl.drawArrays(gl.TRIANGLES,0,T.length/7);gl.enable(gl.DEPTH_TEST);gl.enable(gl.CULL_FACE);}
-/* (2.12.6) In two steps. Before the view: where the windows are (their screen rectangle) and, with a
-   framebuffer, their picture drawn into it. After the view: that picture laid in through the glass. 2.12.4
-   drew the windows after the view, which switched away from the view's framebuffer and back in the middle
-   of the frame: on many GPUs that stores the whole multisampled picture and loads it again. Without a
-   framebuffer the windows are drawn straight into the view after it, as in 2.12.3. */
-function chinGeom(W,Hh,pxr,bw,bh){
-  if(!(cfg.view==='cockpit'&&!cfg.panel3d&&HUD.panelUp>0&&HUD.panelA>0.99&&PANEL.lay)||PERF.noChin)return null;
-  const yb=HUD.panelTop+(PNL_H+8)*PANEL.lay.s,quads=chinQuads(0.03);if(!quads.length)return null;
-  const xs=quads.flat().map(v=>v[0]),ys=quads.flat().map(v=>v[1]);
-  const xa=Math.max(0,Math.min(...xs)-2),xb=Math.min(W,Math.max(...xs)+2),ya=Math.max(yb-10,Math.min(...ys)-2),yz=Math.min(Hh,Math.max(...ys)+2);
-  const X0=Math.floor(xa*pxr),X1=Math.min(bw,Math.ceil(xb*pxr)),Y0=Math.max(0,Math.floor((Hh-yz)*pxr)),Y1=Math.min(bh,Math.ceil((Hh-ya)*pxr));
-  if(X1-X0<2||Y1-Y0<2)return null;
-  const w=X1-X0,h=Y1-Y0,full=PERF.chinFull||cfg.gfx==='full',sc=full?1:0.5;
-  return {quads,X0,Y0,w,h,full,w2:Math.max(2,Math.ceil(w*sc)),h2:Math.max(2,Math.ceil(h*sc))};}
-function chinDraw(lite,A,g,Hh,pxr,bw,bh){const gl=R3.gl,c=R3.cam,vp0=R3.vp,gnd=R3.pr.gnd;if(!g.full)R3.pr.gnd=R3.pr.gndLite;
-  const hE=-c.pos[2]-terrainH(c.pos[0],c.pos[1]),rmax=clamp(2*hE+40,40,200);
-  gl.clear(gl.COLOR_BUFFER_BIT|gl.STENCIL_BUFFER_BIT);
-  chinMask(g.quads,g.X0,g.Y0,g.w,g.h,pxr,Hh);   // the floor round the windows: nothing shaded there
-  R3.vp=m4mul(subRectM(g.X0,g.Y0,g.w,g.h,bw,bh),vp0);
-  R3.spec=0.55;drawMesh(R3.pr.lit,R3.m.body,m4model(A.R,S.pos));R3.spec=0;
-  drawStatics(c.pos,lite,0,rmax);drawGround(c.pos,lite);drawShadows(c.pos,lite,A,rmax);
-  gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);gl.disable(gl.CULL_FACE);
-  if(TUTOR.target){const [n,e]=TUTOR.target;const pulse=0.25+0.15*Math.sin(R3.time*3);drawMesh(R3.pr.lit,R3.m.column,m4model(UPX,[n,e,-terrainH(n,e)]),pulse);}
-  guideGL();if(cfg.predict&&PRED.res)predGL();
-  gl.depthMask(true);gl.disable(gl.BLEND);gl.enable(gl.CULL_FACE);
-  R3.vp=vp0;R3.pr.gnd=gnd;}
-function chinPre(lite,A,W,Hh,pxr,bw,bh){const g=chinGeom(W,Hh,pxr,bw,bh);if(!g)return null;const gl=R3.gl;
-  g.F=chinFB(g.w2,g.h2);if(!g.F)return g;
-  /* (2.12.8) when the approach view's frames come late (under 50 per second for 2 s, the rate the side panel
-     shows), the windows' picture is drawn every other frame and the last one laid in between: through the
-     glass, at half the resolution, the ground under the skids moves on at 25-30 pictures a second */
-  const fps=typeof UI==='object'?UI.fps||60:60;APR.lateT=APR.k>0.9&&fps<50&&!PERF.on?(APR.lateT||0)+(R3.dtF||0):0;if(APR.k<0.5)APR.half=false;else if(APR.lateT>2)APR.half=true;
-  R3.chinN=(R3.chinN||0)+1;const key=g.w2+'x'+g.h2;
-  if(APR.half&&R3.chinN%2&&R3.chinKey===key&&R3.chinLast){Object.assign(g,R3.chinLast,{quads:g.quads,F:g.F});return g;}   // the last picture, its own rectangle
-  R3.chinKey=key;R3.chinLast={X0:g.X0,Y0:g.Y0,w:g.w,h:g.h,w2:g.w2,h2:g.h2};
-  gl.bindFramebuffer(gl.FRAMEBUFFER,g.F.fb);gl.viewport(0,0,g.w2,g.h2);gl.enable(gl.SCISSOR_TEST);gl.scissor(0,0,g.w2,g.h2);gl.clearColor(R3.fog[0],R3.fog[1],R3.fog[2],1);gl.clearStencil(0);
-  chinDraw(lite,A,g,Hh,pxr,bw,bh);
-  gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,bw,bh);gl.disable(gl.SCISSOR_TEST);return g;}
-function chinPost(lite,A,g,Hh,pxr,bw,bh){if(!g)return;const gl=R3.gl;
-  if(g.F)chinGlass(g.quads,g.F,g.X0,g.Y0,g.w,g.h,g.w2,g.h2,pxr,Hh,bw,bh);
-  else{gl.enable(gl.SCISSOR_TEST);gl.viewport(g.X0,g.Y0,g.w,g.h);gl.scissor(g.X0,g.Y0,g.w,g.h);chinDraw(lite,A,g,Hh,pxr,bw,bh);gl.disable(gl.SCISSOR_TEST);}
-  gl.viewport(0,0,bw,bh);}
+  gl.colorMask(false,false,false,false);gl.disable(gl.CULL_FACE);gl.depthFunc(gl.LEQUAL);gl.drawArrays(gl.TRIANGLES,0,T.length/3);
+  gl.colorMask(true,true,true,true);gl.enable(gl.CULL_FACE);}
 const LOOK_GLANCE={on:false};
 /* ---- cameras ---- */
-/* (2.15) Motion cues. A pilot feels an acceleration before any instrument shows its result: the seat pushes
-   up when the lever comes up (0.025 g per 1 % in the hover), the body leans into a deceleration, the airframe
-   shudders through translational lift, in the vortex ring, in retreating blade stall, at a hard touchdown.
-   A screen gives none of that, which is why the vertical speed is chased (2.13.2). The head here does what a
-   head does in the seat: it lags the cockpit by an amount that follows the onset of the specific force
-   (high-passed with 0.8 s, so a steady turn or climb does not hold it off-centre), down and a nod with more g,
-   forward in a deceleration, sideways in a skid. Smooth: no shaking of the picture (a rotor's vibration in the
-   view was tried and left out, it makes the picture harder to read). Subtle: 0.25 m and 3° per g, full: twice
-   that, the offset limited to 6 and 12 cm. Only in the cockpit, not in the replay. */
-const MOT={lx:0,ly:0,lz:0,o:[0,0,0],p:0,y:0};
-function motionStep(dt){const g=REPLAY.on?0:cfg.motion==='full'?1:cfg.motion==='subtle'?0.5:0;
-  if(!g||!(dt>0)){MOT.o=[0,0,0];MOT.p=MOT.y=0;return MOT;}
-  const fx=(S.ax||0)/9.81,fy=(S.ay||0)/9.81,fz=(S.nz||1)-1,k=Math.min(1,dt/0.8);
-  MOT.lx+=(fx-MOT.lx)*k;MOT.ly+=(fy-MOT.ly)*k;MOT.lz+=(fz-MOT.lz)*k;   // the slow part, washed out
-  const hx=fx-MOT.lx,hy=fy-MOT.ly,hz=fz-MOT.lz,lim=0.06+0.06*(g>0.5?1:0),c=v=>clamp(v,-lim,lim),K=0.5*g;
-  const want=[c(-K*hx),c(-K*hy),c(K*hz)];   // body axes: x forward, y right, z down; the head lags the acceleration
-  for(let i=0;i<3;i++)MOT.o[i]+=(want[i]-MOT.o[i])*Math.min(1,dt/0.08);   // the neck: 80 ms
-  MOT.p=clamp(6*g*DEG*hz-3*g*DEG*hx,-3*DEG,3*DEG);   // a nod down (the line of sight lower) with more g and in a deceleration
-  return MOT;}
+/* (2.16.5) No motion cues. 2.15 moved the head with the accelerations (a lag of the eye point and a nod
+   with the load factor); every touch of the lever then moved the picture, which read as the aircraft itself
+   nodding. Left out, like the rotor's vibration before: the picture moves only with the aircraft. */
 function cameraUpdate(dt){
   const c=R3.cam,R=qmat(S.q),[phi,th,psi]=S.eul;
   // head: the mouse sets a target, the camera follows with a 120 ms lag; on release both return forward
@@ -1319,11 +1256,10 @@ function cameraUpdate(dt){
   const kf=Math.min(1,dt/0.12);lk.yaw+=((lk.yawT||0)-lk.yaw)*kf;lk.pitch+=((lk.pitchT||0)-lk.pitch)*kf;
   aprStep(dt);   // (2.12) the approach view's state, in every view (switching to the cockpit finds it current)
   if(cfg.view==='cockpit'){
-    const mo=motionStep(dt);   // (2.15) the head with the accelerations
-    c.pos=vadd(S.pos,mrot(R,vadd(H.pilot.eye,mo.o)));
+    c.pos=vadd(S.pos,mrot(R,H.pilot.eye));
     // head yaw about the body vertical, then pitch; the line of sight looks down so that the bottom of the view sits ~36° below (the flight displays), see cockpitFov
     const fv=cockpitFov(R3.w/Math.max(1,R3.h),APR.k);
-    const hy=lk.yaw+mo.y,cy=Math.cos(hy),sy=Math.sin(hy),el=fv.down-lk.pitch+mo.p,ce=Math.cos(el),se=Math.sin(el);
+    const cy=Math.cos(lk.yaw),sy=Math.sin(lk.yaw),el=fv.down-lk.pitch,ce=Math.cos(el),se=Math.sin(el);
     c.f=mrot(R,[ce*cy,ce*sy,se]);c.u=mrot(R,[se*cy,se*sy,-ce]);c.fov=fv.v;c.gaze=fv.down;   // gaze: the line of sight's angle under the nose line (the panel's lift, 89_panel.js)
   }else if(cfg.view==='chase'){
     const vN=mrot(R,S.vb);const fast=Math.hypot(vN[0],vN[1])>12;
@@ -1407,12 +1343,13 @@ function render(dt){
   const c=R3.cam,vpFull=R3.vp=m4mul(m4persp(c.fov,W/Hh,1.0,R3.far),m4view(c.pos,c.f,c.u));
   skyState();R3.windXY=[S.wind[0],S.wind[1]];
   const R=qmat(S.q),rt=H.rotor,st=S.rot,hubW=vadd(S.pos,mrot(R,rt.hub)),Rh=mmul(R,rt.Rbh),A={R,rt,st,hubW,Rh};
-  const chin=chinPre(lite,A,W,Hh,pxr,bw,bh);   // (2.12.6) the chin windows first, into their own framebuffer: the view's framebuffer is then drawn in one go
+  const chin=chinOcclOn();   // (2.17.2) the chin windows: in this pass, the view drawn over the whole screen
   /* (2.9.2) in the cockpit the instrument panel covers the bottom of the view: nothing is drawn under it */
-  const cut=cfg.view==='cockpit'&&!cfg.panel3d&&HUD.panelA>0.99&&HUD.panelTop<Hh-40?Math.round((Hh-HUD.panelTop-20)*pxr):0;   // (2.12.2) also over a lifted panel: the chin windows under it are their own small passes (renderChin)
+  const cut=!chin&&cfg.view==='cockpit'&&!cfg.panel3d&&HUD.panelA>0.99&&HUD.panelTop<Hh-40?Math.round((Hh-HUD.panelTop-20)*pxr):0;   // (2.12.2) also over a lifted panel: the chin windows under it are their own small passes (renderChin)
   if(cut>0){gl.enable(gl.SCISSOR_TEST);gl.scissor(0,cut,bw,bh-cut);   // (2.12.3) and the viewport with it: the projection cut down to the part above the panel (the same pixels), so what lies under the panel is not even sent
     gl.viewport(0,cut,bw,bh-cut);R3.vp=m4mul(subRectM(0,cut,bw,bh-cut,bw,bh),vpFull);}else gl.disable(gl.SCISSOR_TEST);
   gl.clearColor(R3.fog[0],R3.fog[1],R3.fog[2],1);gl.clearStencil(0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT|gl.STENCIL_BUFFER_BIT);
+  if(chin)chinOccl(W,Hh,pxr,bw,bh);   // (2.17.2) the panel and the floor first, into the depth buffer only
   /* Nearest first, so the depth test turns hidden pixels away before they are shaded: the cockpit, the
      aircraft, buildings and trees, then the ground, then the sky into whatever is left. Then the shadow
      and everything transparent. (Until 2.2 the sky and the ground were shaded first, under everything.) */
@@ -1451,5 +1388,4 @@ function render(dt){
   if(early){gl.depthRange(0,0.01);drawCockpitGlass();}
   else if(cockpit){gl.clear(gl.DEPTH_BUFFER_BIT);drawCockpit();drawCockpitGlass();}
   gl.depthRange(0,1);gl.disable(gl.SCISSOR_TEST);R3.vp=vpFull;gl.viewport(0,0,bw,bh);   // the full view's projection again: the HUD projects with it
-  chinPost(lite,A,chin,Hh,pxr,bw,bh);   // (2.12.2) the chin windows under a lifted panel: laid in through their glass
 }

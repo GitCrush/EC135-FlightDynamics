@@ -7,6 +7,8 @@
    blade stall, the reversed-flow region and a VRS breakdown show up
    where they happen on the disc. */
 const HUD={c:null,x:null,aoaMap:null,incT:0,incText:'',incId:''};
+/* (2.17.1) every key, for the ? overlay and the menu's Controls tab */
+const KEYLIST=[['Mouse','a click into the view captures it as the stick; a left click trims; the system\'s pointer acceleration off keeps it steady'],['Right button · C','hold and look around (the mouse turns the head); the middle button too'],['Q E (hold)','glance out of the left / right door window at the ground beside the skid; the mouse keeps flying'],['Shift+Z · Z','head tracking by webcam on / off · centre it'],['Esc','release the mouse; once more: the menu'],['Wheel · W S','collective'],['A D','pedals'],['Arrows','stick'],['T · left click','trim: the attitude flown becomes the centre'],['Shift + arrows','beep trim'],['Y','back to the hover trim'],['Shift+E','engines: the start sequence (brake off, ENG 1, ENG 2, FLIGHT); running: IDLE, then OFF'],['Shift+1 · Shift+2','one engine\'s main switch a step: OFF – IDLE – FLIGHT and back'],['Shift+B','rotor brake (engines off, below 50 % NR)'],['H','hover assist'],['V','autopilot demonstration'],['U I O','autopilot modes: U ALT (height), I HOV (hover position) or IAS (speed), O HDG (heading); moving a control it drives gives it back'],['M (hold)','click to fly: point at a spot on the ground or in the plan view, wheel for a point in the air, click; the gold arrows lead you there · right-click clears'],['K','coach: off / cues / cues + voice'],['1 2 3','cockpit · chase · tower'],['4','the approach view on / off: the gaze lowers 15° (the chin windows: menu, Display; a hint offers it on the approach)'],['F','flight path marker'],['P','predicted path on / off'],['Space','pause'],['R','repeat reset'],['G','engine failure'],['L','replay of the last 20 s'],['X','CSV export'],['N B Shift+Q','tutor next · back · quit'],['? · F1','this list']];
 const HUD_COL={ink:'#e8e2d6',mute:'#8a8274',amber:'#ffb300',hot:'#ff3b1f',ice:'#6fd3e0',ok:'#7ad36f',panel:'rgba(13,12,10,0.62)'};
 function hudInit(canvas){HUD.c=canvas;HUD.x=canvas.getContext('2d');HUD.aoaMap=new Float32Array(24*8).fill(NaN);}
 function aoaColor(a,st){const d=a*RAD;if(isNaN(d))return '#222';
@@ -83,7 +85,7 @@ function hudDraw(dt){
   hapiDraw(x);   // (2.15) the approach path indicator at the field pad (85_render.js), with or without the HUD
   frameDraw2D(x);   // (2.13) the frame: the horizon against it shows the attitude (89_panel.js)
   if(cfg.view==='cockpit')panelDraw2D(x,W,Hh,k);else{HUD.panelA=0;HUD.panelTop=Hh;HUD.panelUp=0;PANEL.lay=null;}   // the panel is the cockpit, with or without the HUD (89_panel.js)
-  if(!cfg.hud)return;
+  if(!cfg.hud){keysOverlay(x,W,Hh);return;}
   x.font='13px "Arial Narrow",Roboto Condensed,sans-serif';x.textBaseline='middle';
   const [phi,th,psi]=S.eul,rt=H.rotor,st=S.rot;
   const cockpit=cfg.view==='cockpit';
@@ -137,6 +139,8 @@ function hudDraw(dt){
   {const ws=110,x0=W-122,room=(cockpit&&HUD.panelA>0.5?HUD.panelTop:Hh)-10-(byb+70),side=room<120;   // above a lifted panel: beside the ALT box, compact
    const hh=side?30:Math.min(84,(room-46)/2),top=side?byb:byb+70,X0=side?x0-ws-6:x0,cy=top+20+hh,sx=X0+44;
    HUD.vsD=HUD.vsD===undefined?S.vs/FPM:HUD.vsD+(S.vs/FPM-HUD.vsD)*Math.min(1,(dt||0.016)/0.25);const vf=HUD.vsD;
+   /* (2.16.4) the numbers four times a second, by 10 fpm up to 500 and by 50 above (they changed every frame) */
+   {const nowT=performance.now(),rd=f=>Math.abs(f)<20?0:Math.abs(f)<500?Math.round(f/10)*10:Math.round(f/50)*50;if(!HUD.vsNum||nowT-HUD.vsNum.t>250)HUD.vsNum={t:nowT,v:rd(vf),tr:PRED.vsTr!=null?rd(PRED.vsTr/FPM):0};}
    const yv=f=>{const a=Math.min(Math.abs(f),2000),k=a<=500?0.5*a/500:a<=1000?0.5+0.25*(a-500)/500:0.75+0.25*(a-1000)/1000;return cy-Math.sign(f)*k*hh;};
    x.fillStyle=HUD_COL.panel;x.fillRect(X0,top,ws,2*hh+(side?30:46));
    x.font='11px "Arial Narrow",sans-serif';x.textAlign='left';x.textBaseline='alphabetic';x.fillStyle=HUD_COL.mute;x.fillText('V/S  fpm',X0+8,top+13);
@@ -151,9 +155,9 @@ function hudDraw(dt){
      if(Math.abs(ty-py)>6){x.lineWidth=2;x.setLineDash([3,2]);x.beginPath();x.moveTo(sx+4,py);x.lineTo(sx+4,ty+(ty>py?-5:5));x.stroke();x.setLineDash([]);
        x.beginPath();x.moveTo(sx+4,ty);x.lineTo(sx,ty+(ty>py?-6:6));x.lineTo(sx+8,ty+(ty>py?-6:6));x.closePath();x.fill();}
      x.beginPath();x.moveTo(sx-1,ty);x.lineTo(sx-7,ty-4);x.lineTo(sx-7,ty+4);x.closePath();x.fill();   // the bug on the scale
-     x.font='10px "Arial Narrow",sans-serif';x.textAlign='left';const tv=Math.abs(tr/FPM)<20?0:Math.round(tr/FPM/10)*10;x.fillText(`in 6 s ${tv>0?'+':tv<0?'−':''}${Math.abs(tv)}`,X0+ws-50,Math.min(top+2*hh+24,Math.max(top+24,ty+(Math.abs(ty-py)<14?(ty>py?11:-11):0))));}
+     x.font='10px "Arial Narrow",sans-serif';x.textAlign='left';const tv=HUD.vsNum?HUD.vsNum.tr:0;x.fillText(`in 6 s ${tv>0?'+':tv<0?'−':''}${Math.abs(tv)}`,X0+ws-50,Math.min(top+2*hh+24,Math.max(top+24,ty+(Math.abs(ty-py)<14?(ty>py?11:-11):0))));}
    // the pointer and its value
-   {const py=yv(vf),lv=Math.abs(vf)<20,warn=vf<-800&&S.hAGL<100*FT,col=lv?HUD_COL.mute:warn?HUD_COL.amber:HUD_COL.ink,v=lv?0:Math.round(vf/10)*10;
+   {const py=yv(vf),lv=Math.abs(vf)<20,warn=vf<-800&&S.hAGL<100*FT,col=lv?HUD_COL.mute:warn?HUD_COL.amber:HUD_COL.ink,v=HUD.vsNum.v;
     x.fillStyle=col;x.beginPath();x.moveTo(sx+2,py);x.lineTo(sx+10,py-6);x.lineTo(sx+10,py+6);x.closePath();x.fill();
     x.font='bold 13px "Arial Narrow",sans-serif';const t=(v>0?'+':v<0?'−':'')+Math.abs(v),tw=x.measureText(t).width+8;x.fillStyle='rgba(13,12,10,0.9)';x.fillRect(sx+10,py-9,tw,18);x.strokeStyle=col;x.lineWidth=1;x.strokeRect(sx+10.5,py-8.5,tw-1,17);
     x.fillStyle=col;x.textAlign='left';x.fillText(t,sx+14,py+0.5);}
@@ -195,7 +199,7 @@ function hudDraw(dt){
     const pulse=0.55+0.45*Math.sin(S.t*4);x.strokeStyle=`rgba(255,179,0,${pulse})`;x.lineWidth=2.5;
     for(const id of (st.hl||[])){const r=rects[id];if(r)x.strokeRect(r[0],r[1],r[2],r[3]);}
     const bw=Math.min(W-40,640),bx=W/2-bw/2;x.font='15px "Arial Narrow",sans-serif';
-    const lines=wrapText(x,st.text,bw-28);const bh=lines.length*20+64,by=hudSlotT(bh+(TUTOR.passed>0||TUTOR.lessonDone?34:0));
+    const lines=wrapText(x,typeof st.text==='function'?st.text():st.text,bw-28);const bh=lines.length*20+64,by=hudSlotT(bh+(TUTOR.passed>0||TUTOR.lessonDone?34:0));
     x.fillStyle='rgba(13,12,10,0.86)';x.fillRect(bx,by,bw,bh);x.strokeStyle=HUD_COL.amber;x.lineWidth=1;x.strokeRect(bx,by,bw,bh);
     x.textAlign='left';x.fillStyle=HUD_COL.amber;x.font='bold 13px "Arial Narrow",sans-serif';
     x.fillText(`Lesson ${TUTOR.li+1}/${LESSONS.length} · ${L.title}   ·   Step ${TUTOR.si+1}/${L.steps.length}`,bx+14,by+16);
@@ -221,28 +225,14 @@ function hudDraw(dt){
     lines.forEach((l,i)=>x.fillText(l,W/2,by0+16+i*18));}
   replayDraw(x,W,Hh);coachDraw(x,W,Hh);
   /* (2.13.3) the middle: paused, crash and debrief one under the other around the centre (the debrief lay on the crash box) */
-  const dbf=UI.debrief&&S.t-UI.debrief.t<14&&!TUTOR.on?UI.debrief:null,psd=UI.paused&&!REPLAY.on&&!(typeof CAL!=='undefined'&&CAL.on);
+  const dbf=UI.debrief&&S.t-UI.debrief.t<14&&!TUTOR.on?UI.debrief:null,psd=UI.paused&&!REPLAY.on&&!UI.menu;
   let ym;{const hs=[psd?44:0,S.crash?54:0,dbf?dbf.rows.length*20+46:0].filter(Boolean),tot=hs.reduce((a,b)=>a+b,0)+Math.max(0,hs.length-1)*10;ym=Math.max(HUD.slotT,Hh/2-30-tot/2);}
-  if(typeof CAL!=='undefined'&&CAL.on){   // (2.14) fitting the stick to the mouse pad (80_input.js)
-    const w=Math.min(W-40,540),bx=W/2-w/2,sw=CAL.max-CAL.min,ft=clamp(Math.round(sw*0.45/50)*50,300,2500);x.font='13px "Arial Narrow",sans-serif';
-    const L1=wrapText(x,'Move the mouse at the pace you fly, from the left edge of the pad to the right edge, without lifting it. Full stick will lie just inside the edges.',w-32);
-    x.font='12px "Arial Narrow",sans-serif';const L2=wrapText(x,DEV.mouse.raw?'Raw movement: the pointer acceleration is bypassed.':'With the system\'s pointer acceleration a quick move and a slow one differ; switch it off: '+mouseAccelPath()+'.',w-32);
-    const h=64+L1.length*18+L2.length*16+44,by=Math.max(HUD.slotT,ym);ym=by+h+10;
-    x.fillStyle='rgba(13,12,10,0.92)';x.fillRect(bx,by,w,h);x.strokeStyle=HUD_COL.amber;x.lineWidth=1;x.strokeRect(bx+0.5,by+0.5,w-1,h-1);
-    x.textAlign='left';x.fillStyle=HUD_COL.amber;x.font='bold 15px "Arial Narrow",sans-serif';x.fillText('Fit the stick to your mouse pad',bx+16,by+24);
-    x.fillStyle=HUD_COL.ink;x.font='13px "Arial Narrow",sans-serif';L1.forEach((l,i)=>x.fillText(l,bx+16,by+46+i*18));let y=by+46+L1.length*18;
-    const bw=w-32,k=Math.min(1,sw/3000);x.fillStyle='#2a2620';x.fillRect(bx+16,y,bw,8);x.fillStyle=sw>=300?HUD_COL.ok:HUD_COL.amber;x.fillRect(bx+16,y,bw*k,8);
-    x.fillStyle=HUD_COL.mute;x.font='12px "Arial Narrow",sans-serif';x.fillText(sw>=300?`sweep ${Math.round(sw)} px → full stick ${ft} px`:`sweep ${Math.round(sw)} px (at least 300)`,bx+16,y+24);y+=40;
-    L2.forEach((l,i)=>x.fillText(l,bx+16,y+i*16));y+=L2.length*16+6;x.fillStyle=HUD_COL.amber;x.fillText('Click to take it · Enter skips · the setup has it again (Input models)',bx+16,y+4);}
   if(psd){x.textAlign='center';x.font='bold 24px "Arial Narrow",sans-serif';x.fillStyle=HUD_COL.amber;x.fillText('PAUSED',W/2,ym+22);x.font='13px "Arial Narrow",sans-serif';x.fillStyle=HUD_COL.mute;x.fillText('Space or click into the view',W/2,ym+42);ym+=54;}   // (the key is Space; P is the predictor)
   if(S.crash){x.textAlign='center';x.fillStyle='rgba(255,59,31,0.9)';x.fillRect(W/2-190,ym,380,54);x.fillStyle='#0d0c0a';x.font='bold 20px "Arial Narrow",sans-serif';x.fillText(S.crash,W/2,ym+20);x.font='13px "Arial Narrow",sans-serif';x.fillText('R = restart at the same place · L = replay of the last 20 s',W/2,ym+42);ym+=64;}
   if(dbf){const d=dbf,bw=300,bh=d.rows.length*20+46,bx=W/2-bw/2,by=ym;
     x.fillStyle='rgba(13,12,10,0.88)';x.fillRect(bx,by,bw,bh);x.strokeStyle=HUD_COL.ice;x.lineWidth=1;x.strokeRect(bx,by,bw,bh);
     x.textAlign='left';x.fillStyle=HUD_COL.ice;x.font='bold 14px "Arial Narrow",sans-serif';x.fillText(d.title,bx+14,by+18);x.font='13px "Arial Narrow",sans-serif';
     d.rows.forEach(([k,v],i)=>{x.fillStyle=HUD_COL.mute;x.textAlign='left';x.fillText(k,bx+14,by+42+i*20);x.fillStyle=HUD_COL.ink;x.textAlign='right';x.fillText(v,bx+bw-14,by+42+i*20);});}
-  if(UI.showKeys){const K=[['Mouse','a click into the view captures it as the stick; buttons left/right = pedals; the system\'s pointer acceleration off keeps it steady'],['C · middle button','hold and look around (the mouse turns the head)'],['Q E (hold)','glance out of the left / right door window at the ground beside the skid; the mouse keeps flying'],['Shift+Z · Z','head tracking by webcam on / off · centre it'],['Esc','release the mouse'],['Wheel · W S','collective'],['A D','pedals'],['Arrows','stick'],['T','trim to the present attitude'],['Shift + arrows','beep trim'],['Y','back to the hover trim'],['Shift+E','engines: the start sequence (brake off, ENG 1, ENG 2, FLIGHT); running: IDLE, then OFF'],['Shift+1 · Shift+2','one engine\'s main switch a step: OFF – IDLE – FLIGHT and back'],['Shift+B','rotor brake (engines off, below 50 % NR)'],['H','hover assist'],['V','autopilot demonstration'],['U I O','autopilot modes: U ALT (height), I HOV (hover position) or IAS (speed), O HDG (heading); moving a control it drives gives it back'],['M (hold)','click to fly: point at a spot on the ground or in the plan view, wheel for a point in the air, click; the gold arrows lead you there · right-click clears'],['K','coach: off / cues / cues + voice'],['1 2 3','cockpit · chase · tower'],['4','the approach view on / off: the gaze lowers 15° (chin windows in the setup; a hint offers it on the approach)'],['F','flight path marker'],['P','predicted path on / off'],['Space','pause'],['R','repeat reset'],['G','engine failure'],['L','replay of the last 20 s'],['X','CSV export'],['N B Shift+Q','tutor next · back · quit'],['? · F1','this list']];
-    const bw=420,bh=K.length*18+40,bx=W/2-bw/2,by=Hh/2-bh/2-30;x.fillStyle='rgba(13,12,10,0.9)';x.fillRect(bx,by,bw,bh);x.strokeStyle=HUD_COL.amber;x.strokeRect(bx,by,bw,bh);
-    x.font='13px "Arial Narrow",sans-serif';K.forEach(([k,v],i)=>{x.textAlign='right';x.fillStyle=HUD_COL.amber;x.fillText(k,bx+110,by+26+i*18);x.textAlign='left';x.fillStyle=HUD_COL.ink;x.fillText(v,bx+124,by+26+i*18);});}
   guideDraw(x);aimDraw(x);   // click to fly (92_coach.js): the far target, the cursor
   /* ---- the hints' line (2.13.3: stacked from the panel upwards, lowest first: sound, head tracking, the mouse,
      looking around / the demonstration, the approach view, the coach's legend; they used to sit at fixed heights
@@ -270,10 +260,20 @@ function hudDraw(dt){
   if(cfg.mouse&&!REPLAY.on){
     if(DEV.mouse.armed){const cx0=W/2,cy0=Hh/2-40;const sx=cx0+DEV.mouse.vx*110,sy=cy0+DEV.mouse.vy*110;
       x.strokeStyle='rgba(232,226,214,0.25)';x.lineWidth=1;x.strokeRect(cx0-110,cy0-110,220,220);
-      if(SAS.mode==='att'&&SAS.rc){x.fillStyle='rgba(232,226,214,0.7)';x.beginPath();x.arc(cx0,cy0,2.2,0,7);x.fill();x.font='11px "Arial Narrow",sans-serif';x.textAlign='right';x.fillStyle='rgba(232,226,214,0.45)';x.fillText('rate command · centre holds',cx0+106,cy0+104);}   // (2.13.1) the dead centre of the rate command
+      if(SAS.mode==='att'&&SAS.rc){x.fillStyle='rgba(232,226,214,0.7)';x.beginPath();x.arc(cx0,cy0,2.2,0,7);x.fill();x.font='11px "Arial Narrow",sans-serif';x.textAlign='right';x.fillStyle='rgba(232,226,214,0.45)';x.fillText('rate command · centre holds',cx0+106,cy0+104);}
+      else if(SAS.mode==='att'&&SAS.fwd){x.font='11px "Arial Narrow",sans-serif';x.textAlign='right';x.fillStyle='rgba(232,226,214,0.45)';x.fillText(cfg.mouseButtons==='pedals'?'centre = trim attitude · T trims':'centre = trim attitude · click trims',cx0+106,cy0+104);}   // (2.16.8)
+      {const tt=performance.now()/1000-(HUD.trimT||-9);if(tt>=0&&tt<1.2){x.save();x.globalAlpha=Math.min(1,(1.2-tt)/0.4);x.font='bold 13px "Arial Narrow",sans-serif';x.textAlign='center';x.fillStyle=HUD_COL.ok;x.fillText('TRIM',cx0,cy0-116);x.restore();}}   // (2.16.8) T or a left click   // (2.13.1) the dead centre of the rate command
       x.strokeStyle='rgba(255,179,0,0.85)';x.lineWidth=1.5;x.beginPath();x.arc(sx,sy,7,0,7);x.moveTo(sx-12,sy);x.lineTo(sx-4,sy);x.moveTo(sx+4,sy);x.lineTo(sx+12,sy);x.moveTo(sx,sy-12);x.lineTo(sx,sy-4);x.moveTo(sx,sy+4);x.lineTo(sx,sy+12);x.stroke();}
   }
-}
+  keysOverlay(x,W,Hh);   // (2.17.1) last: nothing is drawn over the key list
+}/* (2.17.1) the ? overlay: two columns that wrap, the box as wide as the view allows */
+function keysOverlay(x,W,Hh){if(!UI.showKeys)return;
+    const K=KEYLIST,bw=Math.min(W-40,760),kc=150,tw=bw-kc-34;x.font='13px "Arial Narrow",sans-serif';
+    const rows=K.map(([k,v])=>[k,wrapText(x,v,tw)]),lh=17,bh=rows.reduce((a,r)=>a+r[1].length*lh+4,0)+44,bx=W/2-bw/2,by=Math.max(10,Hh/2-bh/2-20);
+    x.fillStyle='rgba(13,12,10,0.94)';x.fillRect(bx,by,bw,bh);x.strokeStyle=HUD_COL.amber;x.strokeRect(bx,by,bw,bh);
+    x.font='bold 11px "Arial Narrow",sans-serif';x.textAlign='left';x.fillStyle=HUD_COL.amber;x.fillText('ALL KEYS  ·  ? or F1 closes  ·  the menu (Esc) lists them too',bx+16,by+20);
+    let y=by+40;x.font='13px "Arial Narrow",sans-serif';for(const [k,ls] of rows){x.textAlign='right';x.fillStyle=HUD_COL.amber;x.fillText(k,bx+kc,y);x.textAlign='left';x.fillStyle=HUD_COL.ink;ls.forEach((l,n)=>x.fillText(l,bx+kc+16,y+n*lh));y+=ls.length*lh+4;}}
+
 /* (2.13.3) The boards never lie on one another: at the top centre they stack downwards from under the
    heading tape (tutor, the keys' hint at the start, incident, coach, click to fly), on the hints' line
    upwards from the panel (hudDraw's order), in the middle around the centre (paused, crash, debrief).

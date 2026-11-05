@@ -5,11 +5,10 @@ What it left open needs either flight data that was not found or a larger model 
 item has its measured reading in docs/TECHNICAL.md ("Fourth flight and the end of this iteration").
 
 For a next iteration (a larger model change)
-- Pitch bandwidth 3.01 against 1.84 rad/s and phase delay 70 against 92 ms (KNOWN, sweeps with the
-  collective fixed since 2.3). Traced in 2.3 to the short period; the stabiliser is ruled out (the
-  source says it was sized for good M_alpha and M_q). Missing: ~25 ms or more of delay in pitch
-  (published equivalent delay 125 ms). Needs a source: DLR's identified derivatives (Seher-Weiss,
-  JAHS 2019) as numbers, or the inflow / wake-to-tail lag modelled and checked against them.
+- Pitch bandwidth 2.85 against 1.84 rad/s (KNOWN). The phase delay is matched since 2.16.0 (an
+  equivalent delay of 25 ms in the pitch channel: 93 ms against 92). The bandwidth itself needs a
+  source: DLR's identified derivatives (Seher-Weiss, JAHS 2019) as numbers, or the inflow /
+  wake-to-tail lag modelled and checked against them.
 - Retreating blade stall: the limit matches (VAL since 2.3, peak C_T/sigma 0.175 against 0.176);
   the roll-off in the stall is about 1.7 times the expected bank. The retreating tip sits at 16° in
   the 1 g trim at 140 kt: radial inflow variation and tip relief are not modelled.
@@ -34,8 +33,8 @@ Calibration (rotor, controls, stabiliser now from ERF 1997; still open)
 Physics
 - Blade pitch-flap coupling and swashplate phase as measured values.
 - Fenestron: interference with the fin in left sideward flight.
-- Start-up (2.16 has the switches, N1/TOT and the rotor brake): the type's own idle speeds and TOT limits from the flight manual; a hot or hung start.
-- Turbulence intensity scaled with the wind profile near the ground.
+- Start-up: the type's own idle speeds and TOT curve from the flight manual (2.17.1 has hot and hung starts against the start limits of a training deck, not the manual).
+- The terrain's wind (2.17.1) as an engineering model: a check against a flow solution or measurements over a hill (Askervein) would set its numbers; the town's towers have no wake.
 
 Trainer
 - Touch controls (virtual stick, collective slider).
@@ -52,17 +51,14 @@ Trainer
 - Slope-landing critical angle displayed.
 
 Scene
-- Tree and building shadows (the aircraft's own silhouette shadow is in since 2.0).
 - Cockpit: the instrument panel is a flat texture; bezels, knobs and the overhead console
   in 3D; a canopy reflection at low sun.
 - Downwash: snow and sand surfaces; rotor-tip vortices in humid air.
 - Runway numbers, night lighting (a HAPI at the field pad since 2.15).
-- The world (2.9): the wind does not follow the terrain (no lee turbulence or downdraught behind the
-  Kuppe, no gusts round the town's towers); no rain, no cloud to fly into; traffic on the roads does
-  not stop for anything.
-- Approach view (2.12): the chin windows' outline is an estimate from photographs; on integrated
-  GPUs it dropped frames in 2.12.2; 2.12.4 draws the chin windows at half resolution, and the
-  setup's performance test measures it: numbers from an integrated GPU are still missing.
+- The world (2.9): no gusts round the town's towers (the wind follows the terrain since 2.17.1);
+  no rain, no cloud to fly into; traffic on the roads does not stop for anything.
+- Approach view (2.12): the chin windows' outline is an estimate from photographs. The menu's
+  performance test compares the view with and without them on any machine.
   After a departure from the hover that stays low and slow, the next stop has no hint until the
   aircraft has been away.
 

@@ -152,29 +152,61 @@ function forestD(n,e,raw){const r=Math.hypot(n,e);let d=vnoise(n/260+9.2,e/260+4
    filters per axis on white noise, bandwidth scaled with airspeed/length
    scale) plus a slow gust envelope. Reported in NED. */
 const WIND={dir:270,spd:0,turb:0,gust:0,seed:7};
-const WST={f:[0,0,0],g:[0,0,0],gustT:0,gustA:0,rng:makeRng(7)};
-function windReset(seed){WST.rng=makeRng(seed||WIND.seed);WST.f=[0,0,0];WST.g=[0,0,0];WST.gustT=0;WST.gustA=0;}
+const WST={f:[0,0,0],g:[0,0,0],gustT:0,gustA:0,gustD:3,gustAge:99,rng:makeRng(7)};
+function windReset(seed){WST.rng=makeRng(seed||WIND.seed);WST.f=[0,0,0];WST.g=[0,0,0];WST.gustT=0;WST.gustA=0;WST.gustD=3;WST.gustAge=99;WST.terT=0;WST.terN=NaN;}
 /* Boundary layer: WIND.spd is the wind at 10 m; 1/7 power law above 2 m
    (up to 300 m, 1.63 times the 10 m value), cut in half at the ground. */
 function windProfile(hAGL){return Math.pow(clamp(hAGL,2,300)/10,1/7)*(0.5+0.5*sm(0,4,hAGL));}
-function windAt(dt,V,hAGL){
+/* (2.17.1) The ground under the wind, sampled upstream from the point (n, e) at hAGL over the ground:
+   - the slope along the wind, s = dh/ds over ±20 m: the air follows the ground, rising up a windward slope and
+     sinking down a lee slope, w = -U s, fading with the height over the ground over 120 m (a hill's flank);
+   - the wake q (0..1) of a ridge upstream (10 samples, 40 m to 1.1 km): how deep the point lies below the ridge's
+     crest (1 below it, 0 above the shear layer a quarter of the ridge's height over the crest), full to 3 ridge
+     heights downstream and gone at 10, and only behind a lee slope steep enough for the flow to separate
+     (0.12 to 0.3 of slope, 7 to 17°). In the wake the mean wind drops to 40 %, the turbulence is up to 2.5 times
+     stronger and its eddies are smaller, and the slope flow is halved (the lee's air tumbles rather than flows).
+   An engineering model of what a pilot is taught about hills in wind, not a flow solution: the updraught on the
+   windward side, the downdraught and the turbulence in the lee. */
+function terrainWind(n,e,hAGL,fromDeg){const f=fromDeg*DEG,un=-Math.cos(f),ue=-Math.sin(f),g0=terrainH(n,e),z=g0+hAGL;let q=0;
+  for(const d of [40,80,130,200,280,380,500,650,850,1100]){const pn=n-un*d,pe=e-ue*d,hn=terrainH(pn,pe),H=hn-g0;if(H<15)continue;
+    const lee=(hn-terrainH(pn+un*60,pe+ue*60))/60,sep=sm(0.12,0.3,lee);if(sep<=0)continue;
+    const depth=clamp((hn+0.25*H-z)/(0.6*H),0,1),fade=1-clamp((d/H-3)/7,0,1);q=Math.max(q,depth*fade*sep);}
+  const s=(terrainH(n+un*20,e+ue*20)-terrainH(n-un*20,e-ue*20))/40;return {q,s};}
+function windAt(dt,V,hAGL,pos){
   const from=WIND.dir*DEG, w=WIND.spd*KT;
   const prof=windProfile(hAGL);
-  const base=[-Math.cos(from)*w*prof,-Math.sin(from)*w*prof,0];
+  let q=0,s=0;
+  if(pos&&w>0.3){WST.terT=(WST.terT||0)-dt;   // the terrain every 0.1 s or 20 m
+    if(WST.terT<=0||!(Math.hypot(pos[0]-WST.terN,pos[1]-WST.terE)<20)){WST.terT=0.1;WST.terN=pos[0];WST.terE=pos[1];const r=terrainWind(pos[0],pos[1],Math.max(0,hAGL),WIND.dir);WST.terQ=r.q;WST.terS=r.s;}
+    q=WST.terQ||0;s=WST.terS||0;}
+  WST.q=q;WST.s=s;
+  const U=w*prof*(1-0.6*q);
+  const base=[-Math.cos(from)*U,-Math.sin(from)*U,-U*s*Math.exp(-Math.max(0,hAGL)/120)*(1-0.5*q)];   // NED: up a slope is negative
   if(WIND.turb>0){
-    // Dryden: L = 200 m (low altitude), sigma from the turbulence setting
-    const sig=WIND.turb*1.0, L=Math.max(50,Math.min(300,hAGL*3+40)), Vx=Math.max(V,3);
-    const a=Math.exp(-dt*Vx/L), k=Math.sqrt(1-a*a)*sig;
+    /* (2.17.1) Low-altitude turbulence after MIL-HDBK-1797 (as MIL-F-8785C): with h in feet (10 to 1000) the
+       horizontal intensity against the vertical is 1/(0.177+0.000823 h)^0.4 (2 at 10 ft, 1 at 1000 ft), the length
+       scales L_w = h and L_u = L_v = h/(0.177+0.000823 h)^1.2: near the ground the horizontal gusts are stronger and
+       quicker, the vertical ones small. The setting is the horizontal intensity at 300 ft; the eddies pass at the
+       speed through the air (frozen turbulence), not the speed over the ground (until 2.17.0: one intensity and one
+       length, 3 h + 40 m, at every height, passing at the ground speed, so that in a hover in wind they hardly moved). */
+    const hf=clamp(hAGL/FT,10,1000),r=0.177+0.000823*hf,ruv=Math.pow(r,-0.4)/1.414,Vx=Math.max(V,2);
+    const sig=[WIND.turb*ruv*(1+1.5*q),WIND.turb*ruv*(1+1.5*q),WIND.turb/1.414*(1+1.0*q)];
+    const Luv=Math.min(300,hf/Math.pow(r,1.2)*FT)*(1-0.4*q),L=[Luv,Luv,Math.max(3,hf*FT)];
     for(let i=0;i<3;i++){
+      const a=Math.exp(-dt*Vx/L[i]),k=Math.sqrt(1-a*a)*sig[i];
       const n=(WST.rng()+WST.rng()+WST.rng()-1.5)*2;   // ~N(0,1)
       WST.f[i]=a*WST.f[i]+k*n; WST.g[i]=a*WST.g[i]+(1-a)*WST.f[i];
-      base[i]+=WST.g[i]*(i===2?0.6:1);
+      base[i]+=WST.g[i];
     }
   }
+  /* (2.16.7) Gusts: one at a time along the mean wind, rising and falling in the 1-cos shape over 2 to 5 s, then
+     4 to 16 s without (two of three gusts, one of three lulls; 0.5 to 1 times the set amplitude). Until 2.16.6
+     the envelope was sin(π·(t mod 1)): the wind pumped by up to the full gust once a second without a pause,
+     a 1 Hz forcing that kept the aircraft yawing (±3 °/s in cruise with 8 kt of gust from the side) and rocking. */
   if(WIND.gust>0){
-    WST.gustT-=dt;
-    if(WST.gustT<=0){WST.gustT=6+WST.rng()*14;WST.gustA=(WST.rng()>0.5?1:-1)*WIND.gust*KT*(0.5+WST.rng()*0.5);}
-    const ph=WST.gustT%1, env=Math.sin(Math.PI*ph);
+    WST.gustT-=dt;WST.gustAge+=dt;
+    if(WST.gustT<=0){WST.gustD=2+WST.rng()*3;WST.gustAge=0;WST.gustT=WST.gustD+4+WST.rng()*12;WST.gustA=(WST.rng()<2/3?1:-1)*WIND.gust*KT*(0.5+WST.rng()*0.5);}
+    const env=WST.gustAge<WST.gustD?0.5*(1-Math.cos(2*Math.PI*WST.gustAge/WST.gustD)):0;
     base[0]+=-Math.cos(from)*WST.gustA*env;base[1]+=-Math.sin(from)*WST.gustA*env;
   }
   return base;

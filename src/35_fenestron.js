@@ -101,7 +101,16 @@ function engState(e){const a=[];for(let i=0;i<e.n;i++)a.push({P:0,cmd:0,on:true,
    governs NR up; the drive torque at low rotor speed is capped by what
    the turbine can deliver through the freewheel, which is what makes a
    rotor run-up take the better part of a minute. */
-function engStart(st){st.brake=false;for(const en of st.e){if(!en.on&&!en.fail){en.on=true;en.startT=25;en.N1=0;en.sw='flight';en.dir=-1;}}}
+function engStart(st){st.brake=false;st.e.forEach((en,i)=>{if(!en.on&&!en.fail){en.on=true;en.startT=25;en.N1=0;en.sw='flight';en.dir=-1;engFaultTake(st,i);}});}
+/* (2.17.1) Start faults, armed for one engine's next start (the menu, Failures & data; ENGFAULT.next = {i, kind}):
+   'hot': the fuel comes in rich, the TOT runs past the start limits, 1000 °C at its peak if nothing is done;
+   'hung': the engine lights and accelerates but stops at 42 % N1 short of idle, the TOT creeping up 6 °C a second
+   from 700 °C. The limits watched in the start (PW206B2 of the P2+, from a training deck of the flight manual's
+   limits, not the manual itself): 760 °C at most for a continuous start, 875 °C for 2 s at most. Beyond 875 °C for
+   more than 2 s, or past 950 °C at all, the turbine is damaged: the engine fails (Restore repairs it). The FADEC
+   here does not abort for you; the switch to OFF does, and the TOT then falls as the engine runs down. */
+const ENGFAULT={next:null};   // armed for the next start, {i, kind}: outside the state, a reset (the cold start) keeps it
+function engFaultTake(st,i){const en=st.e[i];en.fault=null;en.hungT=0;en.overT=0;en.peakTOT=0;if(ENGFAULT.next&&ENGFAULT.next.i===i){en.fault=ENGFAULT.next.kind;ENGFAULT.next=null;}}
 function engStop(st){for(const en of st.e){en.on=false;en.startT=0;en.sw='off';en.dir=1;}}
 /* (2.16) The start as flown. Each engine has its main switch, OFF - IDLE - FLIGHT. IDLE from OFF starts it:
    the starter turns it up, it lights at about 12 % N1, the turbine outlet temperature (TOT) peaks during the
@@ -113,7 +122,7 @@ function engStop(st){for(const en of st.e){en.on=false;en.startT=0;en.sw='off';e
    740 °C in the start, about 820 °C at take-off power) are the typical shape of a small turboshaft's
    start, not the type's flight-manual values. Returns '' or why not. */
 function engSwitch(st,i,to){const en=st.e[i];if(!en)return 'no engine';
-  if(to==='idle'&&!en.on){if(en.fail)return 'failed';if(st.brake)return 'brake';en.on=true;en.startT=25;en.N1=0;en.sw='idle';return '';}
+  if(to==='idle'&&!en.on){if(en.fail)return 'failed';if(st.brake)return 'brake';en.on=true;en.startT=25;en.N1=0;en.sw='idle';engFaultTake(st,i);return '';}
   if(to==='idle'){en.sw='idle';return '';}
   if(to==='flight'){if(!en.on)return 'off';en.sw='flight';return '';}
   if(to==='off'){en.on=false;en.startT=0;en.sw='off';return '';}
@@ -156,7 +165,16 @@ function engStep(e,st,dt,NRpct,Pload,dCol,colRate,Pcap,lapse){
   const oat=st.oat===undefined?15:st.oat,totT=(en,tgt)=>{en.TOT=(en.TOT===undefined?oat:en.TOT)+(tgt-(en.TOT===undefined?oat:en.TOT))*Math.min(1,dt/(tgt>en.TOT?1.0:en.on?2.5:40));};
   for(const en of st.e){
     if(!en.on||en.fail){en.cmd=0;en.P=approach(en.P,0,dt*(en.fail?600e3:200e3));en.N1=Math.max(0,en.N1-dt*8);totT(en,en.N1>12?480*en.N1/62:oat);continue;}
-    if(en.startT>0){en.cmd=0;en.P=approach(en.P,0,dt*100e3);en.N1=lerp(0,62,1-en.startT/25);totT(en,en.N1<12?oat:480+260*Math.exp(-(((en.N1-32)/14)**2)));continue;}   // light-off at 12 %, the peak in the acceleration
+    if(en.startT>0){en.cmd=0;en.P=approach(en.P,0,dt*100e3);
+      if(en.fault==='hung'&&en.startT<25*(1-0.68)){en.startT=25*(1-0.68);en.hungT=(en.hungT||0)+dt;}   // (2.17.1) it stops at 42 % N1 and never reaches idle
+      en.N1=lerp(0,62,1-en.startT/25);
+      const pk=en.fault==='hot'?520:260;let tgt=en.N1<12?oat:480+pk*Math.exp(-(((en.N1-32)/14)**2));
+      if(en.fault==='hot'&&en.N1>32)tgt=Math.max(tgt,480+pk*0.9);   // rich: it stays hot past the peak
+      if(en.fault==='hung'&&en.hungT>0)tgt=Math.max(tgt,700+6*en.hungT);
+      totT(en,tgt);en.peakTOT=Math.max(en.peakTOT||0,en.TOT);
+      en.overT=en.TOT>875?(en.overT||0)+dt:0;
+      if(en.TOT>950||en.overT>2){en.fail=true;en.damaged=true;en.on=false;en.startT=0;en.sw='off';}   // the turbine damaged
+      continue;}   // light-off at 12 %, the peak in the acceleration   // light-off at 12 %, the peak in the acceleration
     en.cmd=clamp(nFlight&&en.sw==='idle'?e.idle:share,e.idle,perMax);
     const dP=clamp((en.cmd-en.P)/e.tau,-e.rate*3,e.rate);
     en.P+=dP*dt;

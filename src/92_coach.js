@@ -57,7 +57,7 @@ function coachStep(dt){
      settles at, not against level. Learned as a slow average, seeded with
      the hover trim of this type (nose 3° up, left skid 3.5° low: the
      Fenestron pushes right against the counterclockwise rotor's torque). */
-  if(COACH.trimTh===undefined){COACH.trimTh=3*DEG;COACH.trimPhi=H.rotor.s*3.5*DEG;}
+  if(COACH.trimTh===undefined){COACH.trimTh=TRIM.th;COACH.trimPhi=TRIM.phi;}   // (2.16.8) the trim the reset handed over (until now the hover's 3° nose up, also in cruise: 6° off there)
   /* on the way to a target only while the speed is steady: a flare held for half a minute is not the trim
      (learned, it would ask for ever more nose-up) */
   const vH=mrot(qmat(S.q),S.vb),acc=COACH.vPrev&&dt>0?Math.hypot(vH[0]-COACH.vPrev[0],vH[1]-COACH.vPrev[1])/dt:0;COACH.vPrev=[vH[0],vH[1]];COACH.acc=(COACH.acc||0)+(acc-(COACH.acc||0))*Math.min(1,dt/0.5);
@@ -74,12 +74,24 @@ function coachStep(dt){
      dies away as it arrives, not a held offset: where the stick should be is the correction scaled to a
      rate (about 1 s to close an attitude error), and the cue is the way from the stick to there. */
   if(SAS.mode==='att'&&SAS.rc){raw.lon=sat(0.65*o.lon,1)-(IN.raw.lon-(SAS.rcL||0));raw.lat=sat(0.27*o.lat,1)-(IN.raw.lat-(SAS.rcR||0));}
+  /* (2.16.7) Under the attitude command (the hover) likewise: the stick position that commands the attitude the
+     shadow autopilot wants (the inverse of the command shaping in sasApply: 15°·x + 13°·x³ of pitch, 20°·x +
+     20°·x³ of bank), and the cue is the way from the stick to there. Until now it was the autopilot's correction
+     against the attitude the aircraft has, which lags the stick by a few tenths of a second: the arrow still said
+     "more" when the stick was already right, and a student who followed it briskly (the stick moving at 1.5 to
+     3 times the arrow per second, 0.35 to 0.6 s to react) overshot and rocked the hover up to 4-6 m/s with the
+     stick at the stops. Now the drift dies away for any pace of the hand (test/handling.js). */
+  let tgt=null;   // the hover's stick target, smoothed alone: the arrow follows the hand at once
+  if(!(SAS.mode==='att'&&SAS.rc)&&SAS.mode==='att'&&A.att){const inv=(a,b,y)=>{let x=clamp(y/(a+b),-1,1);for(let i=0;i<6;i++)x-=(a*x+b*x*x*x-y)/(a+3*b*x*x);return clamp(x,-1,1);};
+    const tL=inv(15,13,(SAS.refTh-A.att.th)/DEG),tR=inv(20,20,(A.att.ph-SAS.refPhi-(SAS.phMix||0))/DEG),T=COACH.tgt||(COACH.tgt={lon:IN.raw.lon,lat:IN.raw.lat}),k=Math.min(1,dt*6);
+    T.lon+=(tL-T.lon)*k;T.lat+=(tR-T.lat)*k;tgt=T;}else COACH.tgt=null;
   /* (2.16.2) The collective against where the vertical speed is going, not where it is. The lever sets a vertical
      speed that arrives over 3 to 4 s; a cue on the present one kept asking for more lever while the aircraft was
      already about to stop sinking, and turned round with every swing. With the predictor's 6-s vertical speed
      (PRED.vsTr) it asks only for what the lever still lacks. */
   if(PRED.vsTr!=null&&!onGround){const vsC=A.alt!==null&&A.alt!==undefined?clamp((A.alt-S.alt)*0.25,-5,5):(A.vs||0);raw.col=sat(0.03*(vsC-PRED.vsTr),0.5);}
   for(const k in raw){const v=lk[k]?0:raw[k];c[k]+=(v-c[k])*Math.min(1,dt*6);}   // smoothed: an instructor does not twitch
+  if(tgt){c.lon=lk.lon?0:sat(tgt.lon-IN.raw.lon,1);c.lat=lk.lat?0:sat(tgt.lat-IN.raw.lat,1);}
   coachColDir();
   COACH.alive=true;
   /* hint, by priority, with hold time: a short word for the screen, a sentence for the voice */
@@ -103,6 +115,10 @@ function coachStep(dt){
   else if(!hover&&Math.abs(c.lon)>0.18){hint=c.lon>0?('Nose down'):('Nose up');long=c.lon>0?('Speed too low. Nose a little down.'):('Speed too high. Nose a little up.');lvl=1;}
   else if(!hover&&Math.abs(c.col)>0.12&&!lk.col){hint=c.col>0?('Collective in'):('Collective out');long=c.col>0?('You are sinking. Collective in until the vertical speed is zero.'):('You are climbing. Collective out.');lvl=1;}
   else if(!hover&&Math.abs(c.ped)>0.2){hint=dir('ped',c.ped);long=('Ball off centre. ')+hint+'.';lvl=1;}
+  /* (2.17.0) the mouse holding the stick out under the attitude command at speed, the attitude steady: the trim would let it rest */
+  {const out=cfg.mouse&&DEV.mouse.armed&&SAS.mode==='att'&&SAS.fwd&&!SAS.rc&&Math.abs(IN.raw.lat)+Math.abs(IN.raw.lon)>0.2&&Math.abs(S.om[0])<4*DEG&&Math.abs(S.om[1])<4*DEG;
+   COACH.holdOut=out?(COACH.holdOut||0)+dt:0;
+   if(!hint&&COACH.holdOut>4){const pd=cfg.mouseButtons==='pedals';hint=pd?'T trims':'Click trims';long=`You are holding the stick out. ${pd?'T':'A left click'} trims: the attitude stays, the stick rests at the centre.`;lvl=1;}}
   coachHint(hint,long,lvl);
 }
 /* overlay drawing, called from hudDraw. Colour language: green = move

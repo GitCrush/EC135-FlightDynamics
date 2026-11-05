@@ -2,12 +2,12 @@
 const DT=1/360;                                   // 55 steps per rotor revolution at 100 % NR
 const cfg={
   mass:2500, cgx:0.0, dT:0, qnh:1013,             // aircraft & atmosphere
-  sas:true, attHold:true, hdgHold:true, hoverAssist:false, assistK:1, cycLaw:'rcah',   // stability augmentation (training aids); assistK blends hover assist with the raw stick; cycLaw: above 45 kt rate command (2.13.1) or attitude command
+  sas:true, attHold:true, hdgHold:true, hoverAssist:false, assistK:1, cycLaw:'auto',   // stability augmentation (training aids); assistK blends hover assist with the raw stick; cycLaw: above 45 kt rate command (2.13.1) or attitude command
   kbdCol:'metered', kbdPed:'heading', pedRate:25,            // keyboard pilot models; yaw rate per pedal key, °/s
-  mouse:true, mouseMode:'stick', mouseTravel:1600, mouseCurve:'linear', mouseButtons:true, padDead:0.06, mouseCal:false,   // mouseCal: fitted to the pad once (2.14)   // px of mouse movement for full stick (real stick: 80 mm lateral, 108 mm longitudinal per side)
+  mouse:true, mouseMode:'stick', mouseTravel:1600, mouseCurve:'linear', mouseButtons:'look', padDead:0.06, padCurve:'mild',   // px of mouse movement for full stick (real stick: 80 mm lateral, 108 mm longitudinal per side)
   view:'cockpit', hud:true, rotorDisc:true, fpm:true, predict:true,predictT:'auto', sound:true,volume:70, cloud:0.4,tod:11,vis:12,apr:'off',
   engFail:'none',
-  profile:'beginner', weather:'calm', motion:'subtle',   // (2.15) motion cues: off | subtle | full   // (2.14) the setup's profile and weather preset ('custom' once a setting differs)
+  profile:'beginner', weather:'calm',   // (2.14) the setup's profile and weather preset ('custom' once a setting differs)
 };
 const IN={col:0.45,lon:0,lat:0,ped:0,             // controls after the pilot models, [0..1] / [-1..1]
           raw:{col:0.45,lon:0,lat:0,ped:0},       // device values
@@ -36,7 +36,7 @@ function placeAt(n,e,altAGL,psi,ias){
   S.onGround=altAGL<0.5;
   if(altAGL>0.5){S.rot.lam0=0.05;IN.col=0.52;S.ctl.col=0.52;}else{IN.col=0.05;S.ctl.col=0.05;}
   IN.lon=IN.lat=IN.ped=0;IN.trimLon=IN.trimLat=IN.trimPed=0;
-  S.eng.int=0;for(const en of S.eng.e){en.P=altAGL>0.5?220e3:15e3;en.N1=80;en.on=true;en.fail=false;en.startT=0;en.sw='flight';en.dir=-1;en.TOT=altAGL>0.5?560:490;}S.eng.brake=false;
+  S.eng.int=0;for(const en of S.eng.e){en.P=altAGL>0.5?220e3:15e3;en.N1=80;en.on=true;en.fail=false;en.startT=0;en.sw='flight';en.dir=-1;en.TOT=altAGL>0.5?560:490;en.fault=null;en.damaged=false;}S.eng.brake=false;
   windReset();
   return S;
 }
@@ -60,7 +60,7 @@ function step(dt){
   const at=atmo(S.alt,cfg.dT); S.rho=at.rho; S.aS=at.a;
   const hg=terrainH(S.pos[0],S.pos[1]); S.hAGL=S.alt-hg-1.30;   // skid height above ground
   const vNED=mrot(R,S.vb);
-  S.wind=windAt(dt,vlen(S.vb),S.hAGL+1.3);
+  {const vN=mrot(R,S.vb),w0=S.wind||[0,0,0];S.wind=windAt(dt,Math.hypot(vN[0]-w0[0],vN[1]-w0[1],vN[2]-w0[2]),S.hAGL+1.3,S.pos);}   // (2.17.1) the eddies pass at the speed through the air; the terrain under the wind
   S.windB=mrotT(R,S.wind);
   /* ---- Actuators: hydraulic servos, full travel in 0.45 s, and a
      first-order lag (time constant H.ctlTau) for the linkage and servo
@@ -158,14 +158,19 @@ function step(dt){
   const gyro=vcross(S.om,vadd(Iw,Hrot));
   S.omd=mrot(Iinv,vsub(Mc,gyro));
   const acc=vsub(vscl(F,1/m),vcross(S.om,S.vb));
-  S.nz=-(acc[2]-gB[2]/m+ (vcross(S.om,S.vb))[2])/9.81; S.ay=(F[1]-gB[1])/m; S.ax=(F[0]-gB[0])/m;   // specific force (2.15: ax for the motion cues)
+  S.nz=-(acc[2]-gB[2]/m+ (vcross(S.om,S.vb))[2])/9.81; S.ay=(F[1]-gB[1])/m; S.ax=(F[0]-gB[0])/m;   // specific force
   S.om=vadd(S.om,vscl(S.omd,dt));
   S.vb=vadd(S.vb,vscl(acc,dt));
   S.q=qstep(S.q,S.om,dt);
   S.pos=vadd(S.pos,vscl(mrot(qmat(S.q),S.vb),dt));
   /* ---- Derived, ground state, blade strike ---- */
   S.eul=qtoEuler(S.q);
-  S.tas=vlen(va);S.ias=S.tas*Math.sqrt(S.rho/1.225);
+  S.tas=vlen(va);
+  /* (2.16.6) The indicated airspeed as the pitot reads it: the whole flow within 20° of the tube's axis, less
+     beyond, nothing from the side or from behind. Until now it was the whole airspeed vector, so a vertical
+     descent of 4200 fpm read 41 kt: the vortex-ring warning (below 30 kt) could not fire in a deep ring, and the
+     forward-flight laws took a steep descent for forward flight (test/stress.js S18). */
+  {const ang=Math.acos(clamp(va[0]/Math.max(S.tas,1e-6),-1,1)),k=ang<20*DEG?1:ang<90*DEG?Math.cos((ang-20*DEG)*9/7):0;S.ias=S.tas*k*Math.sqrt(S.rho/1.225);}
   S.vs=-vNED[2];
   S.gear=ge;
   const wasGround=S.onGround; S.onGround=ge.contact>0;
@@ -239,7 +244,16 @@ const INC_RULES=[
    text:r=>`Dynamic rollover: pivoting on one skid at ${Math.abs(r.phi).toFixed(0)}° with the rotor pulling sideways. Lower the collective smoothly. Cyclic alone cannot stop it once the critical angle is passed.`},
   {id:'hard',test:r=>S.touch&&S.touch.t&&S.t-S.touch.t<0.5&&S.touch.vs>H.gear.hardVs&&!S.touch.air,
    text:r=>`Hard landing: ${(S.touch.vs/FPM).toFixed(0)} fpm at touchdown.`},
+  /* (2.17.1) the start's limits (35_fenestron.js): a hot start, a hung start, a turbine damaged by one */
+  {id:'engdmg',test:r=>S.eng.e.some(en=>en.damaged&&!en.dmgSaid&&(en.dmgSaid=true)),text:r=>{const i=S.eng.e.findIndex(en=>en.damaged);return `ENG ${i+1} overtemperature in the start (${Math.round(S.eng.e[i].peakTOT)} °C, above 875 °C for more than 2 s): the turbine is damaged and the engine is out. Restore repairs it.`;}},
+  {id:'hotstart',test:r=>S.eng.e.some(en=>en.on&&en.startT>0&&en.TOT>760),text:r=>{const i=S.eng.e.findIndex(en=>en.on&&en.startT>0&&en.TOT>760);return `Hot start, ENG ${i+1}: TOT ${Math.round(S.eng.e[i].TOT)} °C, above the 760 °C of a start (875 °C for 2 s at most). Abort: ENG ${i+1} to OFF (Shift+${i+1}), before it passes 875 °C.`;}},
+  {id:'hungstart',test:r=>S.eng.e.some(en=>en.on&&en.startT>0&&(en.hungT||0)>5),text:r=>{const i=S.eng.e.findIndex(en=>en.on&&en.startT>0&&(en.hungT||0)>5);return `Hung start, ENG ${i+1}: N1 has stopped at ${Math.round(S.eng.e[i].N1)} %, short of idle, and the TOT is creeping up. Abort: ENG ${i+1} to OFF (Shift+${i+1}).`;}},
   {id:'vne',test:r=>r.ias>H.vne+3,text:r=>`Above Vne (${H.vne} kt).`},
+  /* (2.16.7) The load factor against the limit manoeuvring load factors of CS 27.337 (+3.5 / -1.0 g), in the air only
+     (a touchdown is judged by the landing rules above). A collective dumped at 150 kt reached -2.5 g with no word. */
+  {id:'gload',test:r=>!S.onGround&&S.gear.contact===0&&(r.nz>3.5||r.nz<-1.0),
+   text:r=>r.nz<0?`Load factor ${r.nz.toFixed(1)} g, beyond the structural limit of -1.0 g: the rotor is pushing the aircraft down. Ease the cyclic back and raise the collective smoothly; never dump the lever at high speed.`
+     :`Load factor ${r.nz.toFixed(1)} g, beyond the structural limit of +3.5 g. Ease the cyclic forward and the collective down.`},
   {id:'crash',test:r=>!!S.crash,text:r=>S.crash+'.'},
 ];
 const INC_LAST={};

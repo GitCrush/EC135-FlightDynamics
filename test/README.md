@@ -93,3 +93,13 @@ one-revolution averages, since 1.9); `node flighttest/report.js` rebuilds
 `flighttest/report.html` from them and the evaluator's `verdicts.json`.
 
 `test/dev/` holds the development scratch scripts (traces, not suites).
+
+`node test/stress.js [S1 … S21]` (2.16.6) flies what the scenario suite
+does not: sharp-edged gusts, sideward and rearward flight at the edge, the
+collective snapped up and dumped at Vne, overpitching on one engine, both
+engines failing in the high hover, a 60° turn, a zoom into a tail slide,
+an aileron roll, a loop (pitch through ±90°), negative g, touchdowns with
+drift (dynamic rollover), hard landings, a run-on landing, random inputs,
+the energy balance in autorotation and the airspeed in a vertical descent.
+Each row: the measurement, what physics or the limits lead one to expect,
+OK / CHECK / INFO. About 5 minutes.

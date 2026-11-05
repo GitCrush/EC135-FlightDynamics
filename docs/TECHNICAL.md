@@ -604,6 +604,35 @@ view runs under 50 frames per second for 2 s, the windows' picture is redrawn
 every other frame. The GL line shows the frame rate, and switching the view
 shows the rate before and 3 s after, so the cost can be read on any machine.
 
+**2.17.2: the chin windows in the view's own pass.** All of the above drew the
+windows as a scene of their own; off by default since 2.13 for the frame rate.
+They are on again, and drawn by the view itself: with the panel lifted the
+view's pass covers the whole screen, and right after the clear the band from
+the panel's top down is written into the depth buffer at the near plane with
+the colour off (two triangles), the two windows, 3 cm wider than the floor's
+openings, punched back to the far plane (four more). Everything behind the
+panel and the floor then fails the depth test before it is shaded; what is
+shaded is what shows, above the panel and in the windows, with no second pass
+over the scene and no change of framebuffer (`chinOccl`, 85_render.js; the
+floor, the rims and now the glass's tint are the overlay's, 89_panel.js). For
+the depth test to come before the shader, the downwash's particles no longer
+discard their corners (alpha 0 there; they write no depth), are at most
+128 px and fade out within 1.5-4 m of the eye. The software renderer of the
+tests does not test depth early and is no measure here (approach 971 ms a
+frame against 887 for the old windows and 809 for the normal view, 992 × 720,
+SwiftShader); on a GPU the approach view costs about the normal view plus the
+windows' own pixels. The performance test's *approach* against *approach, no
+chin* shows it on any machine. Settings saved before (format 5 or older) get
+the windows on once.
+
+2.17.3: the frame rate fell in the approach view on integrated graphics. The
+punch of the windows back to the far plane wrote depth farther within the
+frame with the test off, which costs many GPUs their hierarchical (per-tile)
+depth and so the early rejection. The band less the windows is now cut into
+trapezoids between the heights of the windows' corners and written with the
+ordinary test, only nearer (`chinOccl`); the picture is unchanged (at most
+0.01 % of the pixels differ, from the moving scenery).
+
 The cockpit (2.0) is drawn in its own pass with the depth buffer cleared and
 a 2 cm near plane, so the frame half a metre from the eye stays sharp while
 the scenery keeps its depth precision. Right seat of the EC135: the
@@ -1475,7 +1504,7 @@ system: GNOME Settings › Mouse & Touchpad › Mouse Acceleration, KDE
 Mouse › Pointer acceleration: None, Windows Pointer Options › Enhance
 pointer precision, macOS Mouse › Advanced › Pointer acceleration.
 
-## Settings, levels and the mouse pad (2.14)
+## Settings, levels and the mouse travel (2.14, 2.16.5)
 
 The settings are kept in the browser's local storage (`ec135fd.settings`,
 95_ui.js: `PERSIST` lists them): saved once a second of real time when the
@@ -1504,35 +1533,49 @@ aids; switching the SAS off as well leaves the bare airframe.
 
 The mouse stick integrates the pointer's movement over `cfg.mouseTravel`
 pixels for full deflection. Pixels are not millimetres: 1600 px are 2 cm
-of mouse at 2000 dpi and 5 cm at 800 dpi. On the first capture
-(`cfg.mouseCal` not yet set) the simulation pauses and the movement is
-summed while the hand sweeps from the pad's left edge to its right edge;
-a click sets full stick to 45 % of the swept width (rounded to 50 px,
-300 to 2500), so the stops lie just inside the edges and a reversal never
-needs the mouse lifted. The pace of the sweep matters only with pointer
-acceleration on, which the card names.
+of mouse at 2000 dpi and 5 cm at 800 dpi. From 2.14 to 2.16.4 the first
+capture paused the simulation and summed the movement while the hand swept
+from the pad's left edge to its right edge; a click set full stick to 45 %
+of the swept width (rounded to 50 px, 300 to 2500). Taken out in 2.16.5:
+a slow or short sweep, or one with the pointer acceleration on, gave 600 to
+900 px, so the stick moved twice as far per millimetre, the 3 % dead centre
+of the rate command (48 px at 1600) shrank to about 20 px, and the stick
+felt nervous around the centre although no control law had changed. The
+travel is the setup's slider again (1600 px by default); settings saved
+with a fitted travel (`mouseCal`, format 3 or older) go back to 1600 px
+once (format 4). The first capture shows the hint on the pointer
+acceleration again, as in 2.13.3.
 
 Outside the cockpit the bottom group of the overlay is laid out for
 1000 px and scaled by `hudSB` below that; its tutor highlights, the
 coach's arrows on it and the plan view's click-to-fly pick use the same
 scale.
 
-## Motion cues and the HAPI (2.15)
+## Motion cues (2.15, taken out in 2.16.5) and the HAPI (2.15)
 
 The seat tells a pilot about an acceleration at once; a screen does not,
 and the vertical speed that the eye watches instead is a fifth there after
 a second (2.13.2). The cockpit camera now moves as a head does: the
 specific force in body axes (`S.ax`, `S.ay`, `S.nz`) is high-passed with a
 0.8 s washout, as a motion platform's onset cue, and the eye point is
-offset against it (0.25 m per g subtle, 0.5 m full, limited to 6 and
-12 cm, through an 80 ms neck lag) and nodded down with more g and in a
-deceleration (3° and 6° per g). Measured: 6 % of lever in the high hover,
+offset against it (2.16.4: 0.15 m per g subtle, 0.3 m full, limited to
+4 and 8 cm) and nodded down with more g and in a deceleration (1.5° and
+3° per g), both through a 0.25 s neck lag; off by default since 2.16.4
+(until then 0.25 / 0.5 m and 3° / 6° through 80 ms, on with the levels:
+every touch of the lever was a small jolt in the picture, and the lever
+seemed nervous though its response had not changed). Measured: 6 % of lever in the high hover,
 +0.09 g, the line of sight 0.23° lower at once and the eye 1.6 cm lower
 after 0.3 s, both back by 2 s. The specific force includes the gravity component of
 the attitude, so a pitch change is felt as a lean as it is in the seat.
 A vibration of the picture (translational lift, vortex ring, stall, touchdown)
 was written and taken out again before release: a shaking view made the
-picture harder to read.
+picture harder to read. In 2.16.5 the motion cues went too: even softened,
+the nod with the load factor made the aircraft itself seem to nod on every
+touch of the lever. The eye point is fixed again (`H.pilot.eye`), the
+picture moves only with the aircraft. Measured before taking it out, for
+6 % of cyclic for 0.5 s the nod was at most 0.04° against 0.6° of pitch,
+so it did not make the cyclic nervous; the lever's +0.09 g did make the
+picture move. `S.ax` stays as the body x specific force.
 
 HAPI (ICAO Annex 14 Vol. II): one light at the field pad (14 m west of the
 H, 0.45 m up), aimed along the approach from the south, visible within 15°
@@ -1557,9 +1600,8 @@ idle power only. The run-up keeps the torque cap below 60 % NR. The rotor
 brake takes 5 % NR a second down to standstill, is refused with an engine
 running or above 50 % NR, and comes off by itself when code starts an engine
 directly (the old `engStart`, which tests use). These figures are the
-typical shape of a small turboshaft's start, not the type's flight-manual
-figures: a hot or hung start, the TOT limits and the idle
-speeds of the P2+ are open (TODO). Measured from a cold reset with
+typical shape of a small turboshaft's start, not the type's flight manual:
+the idle speeds of the P2+ are open (TODO); hot and hung starts came in 2.17.1. Measured from a cold reset with
 `Shift`+`E`: engine 1 at idle after 25 s (TOT peak 728 °C at 15 s), engine 2
 at idle at 50 s, 100 % NR at about 80 s.
 
@@ -1572,6 +1614,235 @@ frequency. This model's lag is rigid. The delay stands in for that and is
 fitted to the published phase delay: 93 ms against 92 (70 without; 40 ms
 gave 107). The bandwidth moves only from 3.01 to 2.85 rad/s against 1.84:
 the open deviation stays where 2.3 traced it, in the short period.
+
+## Stress tests and unconventional manoeuvres (2.16.6)
+
+`test/stress.js` flies 18 groups the scenario suite does not (2500 kg
+unless noted). What they showed:
+
+| Manoeuvre | Result | Judgement |
+|---|---|---|
+| 20 kt sharp-edged gust in the hover, controls frozen | from the right: −13° roll, +10° heading in 1 s; from ahead +10° pitch, +215 fpm | signs right (rolls away, yaws into it, flaps back); size follows the model's own Mu 0.067, Mq −2.43 (10.1° by the linear model). Mu is about twice what the flap equation with the 115 kNm/rad hub gives for the rotor alone: open |
+| 35 kt sideward both ways, 30 kt rearward, 2910 kg | held in position, stick ≤ 54 %, pedal ≤ 61 %, no fan stall | margins left |
+| collective to the top in 0.5 s | FLI 11.0 (the engines stop at take-off power), NR 92 % with the low-NR warning, +2130 fpm after 5 s (ΔP/W … 2ΔP/W: 1730–3450), 165 °/s of yaw with the feet still | consistent |
+| collective dumped at 150 kt | −2.5 g within 1 s (ΔC_T from a full-down lever at μ 0.37 is about three times the hover C_T), nose −4°, nose left; NR to 131 % with the overspeed warning | physically consistent; since 2.16.7 the load-factor warning comes (CS 27.337: +3.5 / −1.0 g) |
+| overpitching on one engine, 2910 kg, ISA+20 | NR 89 %, sink −70 fpm against −304 at the limit | a lower NR lowers the profile power (NR³): consistent; the warning comes |
+| both engines fail in the 1000 ft hover | 0.3 s to react: 544 ft until 55 kt, NR ≥ 90 %, nose 55° left; 1 s: the nose swings 170° left before full right pedal stops it | the yaw kick is right in sign and size; full right pedal gives only −0.2 kN of fan thrust (full left +3.5 kN): open, not checked against the type |
+| 60° bank at 110 kt, take-off power | mean 1.67 g, −81 kt of true airspeed and −376 ft in 15 s, retreating-blade stall; at the end the aircraft slides into the turn (the flow 107° off the nose), so the airspeed indicator reads 0 | C_T/σ at the validated stall boundary (Kampa) |
+| zoom to 50° and tail slide, hands off | the nose falls through (−74° … +78°), 222 °/s of yaw | finite, no recovery hands off |
+| aileron roll, loop, −0.3 g pushover (SAS off) | roll 360° in 4.2 s at up to 104 °/s; loop completed, pitch through ±90° finite; roll control at low g | hingeless rotor: as expected |
+| drift touchdown 2.5 m/s | upright with the attitude held or the stick free; 15 % stick towards the drift with the lever held: rollover, warned first; lever down at once: saved | the textbook mechanism. On level ground a sliding skid trips only above μ ≈ 0.79 (half track / CG height); the model's 0.65 lets it slide |
+| vertical touchdowns 200–1400 fpm | hard landing from ~500 fpm, gear destroyed at 1400 | matches the 13-in limit drop of CS 27.725 (≈ 500 fpm) |
+| run-on landing at 40 kt | 59 m in 5.8 s, no nose-over | μ forward 0.30 with the rotor unloading the skids |
+| random full inputs, 200 s; the mouse thrown about with the aids | no NaN, quaternion error 4e-16; rates bounded | robust |
+| energy in autorotation, no wind | never rises over any 0.5 s | consistent |
+
+Three defects were found and fixed:
+
+1. **The rate command's envelope.** At its limit (±26° pitch, ±43° bank)
+   the reference stopped, but the commanded rate was still fed forward to
+   the damping term, which then held a rate instead of stopping it: full
+   stick held at 120 kt overshot to 37° of pitch and 67° of bank and stayed
+   near 34° and 57°. Now the reference slows over the last 8° and the
+   commanded rate is the reference's own: 25° and 43°, no overshoot.
+2. **The airspeed reading.** `S.ias` was the whole airspeed vector, so a
+   vertical descent at 4200 fpm read 41 kt; the vortex-ring warning (below
+   30 kt) could not fire in a deep ring, and the forward-flight laws (above
+   45 kt) could take a steep descent for forward flight. Now it reads as a
+   pitot does: the whole flow within 20° of the tube's axis, a cosine taper
+   to nothing at 90°, nothing from behind. `S.tas` stays the whole vector.
+3. **The autopilot's hover mode in wind.** Above 25 kt of airspeed it took
+   its cruise branch, which has no lateral ground-speed loop: in a 35 kt
+   crosswind it drifted 5 m/s. The hover mode now keeps its hover loops.
+
+## Yaw, gusts and the coach in the hover (2.16.7)
+
+Reported: frequent uncommanded turns and a rocking that would not settle,
+mostly in the hover and at low speed. Flown with the Beginner aids through
+the browser's input path, three causes turned up; none of them is in calm
+air without the coach.
+
+1. **The heading hold never caught the nose in a wind.** Below 35 kt the
+   pedal law is a rate command whose integrator (the pedal trim, `SAS.intP`)
+   moved only while the heading was held, and the heading was taken only
+   below 2 °/s. A wind from the side or from behind turns the nose with the
+   weathercock moment; the proportional rate loop alone left more than
+   2 °/s, so the hold never engaged and the turn went on: 15 kt from the
+   right after a left turn, 3 °/s for good; 25 kt from the left after a
+   right turn, 17 °/s. 11 of 40 pedal turns (2500 and 2910 kg, ISA+20, 0 to
+   25 kt from four sides, turbulence) never stopped. The pedal trim now
+   also follows the yaw-rate error while the heading is not held (2.0 per
+   rad/s, as a pilot's foot trims): every turn stops, within 2.3 s in 25 kt
+   from any side, 0.7 s on average, at most 4° past the stop (3.0 swings
+   14° past). `test/handling.js` flies six of them.
+2. **The gusts pumped once a second.** The envelope was
+   `sin(π·(t mod 1))` while the gust timer ran, so with any gust setting the
+   wind rose and fell by up to the full amplitude every second without a
+   pause (62 "gusts" a minute, a line at 1.00 Hz): in cruise with 8 kt of
+   gust from the side ±2.9 °/s of yaw and a rocking bank, in the hover
+   ±0.8 °/s. Now one gust at a time along the mean wind, 1-cos over 2 to 5 s,
+   then 4 to 16 s without, two of three gusts and one of three lulls of 0.5
+   to 1 times the setting: 4.5 a minute, the strongest frequency 0.2 Hz
+   (`test/stress.js` S19); the yaw in cruise with 8 kt from the side
+   ±0.9 °/s.
+3. **The coach's hover arrow made a brisk student rock the hover.** Under
+   the attitude command the arrow was the shadow autopilot's correction
+   against the attitude the aircraft has, which lags the stick by a few
+   tenths of a second: it still said "more" when the stick was already
+   right. A student who followed it (the stick moving at 1.5 to 3 times the
+   arrow per second, 0.35 to 0.6 s to react) overshot, and from 2 m/s of
+   drift the hover rocked to 3.5 to 6 m/s with the stick at the stops. Now
+   the coach turns the attitude the autopilot wants into the stick position
+   that commands it (the inverse of the shaping 15°·x + 13°·x³ of pitch,
+   20°·x + 20°·x³ of bank, with the collective-roll mixing) and the arrow is
+   the way from the stick to there, as it already was under the rate
+   command; only the target is smoothed, so the arrow follows the hand at
+   once. The drift dies away for every pace tried (0.01 to 0.05 m/s after
+   25 s, `test/handling.js`).
+
+Also: the **load-factor warning** (`gload`, 60_sim.js) beyond the limit
+manoeuvring load factors of CS 27.337, +3.5 and −1.0 g, in the air only; it
+comes when the collective is dumped at 150 kt (−2.5 g) and stays silent in
+the roll, the loop and the −0.3 g pushover of `test/stress.js`.
+
+Left open: the Fenestron's reverse thrust at full right pedal in the hover
+after a double engine failure (−0.2 kN against +3.5 kN to the left).
+Airbus (Information Notice 3539-I-00) says a Fenestron needs more negative
+thrust at the far pedal than a tail rotor, to balance the fin in
+autorotation, which the model does at 65 kt; how much it gives in the
+hover is not published, so it is not changed.
+
+The forward flight's rate command (2.13.1) holds whatever attitude the
+stick leaves, and a mouse has no centre to feel: a stick left 5 % off
+creeps, a bank flown stays a turn. In the type's attitude-hold mode the
+stick works against a trim datum (out and back = back to the datum
+attitude; the trim release sets a new one), which here is the attitude
+command (`cfg.cycLaw` 'acah') with T. Not changed in this release.
+
+## The cyclic law by device, the trim, the buttons (2.16.8)
+
+`cfg.cycLaw` 'auto' (the default) picks the forward-flight law by the device
+that last moved the cyclic (`DEV.cycDev`: the mouse when it moves 3 px or
+more or is captured, the gamepad beyond 0.1 of its axes, the arrow keys):
+the mouse flies the attitude command (ACAH), the others the rate command
+(RCAH, 2.13.1). The reason is the centre. A gamepad, a joystick and the
+arrow keys come back to it by themselves, so under the rate command the
+centre means "hold". A mouse stick stays where the hand leaves it: brought
+back 80 px (5 %) short, the rate command rolled on into a 43° turn and
+184° of heading in 20 s, or pitched the nose to −24° into a 5,400 fpm dive
+past Vne; under the attitude command the same hand moves the attitude by
+0.4° and 0.8°. The type's attitude-hold mode works the same way: the stick
+works against the force trim's datum, out and back is back to the datum
+attitude, and the trim release sets a new datum. Here that is T, or a left
+click: `trimSet` takes the commanded attitude as the new centre and puts
+the stick back to it (in the rate-damping law without attitude hold it
+takes the stick as the new trim, as a force-trim release does). A change of
+device at speed changes the law without a bump: leaving the rate command
+above 35 kt trims where the aircraft is (until now the switch only happened
+slowing through 35 kt and eased the trim towards the hover attitude);
+0.5° in 3 s either way at 100 kt. Settings saved with 'rcah' (the default
+until 2.16.7) become 'auto' once (format 5).
+
+The mouse buttons (`cfg.mouseButtons`): 'look' (the default) is the right
+button held to look around, as C, and a left click to trim; 'pedals' the
+left and right buttons as pedals, the only choice until 2.16.7. The middle
+button looks around in both. The coach's trim estimate now starts from the
+attitude the reset handed over; it started from the hover's 3° nose up, 6°
+off in cruise, and under the attitude command at speed asked for "Nose up"
+in the first second (`test/handling.js`, click to fly).
+
+## Controller buttons, the stick curve, the trim taught (2.17.0)
+
+`PAD.map.btn` holds per function a device and a button (`PAD_BTN` in
+80_input.js): trim, look, beep trim forward/aft/left/right, pause, reset,
+the autopilot demonstration, the next view, the hover assist. They are read
+each frame from the main loop, also while paused, so that the pause button
+can end the pause (`padButtonsStep`); 'edge' functions act once per press,
+'hold' ones while held. Looking with a controller: the look button held
+turns the head with the cyclic stick (±137° yaw, −57 to +52° pitch at the
+stops) and centres the stick input meanwhile, which under the rate command
+holds the attitude, as a spring stick let go. Learning a button waits 10 s
+for one that was not pressed when it started.
+
+The controller's curve (`cfg.padCurve`, stored with the mapping) is applied
+after the scaled dead zone on the cyclic and the pedals: 'mild' (default)
+expo 1.25, half the stick gives 39 %; 'strong' 1.5; 'linear'. The
+collective is left linear.
+
+The trim taught: the transition lesson's turn asks for 15 to 25° of bank
+held 5 s with the stick within 8 % of the centre, which under the attitude
+command needs the trim and under the rate command comes by itself; the
+step text follows the law in use (`cycLawNow()`). The coach's *Click trims*
+comes when the mouse holds the stick out by more than 20 % at speed under
+the attitude command, the attitude steady, for 4 s.
+
+## The menu and the side panel (2.17.1 work, released in 2.17.0)
+
+`MENU` in 95_ui.js lists six tabs, each a list of cards, each card the rows
+of the old setup (`[key, label, type, …]`, the same types and the same
+`cfgGet`/`cfgSet`) and a few blocks that used to sit in the side panel
+(`MENU_BLOCK`: the exercise and the lessons with their selects, the start
+positions, the failures, the flight data with the 20-s chart, replay and
+CSV, the GL line). The blocks keep their element ids, so `boot()`'s wiring
+and the updates elsewhere find them where they are now. A label ending in
+two spaces and a key shows the key as a key cap. `menuShow(on, tab)` opens
+the window, pauses the flight if it was running (and lets it go on when
+closed), releases a captured mouse and closes the autopilot menu; the last
+tab is kept per browser (`ec135fd.menuTab`). Esc toggles it when the mouse
+is not captured (with the mouse captured the browser's Esc releases it
+first). The wheel over the menu scrolls it and leaves the collective alone.
+
+The side panel keeps what is needed while flying: the numbers, a card for
+what is flown now (`nowCard`: the exercise, its brief and score, Repeat and
+Change…; a lesson's title and step with Back and Next), the coach, the
+autopilot, the last incident and a line of hints; a software-rendering
+warning only when it applies. The ? overlay draws last (`keysOverlay`),
+two columns that wrap; `KEYLIST` feeds it and the Controls tab.
+
+## The wind over the terrain, low-altitude turbulence, start faults (2.17.1)
+
+**Terrain.** `terrainWind(n, e, hAGL, from)` in 10_atmo.js, every 0.1 s or
+20 m of travel. The slope along the wind over ±20 m gives the slope flow,
+w = −U s, fading with the height over the ground over 120 m. Ten samples
+upstream, 40 m to 1.1 km, look for a ridge at least 15 m above the ground
+here; its wake q is how deep the point lies below the crest (1 below it, 0
+a quarter of the ridge's height above it), full to 3 ridge heights
+downstream and gone at 10, and only behind a lee slope steep enough to
+separate (0.12 to 0.3, 7 to 17°). In the wake the mean wind is (1 − 0.6 q)
+of the free wind, the slope flow halved, the turbulence (1 + 1.5 q) times as
+strong (vertical 1 + q) and its length scale (1 − 0.4 q). At the Kuppe with
+20 kt from the west (`test/stress.js` S20): 4.9 m/s up 30 m over the
+windward flank 300 m west of the top (0.40 of the wind there), in the lee
+400 m east q = 1, 40 % of the wind, 0.8 m/s down; the summit and the field
+unaffected. The numbers are engineering choices that give what a pilot is
+taught to expect; they are not fitted to a flow solution or to measurements.
+
+**Turbulence.** MIL-HDBK-1797's low-altitude form (as MIL-F-8785C): with h in
+feet, 10 to 1000, σ_u/σ_w = σ_v/σ_w = 1/(0.177 + 0.000823 h)^0.4,
+L_w = h, L_u = L_v = h/(0.177 + 0.000823 h)^1.2. The setting is σ_u at
+300 ft (σ_w is 0.71 of it there). The filters run with the speed through the
+air (the previous step's wind against the aircraft's velocity): frozen
+turbulence carried by the mean wind. Measured over 15 min: σ_u at 10 ft is
+1.8 times that at 1000 ft, σ_w/σ_u 0.42 at 10 ft, the horizontal gusts' zero
+crossings 7 times as frequent; in the Kuppe's lee 2.45 times the free air's.
+
+**Start faults** (35_fenestron.js, `ENGFAULT.next`, armed from the menu and
+kept across a reset). The limits watched in a start are the P2+'s with the
+PW206B2 as a training deck lists them (760 °C for a continuous start,
+875 °C for 2 s); not checked against the flight manual itself. Hot: the
+start's TOT peak 1000 °C and held hot past the peak; the warning (`hotstart`)
+at 760 °C comes 9.5 s into the start, the damage 2.8 s later; aborted at the
+warning the peak is 761 °C. Hung: the start's progress stops at 68 % (42 %
+N1), the TOT rising from 700 °C at 6 °C/s; the warning (`hungstart`) after
+5 s stuck, the damage at 49 s. Damaged (`engdmg`): the engine fails; Restore
+repairs it and leaves it off. The FADEC does not abort a start here.
+
+**Not done: the stall's roll-off.** The flight-test card F7.3 expects about
+0.6 of the model's roll-off in an abrupt pull at 140 kt; the limit itself
+matches Kampa et al. (ERF 1997) within 10 %. The card's figure is an
+evaluator's expectation, not a measurement, and the change it asks for
+(radial inflow variation, tip relief, the swept tip) reaches into every
+validated figure of the rotor; it waits for data.
 
 ## Project layout
 

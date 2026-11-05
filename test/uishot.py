@@ -9,11 +9,11 @@ OUT=ROOT/'docs'/'screenshots';OUT.mkdir(parents=True,exist_ok=True)
 FAKEPAD='''(()=>{const pad={index:0,id:'GameSir G7 Pro (XInput STANDARD GAMEPAD)',mapping:'standard',connected:true,timestamp:0,
   axes:[0.12,-0.02,0.35,-0.18],buttons:Array.from({length:17},(_,i)=>({value:i===0?1:0,pressed:i===0}))};
   navigator.getGamepads=()=>[pad,null,null,null];})();'''
-COMMON='''()=>{const w=document.getElementById('welcome');if(w)w.style.display='none';if(REPLAY.on)replayStop();UI.paused=false;UI.debrief=null;for(const k in DEV.keys)DEV.keys[k]=false;HUD.keysT0=-1e9;profileApply('beginner');cfg.motion='off';cfg.mass=2500;cfg.view='cockpit';cfg.apr='off';cfg.aprChin=false;cfg.hud=true;cfg.gfx='full';R3.soft=false;const inc=document.getElementById('inc');inc.textContent='';inc.dataset.t='';HUD.incText='';refreshTexts();cfg.sound=false;cfg.tod=11;cfg.vis=12;cfg.cloud=0.4;
+COMMON='''()=>{const w=document.getElementById('welcome');if(w)w.style.display='none';if(REPLAY.on)replayStop();UI.paused=false;UI.debrief=null;for(const k in DEV.keys)DEV.keys[k]=false;HUD.keysT0=-1e9;profileApply('beginner');cfg.mass=2500;cfg.view='cockpit';cfg.apr='off';cfg.aprChin=false;cfg.hud=true;cfg.gfx='full';R3.soft=false;const inc=document.getElementById('inc');inc.textContent='';inc.dataset.t='';HUD.incText='';refreshTexts();cfg.sound=false;cfg.tod=11;cfg.vis=12;cfg.cloud=0.4;
   coachSet('off');COACH.legendT=-1e9;UI.freeze=false;R3.cam.lockPsi=undefined;afcsOffAll();apMenuShow(false);SCOPE.fix=null;guideReset();window.run=(sec,fn)=>{for(let i=0;i<sec/DT;i++){if(fn)fn(i*DT);inputStep(DT);tutorStep(DT);afcsStep(DT);coachStep(DT);step(DT);}};}'''
 SHOTS=[
  ('cockpit-hover','''()=>{startExercise('free');placeAt(0,0,3,205*DEG,0);trimNow(6);cfg.view='cockpit';S.vb[1]+=0.6;run(2);UI.freeze=true;}'''),
- ('approach-view','''()=>{startExercise('free');placeAt(-55,-25,22,24*DEG,18);trimNow(6);cfg.view='cockpit';run(0.5);cfg.apr='on';cameraUpdate(1/30);APR.k=1;APR.ack=true;for(let i=0;i<120;i++)cameraUpdate(1/30);predStep(true);render(1/60);hudDraw(1/60);UI.freeze=true;}'''),
+ ('approach-view','''()=>{startExercise('free');placeAt(-55,-25,22,24*DEG,18);trimNow(6);cfg.view='cockpit';run(0.5);cfg.apr='on';cfg.aprChin=true;cameraUpdate(1/30);APR.k=1;APR.ack=true;for(let i=0;i<120;i++)cameraUpdate(1/30);predStep(true);render(1/60);hudDraw(1/60);UI.freeze=true;}'''),
  ('approach-view-roof','''()=>{startExercise('roof');placeAt(-212,-372,30,225*DEG,10);trimNow(6);cfg.view='cockpit';run(0.5);cfg.apr='on';cfg.aprChin=true;cameraUpdate(1/30);APR.k=1;APR.ack=true;for(let i=0;i<120;i++)cameraUpdate(1/30);predStep(true);render(1/60);hudDraw(1/60);UI.freeze=true;}'''),
  ('approach-hint','''()=>{startExercise('free');placeAt(-55,-25,35,24*DEG,10);trimNow(6);cfg.view='cockpit';run(0.5);for(let i=0;i<60;i++)cameraUpdate(1/30);predStep(true);render(1/60);hudDraw(1/60);UI.freeze=true;}'''),
  ('glance-right','''()=>{startExercise('free');placeAt(8,6,4,205*DEG,0);trimNow(6);cfg.view='cockpit';run(0.5);DEV.keys.KeyE=true;for(let i=0;i<60;i++)cameraUpdate(1/30);render(1/60);hudDraw(1/60);UI.freeze=true;}'''),
@@ -86,9 +86,11 @@ async def main():
         b=await p.chromium.launch(args=['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'])
         ctx=await b.new_context(viewport={'width':1280,'height':800},locale='en-US');pg=await ctx.new_page()
         await pg.add_init_script(FAKEPAD);await pg.goto((ROOT/'index.html').as_uri());await pg.wait_for_timeout(1500)
-        await pg.evaluate(COMMON);await pg.evaluate("()=>{startExercise('free');document.getElementById('setup').classList.add('open');}");await pg.wait_for_timeout(500)
-        await pg.evaluate('()=>{const su=document.getElementById("setup"),pp=document.getElementById("padPanel");su.scrollTop=pp.offsetTop-300;}');await pg.mouse.move(1200,780);await pg.wait_for_timeout(1200)
+        await pg.evaluate(COMMON);await pg.evaluate("()=>{startExercise('free');menuShow(true,'controls');}");await pg.wait_for_timeout(500)   # (2.17.1) the menu's Controls tab
+        await pg.evaluate('()=>{const mb=document.getElementById("menuBody"),pp=document.getElementById("padPanel");mb.scrollTop=pp.getBoundingClientRect().top-mb.getBoundingClientRect().top-140;}');await pg.mouse.move(1200,780);await pg.wait_for_timeout(1200)
         await pg.screenshot(path=str(OUT/'gamepad-panel.png'));print('gamepad-panel')
+        for t in ['fly','aids']:   # (2.17.1) the menu
+            await pg.evaluate(f"()=>{{menuShow(true,'{t}');}}");await pg.wait_for_timeout(700);await pg.screenshot(path=str(OUT/f'menu-{t}.png'));print('menu-'+t)
         await b.close()
         print(errs if errs else 'no page errors')
 asyncio.run(main())

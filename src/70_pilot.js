@@ -49,7 +49,7 @@ function apStep(dt,apo){
     evx=dN*cps+dE*sps; evy=-dN*sps+dE*cps;
   }
   // outer loop: attitude commands from velocity error (with a little integral against trim drift)
-  const cruise=S.ias>25*KT;
+  const cruise=S.ias>25*KT&&AP.mode!=='hover';   // (2.16.6) the hover mode keeps its ground-speed loops in a wind above 25 kt (it dropped the lateral one there and drifted 5 m/s in 35 kt, test/stress.js S2)
   if(!AP.freezeInt&&!AP.pOnly){AP.int.lon=clamp(AP.int.lon+evx*dt*(cruise?0.01:0.004),-0.2,0.2);
   AP.int.lat=clamp(AP.int.lat+evy*dt*0.004,-0.12,0.12);}
   /* Cruise: the bank holds the heading (straight flight), the pedals hold
@@ -100,6 +100,7 @@ function apStep(dt,apo){
     const e=wb*(-S.ay)*0.15+(1-wb)*beta*1.0;                                    // right pedal yaws the nose right for either rotor sense
     if(!AP.pOnly)AP.int.ped=clamp(AP.int.ped+e*dt,-0.95,0.95);ped=-0.10*wb*S.ay+(1-wb)*1.0*beta-0.35*r+AP.int.ped;}
   else{const e=wrapPi(AP.hdg-psi);if(!AP.pOnly)AP.int.ped=pedLim(AP.int.ped+e*dt*0.25);ped=2.0*e-0.8*r+AP.int.ped;}
+  AP.att={th:thC,ph:phC};   // (2.16.7) the attitude it wants: the coach turns it into a stick position under the attitude command
   AP.out={col:clamp(col,0,1),lon:sat(lon,1),lat:sat(lat,1),ped:sat(ped,1)};
   return AP.out;
 }
@@ -133,6 +134,8 @@ function trimSet(){
 function trimClear(){const h=TRIM.hover||{th:3.6*DEG,phi:4.2*DEG,lon:-0.385,lat:0.01};TRIM.th=h.th;TRIM.phi=h.phi;TRIM.lon=h.lon;TRIM.lat=h.lat;SAS.toTrim=!!SAS.rc;
   if(typeof DEV!=='undefined'){DEV.kbd.lon=DEV.kbd.lat=0;DEV.mouse.vx=DEV.mouse.vy=0;}}
 /* Beep trim (Shift + arrows): moves the trim attitude at 3 °/s, as the four-way switch on a cyclic does. */
+/* (2.17.0) the law the forward flight uses now (the setup's choice, 'auto' by the device that last moved the cyclic) */
+function cycLawNow(){return cfg.cycLaw==='auto'?(((typeof DEV!=='undefined'&&DEV.cycDev)||'mouse')==='mouse'?'acah':'rcah'):cfg.cycLaw;}
 function trimBeep(dl,dt){TRIM.th=clamp(TRIM.th-dl[0]*3*DEG*dt,-0.4,0.35);TRIM.phi=clamp(TRIM.phi+dl[1]*3*DEG*dt,-0.4,0.4);
   if(SAS.rc){SAS.refTh=clamp(SAS.refTh-dl[0]*3*DEG*dt,-0.45,0.45);SAS.refPhi=clamp(SAS.refPhi+dl[1]*3*DEG*dt,-0.75,0.75);}}   // (2.13.1) under rate command the held attitude is what the switch moves
 function trimLearn(dt,raw){
@@ -176,7 +179,7 @@ function sasApply(dt,raw){
      test/qualities.js: degrees of roll per unit of collective). Many
      helicopters mix this mechanically; here it shifts the attitude the
      centred stick commands. */
-  const phMix=H.mix.roll*DEG*clamp(raw.col-TRIM.col,-0.4,0.4)*(1-sm(20*KT,45*KT,S.ias));   // a hover effect: in cruise the fin carries the anti-torque
+  const phMix=H.mix.roll*DEG*clamp(raw.col-TRIM.col,-0.4,0.4)*(1-sm(20*KT,45*KT,S.ias));SAS.phMix=phMix;   // a hover effect: in cruise the fin carries the anti-torque
   if(mode==='assist'){
     // stick = wanted ground velocity, ±8 m/s; the SAS flies the attitude around the trim. assistK blends towards the raw stick
     const R=qmat(S.q), vN=mrot(R,S.vb), cps=Math.cos(psi),sps=Math.sin(psi);
@@ -208,9 +211,15 @@ function sasApply(dt,raw){
        centre the stick is dead, so a mouse that comes back almost to the
        centre holds; with the wings within 4° of the trim bank and the
        stick centred the wings level and the heading hold takes over. */
-    const rc=SAS.fwd&&cfg.cycLaw!=='acah',offL=(15*raw.lon+13*raw.lon**3)*DEG,offR=(20*raw.lat+20*raw.lat**3)*DEG;
+    /* (2.16.8) 'auto' (the default): the mouse flies the attitude command with the trim (a mouse has no centre to
+       feel: under the rate command a stick left 5 % off crept, a bank flown stayed a turn; the type's attitude-hold
+       mode works against a trim datum, which is this law with T or a left click), a spring-centred device (gamepad,
+       joystick, the arrow keys, which centre when released) the rate command, whose centre it finds by itself. */
+    const law=cfg.cycLaw==='auto'?((raw.dev||'mouse')==='mouse'?'acah':'rcah'):cfg.cycLaw;
+    const rc=SAS.fwd&&law!=='acah',offL=(15*raw.lon+13*raw.lon**3)*DEG,offR=(20*raw.lat+20*raw.lat**3)*DEG;
     if(rc!==!!SAS.rc){
       if(rc){SAS.refTh=SAS.thC===undefined?th:SAS.thC;SAS.refPhi=(SAS.phC===undefined?phi:SAS.phC)-phMix;SAS.rcL=raw.lon;SAS.rcR=raw.lat;}
+      else if(SAS.fwd){const t0=SAS.thC===undefined?th:SAS.thC,p0=(SAS.phC===undefined?phi:SAS.phC)-phMix;TRIM.th=t0;TRIM.phi=p0;SAS.refTh=t0+offL;SAS.refPhi=p0-offR;}   // (2.16.8) at speed, by a change of device: trimmed where it is
       else{SAS.refTh=(SAS.thC===undefined?th:SAS.thC)+offL;SAS.refPhi=(SAS.phC===undefined?phi:SAS.phC)-phMix-offR;TRIM.th=TRIM.hover?TRIM.hover.th:3.6*DEG;}
       SAS.rc=rc;SAS.holdF=false;SAS.toTrim=false;}
     let qC=0,pC=0;
@@ -218,6 +227,12 @@ function sasApply(dt,raw){
       const fold=(o,v)=>o*v<=0?0:Math.abs(v)<Math.abs(o)?v:o;SAS.rcL=fold(SAS.rcL||0,raw.lon);SAS.rcR=fold(SAS.rcR||0,raw.lat);   // the held stick at the switch folds back to the centre with the hand
       const dz=v=>Math.sign(v)*Math.max(0,Math.abs(v)-0.03)/0.97,uL=dz(raw.lon-SAS.rcL),uR=dz(raw.lat-SAS.rcR);
       qC=-40*DEG*uL;pC=90*DEG*uR;   // stick forward = nose down; about the bare aircraft's rates (80 to 100°/s of roll at the stop)
+      /* (2.16.6) The envelope (±26° of pitch, ±43° of bank): the reference slows over the last 8° before its
+         limit and stops there, and the commanded rate is the reference's own, so the damping stops the
+         aircraft with it. Until now the full rate was still fed forward at the limit: full stick held at
+         120 kt overshot to 37° of pitch and 67° of bank and stayed near 34° and 57° (test/stress.js S10). */
+      const soft=(ref,rate,lim)=>rate*ref>0?rate*clamp((lim-Math.abs(ref))/(8*DEG),0,1):rate;
+      qC=soft(SAS.refTh,qC,0.45);pC=soft(SAS.refPhi,pC,0.75);
       SAS.refTh=clamp(SAS.refTh+qC*dt,-0.45,0.45);SAS.refPhi=clamp(SAS.refPhi+pC*dt,-0.75,0.75);
       if(SAS.toTrim){if(uL||uR)SAS.toTrim=false;else{SAS.refTh=approach(SAS.refTh,TRIM.th,ease);SAS.refPhi=approach(SAS.refPhi,TRIM.phi,ease);}}   // Y: back to the hover trim, until the stick moves
       if(uR===0&&Math.abs(SAS.refPhi-TRIM.phi)<4*DEG)SAS.refPhi=approach(SAS.refPhi,TRIM.phi,ease);   // wings level for the heading hold
@@ -304,6 +319,13 @@ function sasApply(dt,raw){
     else if(!SAS.hold&&cfg.hdgHold&&Math.abs(r)<2*DEG){SAS.hold=true;SAS.psiRef=psi;}   // capture where it stopped
     if(SAS.hold){const e=wrapPi(SAS.psiRef-psi);rc=clamp(2.2*e,-10*DEG,10*DEG);SAS.intP=clamp(SAS.intP+e*dt*0.5,-0.6,0.9);}
     const loop=yc!==0||SAS.hold||cfg.sas||Math.abs(SAS.rCmd)>0.2*DEG;          // the keyboard limb closes the rate loop while it commands
+    /* (2.16.7) The pedal trim follows the yaw-rate error while the heading is not held (turning, stopping), as a
+       pilot's foot does. Until now it moved only once the heading was held, and the heading was taken only below
+       2 °/s: in a wind from the side or from behind the weathercock moment left more than 2 °/s that the rate
+       loop alone could not take out, so the aircraft went on turning after the pedal key was released (15 kt from
+       the right, after a left turn: 3 °/s for good; 25 kt from the left: 17 °/s). 2.0 per rad/s: stopped within
+       2.3 s in 25 kt from any side, within 0.7 s on average, at most 4° past the stop (3.0 swings 14° past). */
+    if(loop&&!SAS.hold&&!S.onGround)SAS.intP=clamp(SAS.intP+2.0*(rc-r)*dt,-0.6,0.9);
     ped=SAS.intP+antic+(loop?1.4*(rc-r):0);
   }
   return {col:raw.col,lon:sat(lon,1),lat:sat(lat,1),ped:sat(ped,1)};

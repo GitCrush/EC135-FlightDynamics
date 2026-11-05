@@ -1,5 +1,72 @@
 # Changelog
 
+## 2.17.3 — 2026-11-04 · Chin windows: depth written only nearer
+
+- The README is short again: how to fly the simulator moved to docs/MANUAL.md, the model and its validation to docs/MODEL.md.
+- The page's short notes work again: on the published page since 2.16.3 the head tracking keys raised an error and the notes on the weather and the frame rate did not show.
+- The frame rate fell again in the approach view with the chin windows. 2.17.2 wrote the panel and the floor into the depth buffer at the near plane and then the windows back to the far plane with the depth test off. A depth buffer written farther within a frame makes many GPUs (AMD's hierarchical Z among them) give up the coarse per-tile depth test, and with it the early rejection of everything behind the panel and the floor: the whole scene was shaded, more than without the windows. Now the band round the windows is cut into trapezoids and written only nearer, with the ordinary depth test; the picture is the same.
+
+## 2.17.2 — 2026-11-04 · The chin windows are back
+
+- **A real look down in the approach view** (`4`): the gaze lowers, the panel rises to where it hangs in the airframe, and under it the two chin windows show the ground ahead of and under the nose, the pad's markings, the shadow. On by default again (menu: *Display*, *… with chin windows*); settings saved before switch them on once.
+- **Without the cost that turned them off in 2.13.** They were a second picture of the scene in a framebuffer of their own; on integrated graphics the switch of framebuffers alone was expensive. Now the view draws them itself, in one pass: the panel and the floor are written into the depth buffer first, so the GPU skips everything behind them before shading it, and only what shows is drawn.
+- The downwash's dust and spray let the GPU skip them where the panel or the floor hides them (they no longer discard their corners), are at most 128 px and fade out close to the eye, where a sprite filled a quarter of the screen.
+
+## 2.17.1 — 2026-11-04 · The wind follows the ground, engines can start badly
+
+- **The wind over the terrain.** The air follows the ground: up a windward slope (at the Kuppe in 20 kt from the west, 950 fpm of updraught 30 m over the flank), down a lee slope, and behind a ridge steep enough for the flow to separate a wake, where the mean wind drops to 40 % and the turbulence is up to 2.5 times stronger in smaller eddies. Sampled upstream along the wind, so every hill and mountain has it, not only the Kuppe. An engineering model of what mountain flying teaches, not a flow solution.
+- **Turbulence for low altitude** after MIL-HDBK-1797: near the ground the horizontal gusts are about twice as strong as at 1000 ft and much quicker, the vertical ones small; the eddies pass at the speed through the air (until now at the speed over the ground, so that in a hover in wind they hardly moved). The turbulence setting is the horizontal intensity at 300 ft.
+- **Hot and hung starts** (menu: *Failures & data*, *Next engine start*). Hot: the TOT runs past the start's limits (760 °C continuous, 875 °C for 2 s, from the P2+'s limits in a training deck); a warning at 760 °C, the abort is the main switch to OFF (Shift+1 or 2), left alone the turbine is damaged after 2 s above 875 °C. Hung: N1 stops at 42 % short of idle and the TOT creeps up; the warning after 5 s, damaged after some 50 s. *Restore* repairs a damaged engine and leaves it off, ready to start again; the start sequence (Shift+E) stops when its engine fails.
+
+## 2.17.0 — 2026-11-04 · One menu, controller buttons, the trim taught
+
+- **The menu** (Esc, or *Menu* in the side panel or at the bottom right of the view): one window with six tabs of cards, *Fly* (exercise, lessons, start positions), *Aids* (level, stability aids, coach, training displays), *Controls* (mouse, keyboard, gamepad and joystick, every key), *Weather & aircraft*, *Display* (view, HUD and sound, graphics and the performance test, head tracking), *Failures & data* (failures, the last 20 s, replay, CSV). It pauses the flight while open; Esc or a click beside it closes it, and it opens on the tab used last. Until now a 2,500 px long setup drawer and a side panel that held everything.
+- **The side panel flies:** the numbers, a card with what is flown now (the exercise with its brief and score, Repeat and Change…; in a lesson its step with Back and Next), the coach, the autopilot, the last incident. Switches instead of check boxes, no cut-off choices, the keys as key caps.
+- **The key list (?)** wraps inside its box and lies above every hint; the same list is in *Controls*.
+
+- **Gamepad and joystick buttons.** Trim (release), beep trim, look around, pause, reset, the autopilot demonstration, the hover assist and the next view on buttons, learned like the axes (Learn, then press the button; × clears). The gamepad preset: RB trims, LB held looks around (the right stick turns the head, the cyclic is centred meanwhile, as a spring stick let go), the D-pad beeps, Start pauses (also back out of the pause), Back resets, Y the demonstration, X the hover assist, B the view. The joystick preset: the trigger trims, the thumb button looks. Mappings saved before get the preset's buttons.
+- **Stick curve for the controller** (setup: *Stick curve*, mild by default: expo 1.25 on the cyclic and the pedals; linear and strong), and an *Invert* button on every axis.
+- **The trim in the lesson.** *Transition to forward flight* now turns with the trim: bank 15 to 25°, trim (a left click or T), hold it 5 s with the stick at the centre; then roll out to 180 and trim again. With a spring stick (rate command) the text says so. The coach suggests *Click trims* when the mouse holds the stick out at speed for 4 s.
+- TODO.md brought up to date.
+
+## 2.16.8 — 2026-11-03 · The mouse flies with the trim, the right button looks around
+
+- **Cyclic in forward flight by device** (setup: *Cyclic in forward flight*, new default `auto`). The mouse flies the attitude command with the trim above 45 kt, as in the hover: moved = the attitude away from the trim, back to the centre = back to the trim attitude. Under the rate command a mouse brought back 80 px short of the centre crept into a 43° turn or a dive past Vne within 20 s; now the attitude moves less than 1°. A gamepad, a joystick and the arrow keys spring back to the centre and keep the rate command. Both laws can still be set for every device; settings saved with the rate command (the old default) change to `auto` once.
+- **Trim with a left click** (or `T`): the attitude flown becomes the centre and the mouse stick goes back to it, as the trim release on a cyclic. `TRIM` shows at the stick cross for a moment; at speed the cross says *centre = trim attitude · click trims*.
+- **Right mouse button held: look around**, as `C` (the middle button still does). The buttons as pedals are a setup choice (*Mouse buttons*: pedals); the default is look + trim.
+- The coach starts from the trim the reset handed over (it started from the hover's 3° nose up, also in cruise).
+
+## 2.16.7 — 2026-11-03 · Turns that stop, gusts that come and go, a calmer coach
+
+Reported: frequent uncommanded turns and a rocking that would not settle, mostly in the hover and at low speed. Three causes:
+
+- **After a pedal turn in a wind the nose kept turning.** The heading hold took the nose only below 2 °/s, and the pedal trim moved only once it held: the weathercock moment of a wind from the side or from behind left more than that, so the turn went on for good (15 kt from the right after a left turn: 3 °/s; 25 kt from the left: 17 °/s). The pedal trim now follows the yaw rate while the nose is turning, as a foot does: every turn stops, within 2.3 s in 25 kt from any side.
+- **The gusts pumped once a second.** With any gust setting the wind rose and fell by up to the full gust every second without a pause, which kept the aircraft yawing and rocking. Now single gusts along the wind, rising and falling over 2 to 5 s, then 4 to 16 s without.
+- **The coach's arrows in the hover made a brisk hand rock the aircraft.** The arrow still said "more" while the stick was already where it had to be (the attitude follows the stick a few tenths of a second later); following it briskly rocked the hover up to 4–6 m/s with the stick at the stops. The arrow now shows the way from the stick to the stick position that gives the wanted attitude, as it does in forward flight; it follows the hand at once. The drift dies away whatever the pace of the hand.
+- **A load-factor warning** beyond +3.5 / −1.0 g (CS 27.337), in the air: a collective dumped at 150 kt reached −2.5 g without a word.
+
+## 2.16.6 — 2026-11-02 · Stress tests: three fixes
+
+A new suite, `test/stress.js`, flies 18 groups of unconventional manoeuvres and abuse: sharp-edged gusts, sideward and rearward flight at 35 and 30 kt, the collective snapped up and dumped at Vne, overpitching on one engine, both engines failing in the high hover, a 60° turn, a zoom into a tail slide, an aileron roll, a loop, negative g, touchdowns with drift, hard landings, a run-on landing, random inputs and the energy balance in autorotation. Most of it behaves as physics and the type's limits say (docs/TECHNICAL.md has the table). Three things did not:
+
+- **The aids' rate command overshot its limits.** With the stick held at the stop above 45 kt the attitude went past the envelope and stayed there: 37° nose up instead of 26°, 67° of bank instead of 43°. The reference now slows over the last 8° and the aircraft stops at 25° and 43°, without overshoot.
+- **The airspeed counted the sink.** A vertical descent of 4200 fpm showed 41 kt, so the vortex-ring warning (below 30 kt) could not fire in a deep ring. The airspeed now reads as a pitot does: the flow along the tube, less from the side, nothing from behind; 0 kt in a vertical descent.
+- **The autopilot's hover mode drifted in strong wind.** Above 25 kt of airspeed it dropped its lateral ground-speed loop: 5 m/s of drift in a 35 kt crosswind. It now holds the position in 35 kt from either side and 45 kt from ahead.
+
+## 2.16.5 — 2026-10-31 · A fixed head, the stick's travel back to 1600 px
+
+The cyclic felt more nervous around the centre since 2.14, and the picture nodded. Measured: the control laws are the same as in 2.13.3; the 25 ms delay in the pitch channel (2.16.0) changes a 6 % pulse of cyclic from 0.57° to 0.60° of pitch, with no overshoot and no extra swing; the nod moved the picture at most 0.04° with it. What did change was the stick per millimetre of mouse:
+
+- **The fitting of the stick to the mouse pad is gone.** Since 2.14 the first capture of the mouse asked for a sweep across the pad and set full stick to 45 % of it. A slow or short sweep, or one with the pointer acceleration on, gave 600 to 900 px instead of 1600: the stick moved about twice as far per millimetre, and the rate command's 3 % dead centre shrank from 48 px to about 20. Full stick is 1600 px again (the setup's *Mouse travel* still sets it); a travel that came from the fitting goes back to 1600 px once, one set by hand stays. The first capture shows the hint on the pointer acceleration again.
+- **No motion cues.** The view no longer moves or nods with the accelerations (2.15; off by default since 2.16.4): every touch of the lever made the aircraft itself seem to nod. The eye point is fixed, the picture moves only with the aircraft. The setting is gone.
+
+## 2.16.4 — 2026-10-29 · A quieter lever
+
+The lever felt more nervous. Measured against 2.13.3 with the same inputs: the same response to the fpm (a wheel notch +0.4 %: 12 fpm after 1 s, 43 after 6 s, 50 after 10; a tap of W the same), the same jolt. What had changed was what the screen does with each touch of the lever:
+
+- **The motion cues are off by default** and softer when switched on (0.15 / 0.3 m and 1.5° / 3° per g instead of 0.25 / 0.5 m and 3° / 6°), through a neck lag of 0.25 s (was 80 ms) for the nod as well: every touch of the lever was a small jolt in the picture. A level no longer switches them on (Realistic: subtle); settings saved until now come back with them off.
+- **The vertical speed scale's numbers** change four times a second, by 10 fpm up to 500 and by 50 above (they changed every frame), and the 6-s mark settles over 0.4 s (was 0.15: it jumped with every notch).
+
 ## 2.16.3 — 2026-10-29 · A vertical speed scale you can read
 
 - **The vertical speed bar becomes a scale**, under the altitude box, as on a glass cockpit's VSI: labelled in fpm (0, 500, 1000, 2000 up and down; the first 500 fpm take half of it, so a hover's small changes are readable and a descent is still on it), a white pointer with the value in a box, and the 6-s mark as a cyan bug with its value ("in 6 s +330") and an arrow from the pointer to it, which shows which way the vertical speed is going and how far with the controls held. A legend under it: white now, cyan in 6 s. Within ±20 fpm it reads 0 in grey; a sink beyond 800 fpm below 100 ft turns it amber. The bar of 2.13.2 to 2.16.2 had no numbers and filled green or amber from the middle.

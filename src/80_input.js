@@ -27,6 +27,8 @@ const DEV={keys:{},mouse:{x:0,y:0,on:false,down:false,armed:false,vx:0,vy:0},pad
 /* Look around: hold C or the middle mouse button. While the stick has the
    pointer captured, the same movement steers the head and the stick is
    frozen; without a capture the look takes its own lock and releases it. */
+/* (2.16.8) Trim (T or a left click): the commanded attitude becomes the centre; the HUD says so for a moment */
+function trimKey(){trimSet();if(typeof HUD!=='undefined')HUD.trimT=performance.now()/1000;}
 function lookStart(){if(DEV.look.on)return;DEV.look.on=true;
   if(!DEV.mouse.armed){const st=DEV.look.stage;if(st&&st.requestPointerLock){try{const r=st.requestPointerLock();if(r&&r.catch)r.catch(()=>{});}catch(e){}}DEV.look.ownLock=true;}}
 function lookStop(){if(!DEV.look.on)return;DEV.look.on=false;
@@ -36,13 +38,22 @@ function lookStop(){if(!DEV.look.on)return;DEV.look.on=false;
    throttle (position). Positive means: stick right, stick forward, right
    pedal, collective up. */
 const PAD_PRESETS={
-  gamepad:{lat:{d:0,a:2,inv:false},lon:{d:0,a:3,inv:true},ped:{d:0,a:0,inv:false},col:{d:0,a:1,inv:true,mode:'rate'},trig:true},
-  joystick:{lat:{d:0,a:0,inv:false},lon:{d:0,a:1,inv:true},ped:{d:0,a:2,inv:false},col:{d:0,a:3,inv:true,mode:'position'},trig:false},
+  gamepad:{lat:{d:0,a:2,inv:false},lon:{d:0,a:3,inv:true},ped:{d:0,a:0,inv:false},col:{d:0,a:1,inv:true,mode:'rate'},trig:true,
+    btn:{trim:{d:0,b:5},look:{d:0,b:4},beepU:{d:0,b:12},beepD:{d:0,b:13},beepL:{d:0,b:14},beepR:{d:0,b:15},pause:{d:0,b:9},reset:{d:0,b:8},apdemo:{d:0,b:3},view:{d:0,b:1},hover:{d:0,b:2}}},
+  joystick:{lat:{d:0,a:0,inv:false},lon:{d:0,a:1,inv:true},ped:{d:0,a:2,inv:false},col:{d:0,a:3,inv:true,mode:'position'},trig:false,
+    btn:{trim:{d:0,b:0},look:{d:0,b:1}}},
 };
+/* (2.17.0) The buttons, per function a device and a button (the standard mapping's numbers in the gamepad
+   preset: RB trim, LB held look around, the D-pad the beep trim, Start pause, Back reset, Y the autopilot
+   demonstration, X the hover assist, B the next view; the joystick: the trigger trims, the thumb button looks).
+   'edge' acts once per press, 'hold' while held. Learned like the axes: press the button. */
+const PAD_BTN=[['trim','Trim (release)','edge'],['look','Look around (held, the stick turns the head)','hold'],['beepU','Beep trim forward','hold'],['beepD','Beep trim aft','hold'],
+  ['beepL','Beep trim left','hold'],['beepR','Beep trim right','hold'],['pause','Pause','edge'],['reset','Reset','edge'],['apdemo','Autopilot demonstration','edge'],['view','Next view','edge'],['hover','Hover assist','edge']];
 const PAD={map:JSON.parse(JSON.stringify(PAD_PRESETS.gamepad)),learn:null,pads:[],blocked:false,colPosSeen:null};
 function padPreset(name){if(!PAD_PRESETS[name])return;PAD.map=JSON.parse(JSON.stringify(PAD_PRESETS[name]));PAD.colPosSeen=null;padSave();}
-function padSave(){try{localStorage.setItem('ec135fd.pad',JSON.stringify({map:PAD.map,dead:cfg.padDead,preset:DEV.padMap}));}catch(e){}}
-function padLoad(){try{const j=JSON.parse(localStorage.getItem('ec135fd.pad')||'null');if(j&&j.map){PAD.map=j.map;if(j.dead!==undefined)cfg.padDead=j.dead;if(j.preset)DEV.padMap=j.preset;}}catch(e){}}
+function padSave(){try{localStorage.setItem('ec135fd.pad',JSON.stringify({map:PAD.map,dead:cfg.padDead,curve:cfg.padCurve,preset:DEV.padMap}));}catch(e){}}
+function padLoad(){try{const j=JSON.parse(localStorage.getItem('ec135fd.pad')||'null');if(j&&j.map){PAD.map=j.map;if(j.dead!==undefined)cfg.padDead=j.dead;if(j.curve)cfg.padCurve=j.curve;if(j.preset)DEV.padMap=j.preset;}}catch(e){}
+  if(!PAD.map.btn)PAD.map.btn=JSON.parse(JSON.stringify(PAD_PRESETS[DEV.padMap==='joystick'?'joystick':'gamepad'].btn));}   // (2.17.0) a mapping saved before the buttons gets the preset's
 function padPoll(){
   if(PAD.blocked||typeof navigator==='undefined'||!navigator.getGamepads){PAD.pads=[];return PAD.pads;}
   try{PAD.pads=Array.from(navigator.getGamepads()||[]);}
@@ -65,6 +76,20 @@ function padLearnStep(dt){
   if(best&&Math.abs(best.dv)>0.5){const m={d:best.d,a:best.a,inv:best.dv<0};if(L.f==='col')m.mode=Math.abs(best.base)>0.5?'position':'rate';
     PAD.map[L.f]=m;PAD.learn=null;DEV.padMap='custom';PAD.colPosSeen=null;padSave();}
 }
+function padBtnOn(f){const m=PAD.map.btn&&PAD.map.btn[f];if(!m)return false;const p=PAD.pads[m.d];const b=p&&p.connected&&p.buttons[m.b];return !!b&&b.value>0.5;}
+function padBtnAct(f){if(f==='trim')trimKey();else if(f==='pause')UI.paused=!UI.paused;else if(f==='reset')keyAction('KeyR');else if(f==='apdemo')keyAction('KeyV');else if(f==='hover')keyAction('KeyH');
+  else if(f==='view'){const v=['cockpit','chase','tower'];setView(v[(v.indexOf(cfg.view)+1)%v.length]);}}
+/* Each frame from the main loop, also while paused (the pause button has to come back) */
+function padButtonsStep(dt){
+  if(PAD.learnB){padLearnBStep(dt);return;}
+  if(PAD.learn||!PAD.pads.some(p=>p&&p.connected))return;
+  const st=PAD.bst||(PAD.bst={});
+  for(const [f,,kind] of PAD_BTN){const on=padBtnOn(f),was=!!st[f];st[f]=on;
+    if(kind==='edge'&&on&&!was)padBtnAct(f);
+    if(f==='look'){if(on&&!was&&!DEV.look.on){DEV.look.pad=true;lookStart();}else if(!on&&was&&DEV.look.pad){DEV.look.pad=false;lookStop();}}}}
+function padLearnBStart(f){padPoll();PAD.learn=null;PAD.learnB={f,base:PAD.pads.map(p=>p&&p.connected?p.buttons.map(b=>b.value>0.5):null),t:0};}
+function padLearnBStep(dt){const L=PAD.learnB;L.t+=dt;if(L.t>10){PAD.learnB=null;return;}
+  PAD.pads.forEach((p,d)=>{if(!PAD.learnB||!p||!p.connected||!L.base[d])return;p.buttons.forEach((b,i)=>{if(PAD.learnB&&b.value>0.5&&!L.base[d][i]){PAD.map.btn[L.f]={d,b:i};PAD.learnB=null;PAD.bst=PAD.bst||{};PAD.bst[L.f]=true;DEV.padMap='custom';padSave();}});});}
 /* (2.13.3) The stick wants the mouse's own movement: with the system's pointer acceleration a quick move out and a
    slow one back do not meet, and the stick creeps. Chrome passes the raw movement where it can (unadjustedMovement:
    Windows, macOS, ChromeOS; web.dev "Disable mouse acceleration"); elsewhere, or if it refuses, the plain lock, and
@@ -74,45 +99,45 @@ function mouseArm(stage){if(DEV.mouse.armed||!stage.requestPointerLock)return;
   const plat=(typeof navigator!=='undefined'&&navigator.userAgentData&&navigator.userAgentData.platform)||'';
   if(!/Windows|macOS|Chrome OS/.test(plat)){DEV.mouse.raw=false;plain();return;}
   try{const r=stage.requestPointerLock({unadjustedMovement:true});if(r&&r.then)r.then(()=>{DEV.mouse.raw=true;},()=>{DEV.mouse.raw=false;plain();});else DEV.mouse.raw=false;}catch(e){DEV.mouse.raw=false;plain();}}
-/* (2.14) Fitting the stick to the mouse pad. On the first capture (and from the setup) the aircraft waits while
-   the hand sweeps the mouse from the pad's left edge to its right edge at the pace it flies; full stick is then
-   45 % of that width, so the stops lie just inside the pad's edges and the hand never has to lift the mouse.
-   The fixed 1600 px were 2 cm of mouse at 2000 dpi and 5 cm at 800 dpi. A click takes it, Enter skips. */
-const CAL={on:false,pending:false,x:0,min:0,max:0,ran:false};
-function calStart(){CAL.on=true;CAL.pending=false;CAL.ran=true;CAL.x=CAL.min=CAL.max=0;DEV.mouse.vx=DEV.mouse.vy=0;if(!UI.paused){UI.paused=true;CAL.paused=true;}}
-function calEnd(take){if(!CAL.on)return;CAL.on=false;const w=CAL.max-CAL.min;
-  if(take&&w>=300){cfg.mouseTravel=clamp(Math.round(w*0.45/50)*50,300,2500);if(typeof dlNote==='function')dlNote(`Mouse: full stick ${cfg.mouseTravel} px (the pad: ${Math.round(w)} px)`);}
-  cfg.mouseCal=true;DEV.mouse.vx=DEV.mouse.vy=0;if(CAL.paused){UI.paused=false;CAL.paused=false;}if(typeof uiSync==='function')uiSync();}
+/* (2.16.5) The fitting of the stick to the mouse pad (2.14: on the first capture a sweep across the pad set
+   the travel to 45 % of it) is gone. A slow or short sweep, or one with the pointer acceleration on, gave a
+   travel of 600 to 900 px instead of 1600: twice the stick per millimetre, the 3 % dead centre of the rate
+   command half as wide, and the stick nervous around the centre. The travel is the setup's slider again. */
 function mouseDisarm(){DEV.mouse.armed=false;DEV.mouse.l=DEV.mouse.r=false;if(DEV.look.stage)DEV.look.stage.classList.remove('armed');}
 function inputInit(stage){
   if(typeof window==='undefined')return;
   DEV.look.stage=stage;
-  window.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;if(e.code==='KeyC'&&!e.repeat)lookStart();if(e.code==='KeyM'&&!e.repeat)aimStart();if(CAL.on&&(e.code==='Enter'||e.code==='NumpadEnter')){calEnd(false);e.preventDefault();return;}DEV.keys[e.code]=true;if(!e.repeat)keyAction(e.code);if(e.key==='?'&&e.code!=='Slash'&&!e.repeat)UI.showKeys=!UI.showKeys;if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','F1','Slash'].includes(e.code))e.preventDefault();});
+  window.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;if(e.code==='KeyC'&&!e.repeat)lookStart();if(e.code==='KeyM'&&!e.repeat)aimStart();DEV.keys[e.code]=true;if(!e.repeat)keyAction(e.code);if(e.key==='?'&&e.code!=='Slash'&&!e.repeat)UI.showKeys=!UI.showKeys;if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','F1','Slash'].includes(e.code))e.preventDefault();});
   window.addEventListener('keyup',e=>{DEV.keys[e.code]=false;if(e.code==='KeyC')lookStop();if(e.code==='KeyM')aimStop();});
   stage.addEventListener('mousemove',e=>{
     const dx=e.movementX||0,dy=e.movementY||0;
     if(AIM.on){const r=(R3.canvas||stage).getBoundingClientRect();aimMove(dx,dy,e.clientX-r.left,e.clientY-r.top);return;}   // click to fly: the cursor moves, the stick stays
-    if(CAL.on){CAL.x+=dx;CAL.min=Math.min(CAL.min,CAL.x);CAL.max=Math.max(CAL.max,CAL.x);return;}   // (2.14) fitting the stick: the sweep, the stick stays
     if(DEV.look.on){DEV.look.yawT=sat(DEV.look.yawT+dx*0.0022,2.6);DEV.look.pitchT=clamp(DEV.look.pitchT-dy*0.0022,-1.0,1.2);return;}   // stick frozen while looking; the camera follows smoothly
-    if(DEV.mouse.armed){const t=Math.max(200,cfg.mouseTravel);DEV.mouse.vx=sat(DEV.mouse.vx+dx/t,1);DEV.mouse.vy=sat(DEV.mouse.vy+dy/t,1);}   // virtual stick, ±1 = full deflection
+    if(DEV.mouse.armed){const t=Math.max(200,cfg.mouseTravel);DEV.mouse.vx=sat(DEV.mouse.vx+dx/t,1);DEV.mouse.vy=sat(DEV.mouse.vy+dy/t,1);if(Math.abs(dx)+Math.abs(dy)>=3)DEV.cycDev='mouse';}   // virtual stick, ±1 = full deflection
     const r=stage.getBoundingClientRect();DEV.mouse.x=(e.clientX-r.left)/r.width*2-1;DEV.mouse.y=(e.clientY-r.top)/r.height*2-1;});
   document.addEventListener('pointerlockchange',()=>{const locked=document.pointerLockElement===stage;DEV.look.locked=locked;
-    if(locked&&!DEV.look.ownLock){DEV.mouse.armed=true;DEV.mouse.vx=0;DEV.mouse.vy=0;stage.classList.add('armed');if(CAL.pending||(!cfg.mouseCal&&!CAL.ran))calStart();else if(DEV.mouse.firstArm===undefined&&!CAL.ran)DEV.mouse.firstArm=performance.now()/1000;}   // captured: the stick starts at neutral; (2.14) the first time, fit it to the pad (the card names the acceleration switch too)
-    if(!locked){if(DEV.look.on)DEV.look.on=false;DEV.look.ownLock=false;mouseDisarm();calEnd(false);}});
+    if(locked&&!DEV.look.ownLock){DEV.mouse.armed=true;DEV.mouse.vx=0;DEV.mouse.vy=0;DEV.cycDev='mouse';stage.classList.add('armed');if(DEV.mouse.firstArm===undefined)DEV.mouse.firstArm=performance.now()/1000;}   // captured: the stick starts at neutral; the first time, the hint on the pointer acceleration
+    if(!locked){if(DEV.look.on)DEV.look.on=false;DEV.look.ownLock=false;mouseDisarm();}});
   stage.addEventListener('mouseenter',()=>{DEV.mouse.on=true;});
   stage.addEventListener('mouseleave',()=>{DEV.mouse.on=false;});
   stage.addEventListener('contextmenu',e=>e.preventDefault());
   stage.addEventListener('mousedown',e=>{
     if(!(e.target===stage||e.target.id==='ovl'||e.target.id==='world'))return;   // clicks on the welcome card or the setup panel are not the hand
     if(AIM.on){aimClick(e.button);e.preventDefault();return;}   // click to fly: left sets the target, right clears it (not a pedal, not a capture)
+    /* (2.16.8) The buttons: 'look' (the default) = the right button held looks around, as C does, and a left click
+       trims, as T does (the trim release on a cyclic: the attitude flown becomes the centre, the stick goes back
+       to it); 'pedals' = left and right are the pedals (until 2.16.7 the only choice). The middle button looks in both. */
+    const pedals=cfg.mouseButtons==='pedals';
+    if(e.button===2&&!pedals&&cfg.mouse){e.preventDefault();DEV.look.btn=true;lookStart();return;}
     if(e.button===0&&!DEV.mouse.armed&&!DEV.look.on&&cfg.mouse){mouseArm(stage);return;}   // capture the pointer; the stick starts neutral
     if(!DEV.mouse.armed)return;
-    if(CAL.on){if(e.button===0)calEnd(true);return;}   // (2.14) the click takes the sweep, it is not a pedal
-    if(e.button===0)DEV.mouse.l=true;if(e.button===2)DEV.mouse.r=true;if(e.button===1){e.preventDefault();lookStart();}});
-  window.addEventListener('mouseup',e=>{if(e.button===0)DEV.mouse.l=false;if(e.button===2)DEV.mouse.r=false;if(e.button===1)lookStop();});
+    if(e.button===0&&!pedals){if(!DEV.look.on)trimKey();return;}
+    if(pedals){if(e.button===0)DEV.mouse.l=true;if(e.button===2)DEV.mouse.r=true;}
+    if(e.button===1){e.preventDefault();lookStart();}});
+  window.addEventListener('mouseup',e=>{if(e.button===0)DEV.mouse.l=false;if(e.button===2){DEV.mouse.r=false;if(DEV.look.btn){DEV.look.btn=false;lookStop();}}if(e.button===1)lookStop();});
   stage.addEventListener('mousedown',e=>{DEV.mouse.down=true;soundStart&&soundStart();});
   window.addEventListener('mouseup',()=>{DEV.mouse.down=false;});
-  stage.addEventListener('wheel',e=>{if(e.target&&e.target.closest&&e.target.closest('#apMenu,#setup'))return;   // a panel scrolls, the lever stays
+  stage.addEventListener('wheel',e=>{if(e.target&&e.target.closest&&e.target.closest('#apMenu,#menu'))return;   // a panel scrolls, the lever stays
     if(AIM.on){aimWheel(e.deltaY*(e.deltaMode===1?33:e.deltaMode===2?400:1));e.preventDefault();return;}   // click to fly: the wheel sets the target's height
     /* (2.12.7) The wheel as the collective: one notch 0.4 % of the lever (0.06° of blade pitch, ~55 fpm of steady
        climb in the hover), the same in every browser (the delta comes in pixels, lines or pages: normalised to
@@ -138,6 +163,7 @@ function engAuto(){const E=S.eng.e,run=E.some(x=>x.on&&!x.fail);
   if(!run){ENG_SEQ.on=true;ENG_SEQ.stage=0;if(S.eng.brake){engBrake(S.eng,false);engNote('Rotor brake off');}return;}
   ENG_SEQ.on=false;const fl=E.some(x=>x.on&&x.sw!=='idle');E.forEach((x,i)=>{engSwitch(S.eng,i,fl?'idle':'off');x.dir=fl?x.dir:1;});engNote(fl?'Both engines IDLE':'Both engines OFF');}
 function engSeqStep(){if(!ENG_SEQ.on||!S)return;const E=S.eng.e,ready=x=>x.on&&x.startT<=0;
+  {const k=ENG_SEQ.stage-1,x=E[k];if(x&&ENG_SEQ.stage<3&&(x.fail||!x.on)){ENG_SEQ.on=false;engNote(`Start sequence stopped: ENG ${k+1} ${x.fail?'failed':'off'}`,'#ffb300');return;}}   // (2.17.1)
   if(ENG_SEQ.stage===0){if(engSwitch(S.eng,0,'idle')===''){engNote('ENG 1 IDLE – starting');ENG_SEQ.stage=1;}else ENG_SEQ.on=false;}
   else if(ENG_SEQ.stage===1&&ready(E[0])){engSwitch(S.eng,1,'idle');engNote('ENG 2 IDLE – starting');ENG_SEQ.stage=2;}
   else if(ENG_SEQ.stage===2&&ready(E[1])){E.forEach((x,i)=>{engSwitch(S.eng,i,'flight');x.dir=-1;});engNote('Both engines FLIGHT – rotor running up');ENG_SEQ.on=false;}}
@@ -146,16 +172,16 @@ function keyAction(code){
   const shift=DEV.keys.ShiftLeft||DEV.keys.ShiftRight;
   if(shift&&(code==='Digit1'||code==='Digit2')){engKey(code==='Digit1'?0:1);return;}
   if(shift&&code==='KeyB'){const on=!S.eng.brake,why=engBrake(S.eng,on,S.NR);engNote(why?`Rotor brake: ${ENG_WHY[why]}`:on?'Rotor brake ON':'Rotor brake off',why?'#ffb300':undefined);return;}
-  const map={KeyL:()=>replayStart(),KeyV:()=>apDemoToggle(),KeyU:()=>afcsToggle('alt'),KeyI:()=>afcsToggle(S.ias>40*KT?'ias':'hov'),KeyO:()=>afcsToggle('hdg'),KeyJ:()=>apMenuToggle(),Escape:()=>apMenuShow(false),KeyK:()=>coachCycle(),Slash:()=>{UI.showKeys=!UI.showKeys;},F1:()=>{UI.showKeys=!UI.showKeys;},KeyR:()=>{const k=cfg.resetKind||'pad';if(k.startsWith('ex:'))startExercise(k.slice(3));else uiReset(k);},Digit1:()=>setView('cockpit'),Digit2:()=>setView('chase'),Digit3:()=>setView('tower'),Digit4:()=>{cfg.apr=cfg.apr==='on'?'off':'on';APR.ack=true;APR.fpsCmp={t:performance.now(),f0:UI.fps||0,on:cfg.apr==='on'};uiSync();dlNote('Approach view '+(cfg.apr==='on'?(cfg.aprChin?'on: the gaze lowers, the chin windows come into view (4: back)':'on: the gaze lowers 15° (4: back)'):'off'));},
+  const map={KeyL:()=>replayStart(),KeyV:()=>apDemoToggle(),KeyU:()=>afcsToggle('alt'),KeyI:()=>afcsToggle(S.ias>40*KT?'ias':'hov'),KeyO:()=>afcsToggle('hdg'),KeyJ:()=>apMenuToggle(),Escape:()=>{if(UI.apMenu)apMenuShow(false);else menuToggle();},KeyK:()=>coachCycle(),Slash:()=>{UI.showKeys=!UI.showKeys;},F1:()=>{UI.showKeys=!UI.showKeys;},KeyR:()=>{const k=cfg.resetKind||'pad';if(k.startsWith('ex:'))startExercise(k.slice(3));else uiReset(k);},Digit1:()=>setView('cockpit'),Digit2:()=>setView('chase'),Digit3:()=>setView('tower'),Digit4:()=>{cfg.apr=cfg.apr==='on'?'off':'on';APR.ack=true;APR.fpsCmp={t:performance.now(),f0:UI.fps||0,on:cfg.apr==='on'};uiSync();dlNote('Approach view '+(cfg.apr==='on'?(cfg.aprChin?'on: the gaze lowers, the chin windows come into view (4: back)':'on: the gaze lowers 15° (4: back)'):'off'));},
     KeyZ:()=>{if(DEV.keys.ShiftLeft||DEV.keys.ShiftRight){if(HT.on)htStop();else htStart();dlNote(HT.on?'Head tracking off':'Head tracking: starting the webcam…');}else if(HT.on){htCentre();dlNote('Head tracking: centred');}},   // (2.13) Shift+Z head tracking on/off, Z centres it
-    KeyT:()=>trimSet(),
+    KeyT:()=>trimKey(),
     KeyY:()=>trimClear(),
     KeyH:()=>{cfg.hoverAssist=!cfg.hoverAssist;uiSync();},
     KeyG:()=>{engineFailure('one');},
     KeyE:()=>{if(!(DEV.keys.ShiftLeft||DEV.keys.ShiftRight))return;engAuto();},   // (2.13) Shift+E: E alone is the glance right; (2.16) the whole sequence
     KeyX:()=>{downloadCSV();},
     KeyP:()=>{cfg.predict=!cfg.predict;uiSync();},
-    Space:()=>{if(!CAL.on)UI.paused=!UI.paused;},
+    Space:()=>{UI.paused=!UI.paused;},
     KeyF:()=>{cfg.fpm=!cfg.fpm;uiSync();},
     KeyN:()=>tutorNext(),Enter:()=>tutorNext(),KeyB:()=>tutorBack(),KeyQ:()=>{if(DEV.keys.ShiftLeft||DEV.keys.ShiftRight)tutorStop();}};   // (2.13) Shift+Q: Q alone is the glance left
   if(map[code])map[code]();
@@ -170,6 +196,10 @@ function inputStep(dt){
   let gLon=0,gLat=0,gPed=0,gColRate=0,gColPos=null,padActive=false;
   if(PAD.pads.some(p=>p&&p.connected)&&!PAD.learn){
     const M=PAD.map;gLat=padAxis(M.lat,true)||0;gLon=padAxis(M.lon,true)||0;gPed=padAxis(M.ped,true)||0;
+    /* (2.17.0) the stick curve (setup): 'mild' (the default) expo 1.25, 'strong' 1.5, on the cyclic and the pedals; a thumb stick
+       has a few millimetres of travel, and around its centre the small corrections are most of the flying */
+    {const pc=cfg.padCurve==='strong'?1.5:cfg.padCurve==='linear'?1:1.25,pex=v=>Math.sign(v)*Math.pow(Math.abs(v),pc);gLat=pex(gLat);gLon=pex(gLon);gPed=pex(gPed);}
+    if(DEV.look.on&&DEV.look.pad){DEV.look.yawT=gLat*2.4;DEV.look.pitchT=clamp(gLon*0.9,-1,1.2);gLat=0;gLon=0;}   // (2.17.0) the look button held: the cyclic stick turns the head, the stick input is centred (a spring stick let go)
     const cv=padAxis(M.col,!M.col||M.col.mode!=='position');
     if(cv!==null){if(M.col&&M.col.mode==='position'){const pos=clamp((cv+1)/2,0,1);if(PAD.colPosSeen===null)PAD.colPosSeen=pos;if(Math.abs(pos-PAD.colPosSeen)>0.02)PAD.colPosSeen=-1;if(PAD.colPosSeen===-1)gColPos=pos;}   // a slider takes over once it has been moved
       else gColRate=cv;}
@@ -183,7 +213,7 @@ function inputStep(dt){
   if(afcsAny()&&!UI.apDemo&&!TUTOR.on){const H_=AFCS.held,ov=AFCS_UI.ovAcc;
     ov.lon=Math.max(0,ov.lon-dt*0.08)+(H_.lon?Math.abs(DEV.mouse.vy):0);ov.lat=Math.max(0,ov.lat-dt*0.08)+(H_.lat?Math.abs(DEV.mouse.vx):0);
     if(H_.col&&((k.KeyW||k.KeyS)||DEV.wheel||Math.abs(gColRate)>0.15||(gColPos!==null&&padActive)))afcsPilotTakes('col');
-    if(H_.ped&&((k.KeyA||k.KeyD)||(cfg.mouseButtons&&DEV.mouse.armed&&(DEV.mouse.l||DEV.mouse.r))||Math.abs(gPed)>0.15))afcsPilotTakes('ped');
+    if(H_.ped&&((k.KeyA||k.KeyD)||(cfg.mouseButtons==='pedals'&&DEV.mouse.armed&&(DEV.mouse.l||DEV.mouse.r))||Math.abs(gPed)>0.15))afcsPilotTakes('ped');
     if(H_.lon&&(k.ArrowUp||k.ArrowDown||Math.abs(gLon)>0.15||ov.lon>0.016))afcsPilotTakes('lon');
     if(H_.lat&&(k.ArrowLeft||k.ArrowRight||Math.abs(gLat)>0.15||ov.lat>0.016))afcsPilotTakes('lat');}
   DEV.wheel=false;
@@ -221,7 +251,7 @@ function inputStep(dt){
   raw.col=DEV.kbd.col;
   engSeqStep();   // (2.16) Shift+E's sequence, one step when the engines are ready
   // ---- pedals: an offset from the trim pedal; 'heading' = key is a yaw-rate demand, the SAS holds the heading when released
-  const pedKey=(k.KeyD?1:0)-(k.KeyA?1:0)+(cfg.mouseButtons&&DEV.mouse.armed?((DEV.mouse.r?1:0)-(DEV.mouse.l?1:0)):0);
+  const pedKey=(k.KeyD?1:0)-(k.KeyA?1:0)+(cfg.mouseButtons==='pedals'&&DEV.mouse.armed?((DEV.mouse.r?1:0)-(DEV.mouse.l?1:0)):0);
   raw.yawCmd=0;
   if(padActive&&Math.abs(gPed)>0){raw.ped=gPed;}
   else if(cfg.kbdPed==='heading'){raw.ped=0;raw.yawCmd=sat(pedKey,1)*(cfg.pedRate||25)*DEG;}   // key = yaw-rate demand; the SAS closes the loop
@@ -243,6 +273,7 @@ function inputStep(dt){
     const xp=cfg.mouseCurve==='strong'?1.5:cfg.mouseCurve==='mild'?1.25:1,ex=v=>Math.sign(v)*Math.pow(Math.min(Math.abs(v),1),xp);
     lon=ex(-DEV.mouse.vy);lat=ex(DEV.mouse.vx);src='mouse';}
   const beep=k.ShiftLeft||k.ShiftRight;
+  {const b=PAD.bst||{},bl=(b.beepU?1:0)-(b.beepD?1:0),br=(b.beepR?1:0)-(b.beepL?1:0);if(bl||br)trimBeep([bl,br],dt);}   // (2.17.0) the D-pad: beep trim
   if(beep&&(kx||ky)){trimBeep([ky,kx],dt);DEV.kbd.lon=approach(DEV.kbd.lon,0,1.5*dt);DEV.kbd.lat=approach(DEV.kbd.lat,0,1.5*dt);}   // Shift + arrows: beep trim
   else{/* two-stage ramp per axis: quickly to 60 % (a tap stays fine), then slowly to the stop
           (full stick after about 2 s of holding); an axis without its key centres */
@@ -250,6 +281,8 @@ function inputStep(dt){
     DEV.kbd.lon=ramp(DEV.kbd.lon,ky);DEV.kbd.lat=ramp(DEV.kbd.lat,kx);}
 
   lon+=DEV.kbd.lon;lat+=DEV.kbd.lat;if(src==='none'&&(kx||ky))src='keys';
+  if(padActive&&Math.abs(gLon)+Math.abs(gLat)>0.1)DEV.cycDev='pad';else if((kx||ky)&&!beep)DEV.cycDev='keys';   // (2.16.8) the device that last moved the cyclic chooses the law under 'auto'
+  raw.dev=DEV.cycDev||'mouse';
   raw.att=false;
   raw.lon=sat(lon,1);raw.lat=sat(lat,1);raw.ped=sat(raw.ped,1);   // the trim lives in TRIM (SAS), not as a stick offset
   raw.src=src;

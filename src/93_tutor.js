@@ -92,7 +92,13 @@ const LESSONS=[
   steps:[
    {text:'Lower the nose a little and accelerate. Between 15 and 25 kt the aircraft shudders and wants to climb: the rotor reaches clean air (translational lift). Ease the collective, hold the nose. Target: 60 kt and 300 ft.',hl:['ias','ra'],check:(dt)=>S.ias>55*KT&&S.hAGL>300*FT},
    {text:'Climb to 500 ft and level off: lower the collective until the vertical speed is zero. Hold 60 kt (±10) and 500 ft (±100) for 10 seconds. Speed comes from the stick, height from the collective.',hl:['ias','ra','col'],check:(dt)=>tHold(Math.abs(S.ias/KT-60)<10&&Math.abs(S.hAGL/FT-500)<100,10,dt)},
-   {text:'Turn: push the stick a little to the right and back to the centre. At this speed the aids hold the bank you leave and the aircraft turns (with the attitude command at speed, chosen in the setup, hold the stick there instead). Roll out with the same push to the left. Turn to heading 180 and hold it.',hl:['hdg','stick'],check:(dt)=>tHold(tHdg(180,10)&&S.hAGL>200*FT,5,dt)},
+   /* (2.17.0) the turn by the law in use: the mouse flies the attitude command with the trim (2.16.8), a spring stick the rate command */
+   {text:()=>cycLawNow()==='rcah'?'Turn: push the stick a little to the right and back to the centre. At this speed the aids hold the bank you leave: the aircraft turns. Hold 15 to 25° of bank for 5 seconds with the stick back at the centre.'
+      :`Turn: move the stick a little to the right, the aircraft banks and turns. Now trim: ${cfg.mouseButtons==='pedals'?'T':'a left click (or T)'} makes this bank the new centre, and the stick can rest there. Hold 15 to 25° of bank for 5 seconds with the stick at the centre.`,
+    hl:['stick'],check:(dt)=>tHold(Math.abs(S.eul[0])>15*DEG&&Math.abs(S.eul[0])<25*DEG&&Math.abs(IN.raw.lat)<0.08&&S.hAGL>200*FT,5,dt)},
+   {text:()=>cycLawNow()==='rcah'?'Roll out to heading 180: the same push to the left levels the wings. Hold the heading.'
+      :`Roll out to heading 180: stick to the left until the wings are level, then trim again (${cfg.mouseButtons==='pedals'?'T':'click'}). Hold the heading.`,
+    hl:['hdg','stick'],check:(dt)=>tHold(tHdg(180,10)&&Math.abs(S.eul[0])<6*DEG&&S.hAGL>200*FT,5,dt)},
   ]},
  {title:'Approach and landing',reset:'approach',lock:{col:false,cyc:false,ped:false},aids:{sas:true,attHold:true,hdgHold:true,hoverAssist:false},
   steps:[

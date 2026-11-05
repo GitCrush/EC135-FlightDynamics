@@ -209,6 +209,9 @@ function panelChin(x,L,W,Hh){const yb=(L.t+PNL_H)*L.s;if(yb>=Hh-2)return;
   for(const q of quads){const c=clipY(q);if(c.length<3)continue;x.moveTo(c[0][0],c[0][1]);for(let i=1;i<c.length;i++)x.lineTo(c[i][0],c[i][1]);x.closePath();}
   x.fill('evenodd');
   x.beginPath();x.rect(0,yb-1,W,Hh-yb+1);x.clip();   // the rims only below the panel
+  /* (2.17.2) the glass: a faint green-grey over the window, darker towards its frame (the windows' own picture had it until 2.17.1) */
+  for(const q of quads){const cy=(q[0][1]+q[2][1])/2,g2=x.createLinearGradient(0,Math.min(q[0][1],q[1][1]),0,Math.max(q[2][1],q[3][1]));g2.addColorStop(0,'rgba(150,175,185,0.10)');g2.addColorStop(0.5,'rgba(40,60,55,0.05)');g2.addColorStop(1,'rgba(10,14,12,0.16)');
+    x.fillStyle=g2;x.beginPath();x.moveTo(q[0][0],q[0][1]);for(let i=1;i<4;i++)x.lineTo(q[i][0],q[i][1]);x.closePath();x.fill();}
   x.lineWidth=2.5;x.strokeStyle='rgba(255,255,255,0.16)';for(const q of quads){x.beginPath();x.moveTo(q[0][0],q[0][1]);for(let i=1;i<4;i++)x.lineTo(q[i][0],q[i][1]);x.closePath();x.stroke();}
   const sh=x.createLinearGradient(0,yb,0,yb+16);sh.addColorStop(0,'rgba(0,0,0,0.55)');sh.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=sh;x.fillRect(0,yb-1,W,18);
   x.restore();}

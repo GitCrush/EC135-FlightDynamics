@@ -21,7 +21,7 @@ function student(g,dt){const S=E.S,[phi,th,psi]=S.eul,[p,q,r]=S.om;
     if(g.follow&&TUTOR.target)g={pos:TUTOR.target};
     if(g.att){thC=(g.att.th||0)*DEG;phC=(g.att.phi||0)*DEG;ST.ai=clamp(ST.ai+(th-thC)*dt*0.4,-0.3,0.3);}
     else if(g.ias!==undefined){const u=S.vb[0];thC=clamp(-0.05*(g.ias*KT-u)-ST.ai,-0.3,0.25);ST.ai=clamp(ST.ai+(g.ias*KT-u)*dt*0.01,-0.2,0.2);
-      const vyT=g.track?clamp(-S.pos[1]*0.2,-5,5):0;phC=clamp(0.05*(vyT-S.vb[1])+(g.hdg!==undefined?0.6*wrapPi(g.hdg*DEG-psi):0),-0.4,0.4);}
+      const vyT=g.track?clamp(-S.pos[1]*0.2,-5,5):0;phC=clamp(0.05*(vyT-S.vb[1])+(g.hdg!==undefined?0.6*wrapPi(g.hdg*DEG-psi):0),-0.4,0.4);if(g.bank!==undefined)phC=g.bank*DEG;}
     else{const R=qmat(S.q),vN=mrot(R,S.vb);const pos=g.pos||[0,0];const vNc=clamp((pos[0]-S.pos[0])*0.35,-4,4),vEc=clamp((pos[1]-S.pos[1])*0.35,-4,4);
       const cps=Math.cos(psi),sps=Math.sin(psi);const evx=(vNc-vN[0])*cps+(vEc-vN[1])*sps,evy=-(vNc-vN[0])*sps+(vEc-vN[1])*cps;
       ST.ai=clamp(ST.ai+evx*dt*0.004,-0.12,0.12);ST.ei=clamp(ST.ei+evy*dt*0.004,-0.12,0.12);thC=clamp(-0.06*evx-ST.ai,-0.3,0.3);phC=clamp(0.06*evy+ST.ei,-0.3,0.3);}
@@ -41,7 +41,7 @@ const GOALS={
   'The stick as velocity':[{pos:[25,0]},{pos:[0,0]},{pos:[0,0]},{pos:[25,0],then:{pos:[0,0]}}],
   'The raw stick':[{pos:[0,0]},{pos:[0,0]},{pos:[0,0]},{pos:[25,0]},{pos:[0,0]}],
   'All together':[{alt:3,pos:[0,0]},{land:true,pos:[0,0]}],
-  'Transition to forward flight':[{ias:60,climbTo:350},{ias:60,climbTo:500},{ias:60,climbTo:500,hdg:180}],
+  'Transition to forward flight':[{ias:60,climbTo:350},{ias:60,climbTo:500},{ias:60,climbTo:500,bank:20},{ias:60,climbTo:500,hdg:180}],
   'Approach and landing':[{ias:40,climbTo:200,hdg:0,track:true},{alt:3,pos:[0,0]},{land:true,pos:[0,0]}],
 };
 let fail=0;
